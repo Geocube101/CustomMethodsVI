@@ -16,7 +16,7 @@ if __name__ == '__main__':
 			for i, line in enumerate(lines):
 				instr: int = encoded[i]
 				payload += instr.to_bytes(4, sys.byteorder)
-				print(f'"{line}" ->\n ... {str(instr).rjust(10, "0")}, {str(binary.convert(instr)).rjust(32, "0")}, {instr.bit_length()}\n')
+				print(f'"{line}" ->\n ... {hex(instr)[2:].upper().rjust(8, '0')} {str(instr).rjust(10, "0")}, {str(binary.convert(instr)).rjust(32, "0")}, {instr.bit_length()}\n')
 				# print(f'"{line}" {hex(instr)[2:].upper()}\n')
 
 			fout.write(payload)
@@ -30,3 +30,6 @@ if __name__ == '__main__':
 		for i, instr in enumerate(instructions):
 			line: str = decoded[i]
 			print(f'"{instr}" ->\n ... {line}\n')
+
+	print('\nBREAKDOWN\n')
+	Assembler.print_breakdown(0x12490AFF)

@@ -1,6 +1,7 @@
 import sys
 import typing
 
+from collections import OrderedDict
 
 from CustomMethodsVI.Math.Based import BaseN, BaseNumber
 from CustomMethodsVI.Decorators import Overload, DefaultOverload
@@ -300,8 +301,8 @@ class Assembler:
 				encoded |= cond & 0xF
 				encoded = encoded << 2 | 0x1
 				encoded = encoded << 1 | ((not is_immediate) & 0x1)
-				encoded = encoded << 1 | (method >> 1 & 0x1)
-				encoded = encoded << 1 | ((not (is_immediate and offset < 0)) & 0x1)
+				encoded = encoded << 1 | (method >> 1 & 0b1)
+				encoded = encoded << 1 | ((not (is_immediate and offset >= 0)) & 0x1)
 				encoded = encoded << 1 | (byte & 0x1)
 				encoded = encoded << 1 | (method & 0x1)
 				encoded = encoded << 1 | ((full_cmd[0] == 'L') & 0x1)
@@ -455,7 +456,7 @@ class Assembler:
 							instruction[-1] += ','
 							instruction.append(f'{Assembler.__SHIFT_TYPES__[sh]} #{hex(shamt5)}')
 				else:
-					src2_str: str = hex(src2) if u else f'-{hex(src2)}'
+					src2_str: str = f'-{hex(src2)}' if u else hex(src2)
 					instruction.append(f'[R{rn}{"" if method == 0b00 or src2 == 0 else f", #{src2_str}"}]' + ('!' if method == 0b11 else f' #{src2_str}' if method == 0b00 else ''))
 
 			elif op == 2:
@@ -484,3 +485,143 @@ class Assembler:
 			decoded[index] = f'{label_str}\t' + decoded[index]
 
 		return tuple(decoded)
+
+	@staticmethod
+	def breakdown(instruction: int) -> OrderedDict[str, int]:
+		"""
+		Creates a breakdown of the single 32-bit Arm32 instruction
+		The resulting ordered dictionary contains a mapping of tuples
+		Each tuple contains a str (the column name) and the field size in bits
+		If the size is negative, the number should be represented as a negative number
+		:param instruction: (int) The 32-bit Arm32 instruction
+		:return: (OrderedDict[str, int]) The breakdown
+		"""
+
+		breakdown: OrderedDict[str, tuple[int, int]] = OrderedDict()
+		instruction = instruction & 0xFFFFFFFF
+		cond: int = instruction >> 28 & 0xF
+		op: int = instruction >> 26 & 0b11
+		breakdown['cond'] = (4, cond)
+		breakdown['op'] = (2, op)
+
+		if op == 0:
+			i: bool = bool(instruction >> 25 & 0x1)
+			cmd: int = instruction >> 21 & 0xF
+			s: bool = bool(instruction >> 20 & 0x1)
+			rn: int = instruction >> 16 & 0xF
+			rd: int = instruction >> 12 & 0xF
+			src2: int = instruction & 0xFFF
+
+			breakdown['i'] = (1, i)
+			breakdown['cmd'] = (4, cmd)
+			breakdown['s'] = (1, s)
+			breakdown['Rn'] = (4, rn)
+			breakdown['Rd'] = (4, rd)
+
+			if i and cmd != Assembler.__DATA_PROCESSING__.index('MOV'):
+				rot: int = src2 >> 8 & 0xF
+				imm8: int = (src2 & 0xFF)
+				breakdown['rot'] = (4, rot)
+				breakdown['imm8'] = (8, imm8)
+			elif not i and src2 >> 4 & 0x1:
+				rs: int = src2 >> 8 & 0xF
+				sh: int = src2 >> 5 & 0b11
+				rm: int = src2 & 0xF
+				breakdown['Rs'] = (4, rs)
+				breakdown['0'] = (1, 0)
+				breakdown['sh'] = (2, sh)
+				breakdown['1'] = (1, 1)
+				breakdown['Rm'] = (4, rm)
+			elif not i:
+				shamt5: int = src2 >> 7 & 0b11111
+				sh: int = src2 >> 5 & 0b11
+				rm: int = src2 & 0xF
+				breakdown['shamt5'] = (5, shamt5)
+				breakdown['sh'] = (2, sh)
+				breakdown['0'] = (1, 0)
+				breakdown['Rm'] = (4, rm)
+
+		elif op == 1:
+			not_i: bool = bool(instruction >> 25 & 0b1)
+			p: bool = bool(instruction >> 24 & 0b1)
+			u: bool = bool(instruction >> 23 & 0b1)
+			b: bool = bool(instruction >> 22 & 0b1)
+			w: bool = bool(instruction >> 21 & 0b1)
+			l: bool = bool(instruction >> 20 & 0b1)
+			rn: int = instruction >> 16 & 0xF
+			rd: int = instruction >> 12 & 0xF
+			src2: int = instruction & 0xFFF
+			method: int = (p << 1) | w
+			register_shifted: bool = bool(src2 >> 4 & 0b1)
+			breakdown['/I'] = (1, not_i)
+			breakdown['P'] = (1, p)
+			breakdown['U'] = (1, u)
+			breakdown['B'] = (1, b)
+			breakdown['W'] = (1, w)
+			breakdown['L'] = (1, l)
+			breakdown['Rn'] = (4, rn)
+			breakdown['Rd'] = (4, rd)
+
+			if not_i and register_shifted:
+				rs: int = src2 >> 8 & 0xFF
+				sh: int = src2 >> 5 & 0b11
+				rm: int = src2 & 0xF
+				breakdown['Rs'] = (4, rs)
+				breakdown['0'] = (1, 0)
+				breakdown['sh'] = (2, sh)
+				breakdown['1'] = (1, 1)
+				breakdown['Rm'] = (4, rm)
+			elif not_i:
+				shamt5: int = src2 >> 7 & 0b11111
+				sh: int = src2 >> 5 & 0b11
+				rm: int = src2 & 0xF
+				breakdown['shamt5'] = (5, shamt5)
+				breakdown['sh'] = (2, sh)
+				breakdown['0'] = (1, 0)
+				breakdown['Rm'] = (4, rm)
+			else:
+				breakdown['imm12'] = (-12, src2)
+
+		elif op == 2:
+			l: bool = bool(instruction >> 24 & 0b1)
+			imm24: int = instruction & 0xFFFFFF
+			breakdown['1'] = (1, 1)
+			breakdown['l'] = (1, l)
+			breakdown['imm24'] = (24, imm24)
+
+		else:
+			raise ValueError(f'Unexpected op-flag \'{op}\'')
+
+
+		return breakdown
+
+	@staticmethod
+	def print_breakdown(instruction: int) -> None:
+		"""
+		Prints a breakdown of the single 32-bit Arm32 instruction
+		:param instruction: (int) The 32-bit Arm32 instruction
+		:return: (None)
+		"""
+
+		msg: str = f'"{instruction}"\n\n'
+		breakdown: OrderedDict[str, int] = Assembler.breakdown(instruction)
+		lines: list[str] = [' FORMAT │ ', '────────┼─', '    BIN │ ', '    OCT │ ', '    DEC │ ', '    HEX │ ']
+
+		for i, (field, (size, value)) in enumerate(breakdown.items()):
+			signed: bool = size < 0
+			mask: int = (2 << abs(size)) - 1
+			value &= mask
+			bin_: str = f'-{bin(abs(value))[2:].zfill(size)}' if signed and value < 0 else bin(value)[2:].zfill(size)
+			oct_: str = f'-{oct(abs(value))[2:]}' if signed and value < 0 else oct(value)[2:]
+			dec_: str = f'-{abs(value)[2:]}' if signed and value < 0 else str(value)
+			hex_: str = (f'-{hex(abs(value))[2:]}' if signed and value < 0 else hex(value)[2:]).upper()
+			longest: int = max(len(bin_), len(oct_), len(dec_), len(hex_), len(field))
+			end: str = ' │ ' if i + 1 < len(breakdown) else ''
+			lines[0] += f'{field.rjust(longest, " ")}{end}'
+			lines[1] += '─' * (longest + 1) + ('┼─' if i + 1 < len(breakdown) else '')
+			lines[2] += f'{bin_.zfill(longest)}{end}'
+			lines[3] += f'{oct_.zfill(longest)}{end}'
+			lines[4] += f'{dec_.zfill(longest)}{end}'
+			lines[5] += f'{hex_.zfill(longest)}{end}'
+
+		print(msg + '\n'.join(lines))
