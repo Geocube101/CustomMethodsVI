@@ -518,7 +518,7 @@ class Assembler:
 			breakdown['Rn'] = (4, rn)
 			breakdown['Rd'] = (4, rd)
 
-			if i and cmd != Assembler.__DATA_PROCESSING__.index('MOV'):
+			if i:
 				rot: int = src2 >> 8 & 0xF
 				imm8: int = (src2 & 0xFF)
 				breakdown['rot'] = (4, rot)
