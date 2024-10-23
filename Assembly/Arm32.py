@@ -223,7 +223,7 @@ class Assembler:
 
 				encoded |= cond & 0xF
 				encoded <<= 2
-				encoded = encoded << 1 | (is_immediate & 0x1)
+				encoded = encoded << 1 | (is_immediate & 0b1)
 				encoded = encoded << 4 | (cmd & 0xF)
 				encoded = encoded << 1 | (has_s & 0x1)
 				encoded = encoded << 4 | (Rn & 0xF)
@@ -369,7 +369,7 @@ class Assembler:
 			op: int = instr >> 26 & 0b11
 
 			if op == 0:
-				i: bool = bool(instr >> 25 & 0x1)
+				i: bool = bool(instr >> 25 & 0b1)
 				cmd: int = instr >> 21 & 0xF
 				s: bool = bool(instr >> 20 & 0x1)
 				rn: int = instr >> 16 & 0xF
@@ -505,13 +505,12 @@ class Assembler:
 		breakdown['op'] = (2, op)
 
 		if op == 0:
-			i: bool = bool(instruction >> 25 & 0x1)
+			i: bool = bool(instruction >> 25 & 0b1)
 			cmd: int = instruction >> 21 & 0xF
 			s: bool = bool(instruction >> 20 & 0x1)
 			rn: int = instruction >> 16 & 0xF
 			rd: int = instruction >> 12 & 0xF
 			src2: int = instruction & 0xFFF
-
 			breakdown['i'] = (1, i)
 			breakdown['cmd'] = (4, cmd)
 			breakdown['s'] = (1, s)

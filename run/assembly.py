@@ -31,5 +31,6 @@ if __name__ == '__main__':
 			line: str = decoded[i]
 			print(f'"{instr}" ->\n ... {line}\n')
 
-	print('\nBREAKDOWN\n')
-	Assembler.print_breakdown(0x12490AFF)
+		print('\nBREAKDOWN\n')
+		for instr in instructions:
+			Assembler.print_breakdown(instr)
