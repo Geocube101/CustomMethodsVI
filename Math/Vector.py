@@ -93,7 +93,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		components: list[float] = []
 
 		for i, value in enumerate(iterable):
-			if hasattr(value, '__float__') or type(value) is int or type(value) is float:
+			if hasattr(value, '__float__') or isinstance(value, (int, float)):
 				components.append(float(value))
 			elif hasattr(value, '__int__'):
 				components.append(float(int(value)))
@@ -112,7 +112,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		self.__dimensions: tuple[float, ...] = tuple(components)
 
 		if len(self.__dimensions) < 2:
-			raise ValueError(f'Vector dimension is \'{len(self.__dimensions)}\' is less than 2')
+			raise ValueError(f'Vector dimension \'{len(self.__dimensions)}\' is less than 2')
 
 	@Overload(strict=True)
 	def __init__(self, *components: int | float):

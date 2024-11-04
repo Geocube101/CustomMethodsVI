@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import sys
 import typing
+import collections.abc
 import math
 import zlib
 import dill
@@ -1241,7 +1242,7 @@ class EventedStream(OrderedStream):
 			del self.__callbacks__[eid][callback]
 
 
-class LinqStream:
+class LinqStream(typing.Iterable):
 	"""
 	[LinqStream] - Lazy generator mimicking C# LINQ or Java Streams
 	"""
@@ -1252,88 +1253,91 @@ class LinqStream:
 		- Constructor -
 		:param iterable: (ITERABLE) The source iterable
 		"""
-
-		self.__functions__: list[typing.Callable] = []
-		self.__func_purpose__: list[int] = []
 		self.__source__: typing.Iterable = iterable
 
-	def filter(self, callback: typing.Callable) -> LinqStream:
-		"""
-		Filters elements based on this filter function
-		:param callback: (CALLABLE) The filter function
-		:return: (LinqStream) This instance
-		:raises AssertionError: If 'callback' is not callable
-		"""
+	def __iter__(self):
+		iterator: typing.Iterator = iter(self.__source__)
 
-		assert callable(callback), 'Filter is not callable'
-		self.__functions__.append(callback)
-		self.__func_purpose__.append(0)
-		return self
+		while True:
+			try:
+				yield next(iterator)
+			except StopIteration:
+				break
 
-	def transform(self, callback: typing.Callable) -> LinqStream:
-		"""
-		Transforms elements based on this transform function
-		:param callback: (CALLABLE) The transformer function
-		:return: (LinqStream) This instance
-		:raises AssertionError: If 'callback' is not callable
-		"""
+	def __next__(self):
+		return next(iter(self))
 
-		assert callable(callback), 'Transformer is not callable'
-		self.__functions__.append(callback)
-		self.__func_purpose__.append(1)
-		return self
+	def any(self) -> bool:
+		try:
+			next(self)
+			return True
+		except StopIteration:
+			return False
 
 	def count(self) -> int:
-		"""
-		Executes the generator
-		:return: (int) The length of the resulting collection
-		"""
+		return sum(1 for _ in self)
 
-		return len(self.collect(tuple))
+	def first(self) -> typing.Any:
+		return next(self)
 
-	def max(self) -> typing.Any:
-		"""
-		Executes the generator
-		:return: (int) The largest value of the resulting collection
-		"""
+	def first_or_default(self, default: typing.Any = None) -> typing.Any:
+		try:
+			return next(self)
+		except StopIteration:
+			return default
 
-		return max(self.collect())
+	def min(self, comparer: typing.Callable[[typing.Any, typing.Any], typing.Any] = None) -> typing.Any:
+		return min(self, key=comparer)
 
-	def min(self) -> typing.Any:
-		"""
-		Executes the generator
-		:return: (int) The smallest of the resulting collection
-		"""
+	def max(self, comparer: typing.Callable[[typing.Any, typing.Any], typing.Any] = None) -> typing.Any:
+		return max(self, key=comparer)
 
-		return min(self.collect())
+	def collect(self, cls: type = tuple) -> typing.Iterable[typing.Any]:
+		return cls(self)
 
-	def sum(self) -> typing.Any:
-		"""
-		Executes the generator
-		:return: (int) The sum of all elements in the resulting collection
-		"""
+	def select(self, mapper: typing.Callable[[typing.Any], typing.Any]) -> __TransformStream__:
+		assert callable(mapper)
+		return __TransformStream__(self, mapper)
 
-		return sum(self.collect())
+	def filter(self, filter_: typing.Callable[[typing.Any], bool]) -> __FilterStream__:
+		assert callable(filter_)
+		return __FilterStream__(self, filter_)
 
-	def sort(self, key: typing.Optional[typing.Callable] = ...) -> LinqStream:
-		pass
+	def sort(self, sorter: typing.Callable = None, *, reverse: bool = False) -> LinqStream:
+		return LinqStream(sorted(self, key=sorter, reverse=reverse))
 
-	def collect(self, iter_type: typing.Optional[type] = ...) -> typing.Iterable | typing.Sized | typing.Generator:
-		"""
-		Executes the generator
-		:param iter_type: (type?) The type of the collection to return
-		:return: (ITERABLE) The resulting collection
-		"""
+	def reverse(self) -> LinqStream:
+		return LinqStream(reversed(self))
 
-		def _generator(src: typing.Iterable, func: typing.Callable, purpose: int):
-			if purpose == 0:
-				yield from (x for x in src if func(x))
-			elif purpose == 1:
-				yield from (func(x) for x in src)
 
-		source = self.__source__
+class __TransformStream__(LinqStream):
+	def __init__(self, iterable: typing.Iterable, mapper: typing.Callable[[typing.Any], typing.Any]):
+		super().__init__(iterable)
+		self.__mapper__: typing.Callable[[typing.Any], bool] = mapper
 
-		for func, purpose in zip(self.__functions__, self.__func_purpose__):
-			source = _generator(source, func, purpose)
+	def __iter__(self):
+		iterator: typing.Iterator = iter(self.__source__)
 
-		return source if iter_type is None or iter_type is ... else iter_type(source)
+		while True:
+			try:
+				yield self.__mapper__(next(iterator))
+			except StopIteration:
+				break
+
+
+class __FilterStream__(LinqStream):
+	def __init__(self, iterable: typing.Iterable, filter_: typing.Callable[[typing.Any], bool]):
+		super().__init__(iterable)
+		self.__filter__: typing.Callable[[typing.Any], typing.Any] = filter_
+
+	def __iter__(self):
+		iterator: typing.Iterator = iter(self.__source__)
+
+		while True:
+			try:
+				element: typing.Any = next(iterator)
+
+				if self.__filter__(element):
+					yield element
+			except StopIteration:
+				break

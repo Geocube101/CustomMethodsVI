@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+import threading
 import typing
 import types
 import typeguard
@@ -16,6 +18,14 @@ class __OverloadCaller:
 	"""
 
 	__FunctionOverloads: dict[str, __OverloadCaller] = {}
+	__FunctionCallers: dict[typing.Callable, __OverloadCaller] = {}
+
+	@classmethod
+	def assoc(cls, lambda_: typing.Callable, caller: __OverloadCaller) -> None:
+		if callable(caller):
+			cls.__FunctionCallers[lambda_] = caller
+		elif lambda_ in cls.__FunctionCallers:
+			del cls.__FunctionCallers[lambda_]
 
 	@classmethod
 	def new(cls, function: typing.Callable | types.FunctionType | types.LambdaType | types.MethodType, strict_only: bool | None = False) -> __OverloadCaller:
@@ -84,13 +94,13 @@ class __OverloadCaller:
 				except typeguard.TypeCheckError:
 					return False
 
-			_match: int = 2
+			_match: int = 0
 
 			for annotate in annotation:
 				if isinstance(annotate, type):
-					_match = 2 if type(_value) is annotate else 1 if isinstance(_value, annotate) or can_cast(_value, annotate) else 0
+					_match = max(_match, 2 if type(_value) is annotate else 1 if isinstance(_value, annotate) or can_cast(_value, annotate) else 0)
 				else:
-					_match = 2 if check_type(_value, annotate) else 0
+					_match = max(_match, 2 if check_type(_value, annotate) else 0)
 
 			return _match
 
@@ -107,7 +117,9 @@ class __OverloadCaller:
 				raise TypeError(f'Non-standard type hint: \'{annotation}\' ({type(annotation)})')
 
 		def can_cast(_value: typing.Any, _type: type) -> bool:
-			if hasattr(_value, f'__cast_{_type.__name__}__'):
+			if hasattr(_value, f'__cast_{_type.__name__}__') or isinstance(_value, _type) or _type.__init__ in type(self).__FunctionCallers:
+				return True
+			elif hasattr(_type, '__iter__') and _type.__name__ in dir(__builtins__) and hasattr(_value, '__iter__'):
 				return True
 
 			try:
@@ -289,10 +301,17 @@ class __OverloadCaller:
 				sstream: Stream.StringStream = Stream.StringStream()
 				sstream.write(f'\'{function}\' Strictly Accepts:' if strict_only else f'\'{function}\' Accepts:')
 				signature: inspect.Signature = inspect.signature(function)
+				_annotations: dict[str, typing.Any] = typing.get_type_hints(function)
+				total: str = str(len(signature.parameters))
 
-				for parameter_name, parameter in signature.parameters.items():
+				for i, (parameter_name, parameter) in enumerate(signature.parameters.items()):
 					header: str = '**' if parameter.kind == parameter.VAR_KEYWORD else '*' if parameter.kind == parameter.VAR_POSITIONAL else ''
-					sstream.write(f'\n -Parameter \'{header}{parameter_name}\' - One of type: [{", ".join(str(x) for x in deduce_annotation(parameter.annotation))}]')
+					index: str = str(i + 1).zfill(len(total))
+
+					if parameter_name in _annotations:
+						sstream.write(f'\n - [{index}/{total}] Parameter \'{header}{parameter_name}\' - One of type: [{", ".join(str(x) for x in deduce_annotation(_annotations[parameter_name]))}]')
+					else:
+						sstream.write(f'\n - [{index}/{total}] Parameter \'{header}{parameter_name}\' - ?')
 
 				msg.append(sstream.read())
 
@@ -348,12 +367,16 @@ def Overload(*function: typing.Callable, strict: bool = False) -> typing.Callabl
 	if len(function) == 0:
 		def binder(callback: typing.Callable):
 			caller: __OverloadCaller = __OverloadCaller.new(callback, strict)
-			return lambda *args, __caller=caller, **kwargs: __caller(*args, **kwargs)
+			redirect: typing.Callable = lambda *args, __caller=caller, **kwargs: __caller(*args, **kwargs)
+			__OverloadCaller.assoc(redirect, caller)
+			return redirect
 
 		return binder
 	else:
 		caller: __OverloadCaller = __OverloadCaller.new(function[0], strict)
-		return lambda *args, __caller=caller, **kwargs: __caller(*args, **kwargs)
+		redirect: typing.Callable = lambda *args, __caller=caller, **kwargs: __caller(*args, **kwargs)
+		__OverloadCaller.assoc(redirect, caller)
+		return redirect
 
 
 def DefaultOverload(function: typing.Callable):
@@ -365,4 +388,6 @@ def DefaultOverload(function: typing.Callable):
 	"""
 
 	caller: __OverloadCaller = __OverloadCaller.new(function, None)
-	return lambda *args, __caller=caller, **kwargs: __caller(*args, **kwargs)
+	redirect: typing.Callable = lambda *args, __caller=caller, **kwargs: __caller(*args, **kwargs)
+	__OverloadCaller.assoc(redirect, caller)
+	return redirect

@@ -1465,3 +1465,23 @@ def frange(start: float, stop: float = None, step: float = 1, precision: int = N
 		yield a
 		a = round(a + _step, precision)
 
+def minmax(arg: typing.Iterable, *args) -> tuple[typing.Any, typing.Any]:
+	if len(args) > 0:
+		return minmax((arg, *args))
+
+	try:
+		iterator: typing.Iterator = iter(arg)
+		vmin: typing.Any = next(iterator)
+		vmax: typing.Any = vmin
+
+		for rem in iterator:
+			if rem > vmax:
+				vmax = rem
+
+			if rem < vmin:
+				vmin = rem
+
+		return vmin, vmax
+
+	except StopIteration:
+		raise ValueError('minmax() iterable argument is empty') from None
