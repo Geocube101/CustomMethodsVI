@@ -6,6 +6,7 @@ import typing
 import types
 import typeguard
 import inspect
+import multiprocessing
 
 import CustomMethodsVI.Exceptions as Exceptions
 import CustomMethodsVI.Stream as Stream
@@ -319,39 +320,6 @@ class __OverloadCaller:
 			msg.append(f'Keyword arguments were: {", ".join(f"{x}={str(type(y))}" for x, y in _kwargs.items())}')
 			msg: str = '\n'.join(msg)
 			raise TypeError(f'No matches found for function \'{self.__function_qual_name}\':\n\t...\n{msg}')
-
-	def __get_function_annotations(self) -> dict[typing.Callable, dict[str, tuple[type, ...]]]:
-		"""
-		INTERNAL METHOD; DO NOT USE
-		Gets function parameter types from annotations
-		:return: (dict[str, tuple[type]]) The function parameter type map
-		"""
-
-		parameter_types_map: dict[typing.Callable, dict[str, tuple[type, ...]]] = {}
-
-		for function in self.__function_overloads:
-			parameter_map: dict[str, tuple[type, ...]] = {}
-			parameter: str
-			parameter_type: type | types.Union
-
-			for parameter, parameter_type in typing.get_type_hints(function).items():
-				if parameter == 'return':
-					continue
-				elif isinstance(parameter_type, (type, typing._GenericAlias, typing._SpecialGenericAlias)):
-					parameter_map[parameter] = (parameter_type,)
-				elif isinstance(parameter_type, types.UnionType):
-					parameter_map[parameter] = parameter_type.__args__
-				elif parameter_type == typing.Callable:
-					parameter_map[parameter] = (types.FunctionType, types.MethodType, types.BuiltinFunctionType, types.LambdaType, types.MethodDescriptorType)
-				else:
-					raise TypeError(f'Non-standard type hint: \'{parameter_type}\' ({type(parameter_type)})')
-
-			for parameter_types in parameter_map.values():
-				assert all(isinstance(x, (type, typing._GenericAlias, typing._SpecialGenericAlias)) for x in parameter_types)
-
-			parameter_types_map[function] = parameter_map
-
-		return parameter_types_map
 
 
 def Overload(*function: typing.Callable, strict: bool = False) -> typing.Callable:

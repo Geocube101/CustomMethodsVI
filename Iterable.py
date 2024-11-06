@@ -946,7 +946,7 @@ class String(Iterable):
 
 		self.__buffer__: list[int]
 
-	def __contains__(self, item: str | bytes | int) -> bool:
+	def __contains__(self, item: str | String | bytes | int) -> bool:
 		"""
 		Checks if a substring or character is within this string
 		:param item: (str | bytes | int) The substring or character code to check

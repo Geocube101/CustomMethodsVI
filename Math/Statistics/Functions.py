@@ -64,3 +64,8 @@ def quantile(set_: NUMBERSET_T, percent: float) -> NUMBER_T:
 		return set_[int(index)]
 	else:
 		return (set_[math.floor(index)] + set_[math.ceil(index)]) / 2
+
+@Overload
+def standard_deviation_pn(p: float, n: float) -> float:
+	assert 0 <= p <= 1, 'P must be a 0-1 clamped value'
+	return math.sqrt((p * (1 - p)) / n)

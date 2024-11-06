@@ -43,8 +43,8 @@ class File:
 
 	def exists(self) -> bool:
 		"""
-		Returns whether this file exists in path
-		:return: Existedness
+		Existedness
+		:return: (bool) Whether this file exists in path
 		"""
 
 		return os.path.isfile(self.__fpath__)
@@ -103,48 +103,48 @@ class File:
 
 	def filepath(self) -> str:
 		"""
-		Returns the filepath
-		:return: (str) Filepathness
+		Filepathness
+		:return: (str) Returns the filepath
 		"""
 
 		return self.__fpath__
 
 	def filename(self) -> str:
 		"""
-		Returns the filename without extension
-		:return: (str) Filenameness
+		Filenameness
+		:return: (str) Returns the filename without extension
 		"""
 
 		return os.path.basename(self.__fpath__).split('.')[0]
 
 	def extension(self) -> str:
 		"""
-		Returns the last extension
-		:return: (str) Extensionness
+		Extensionness
+		:return: (str) Returns the last extension
 		"""
 
 		return os.path.basename(self.__fpath__).split('.')[-1]
 
 	def full_extension(self) -> str:
 		"""
-		Returns the full extension (same as File.extension if only one extension present)
-		:return: (str) Extensionness
+		Extensionness
+		:return: (str) Returns the full extension (same as File.extension if only one extension present)
 		"""
 
 		return os.path.basename(self.__fpath__).split('.', 1)[-1]
 
 	def extensions(self) -> tuple[str, ...]:
 		"""
-		Returns all extensions as a tuple
-		:return: (tuple[str, ...]) Extensionsness
+		Extensionsness
+		:return: (tuple[str, ...]) Returns all extensions as a tuple
 		"""
 
 		return tuple(os.path.basename(self.__fpath__).split('.')[1:])
 
 	def basename(self) -> str:
 		"""
-		Returns the filepath base name
-		:return: (str) basenameness
+		Basenameness
+		:return: (str) Returns the filepath base name
 		"""
 
 		return os.path.basename(self.__fpath__)
@@ -261,8 +261,7 @@ class Directory:
 
 	def files(self) -> tuple[File, ...]:
 		"""
-		Recursively gets all sub-files
-		:return: (tuple[File, ...]) Fileness
+		:return: (tuple[File, ...]) All sub-files of this directory
 		"""
 
 		try:
@@ -273,8 +272,7 @@ class Directory:
 
 	def dirs(self) -> tuple[Directory, ...]:
 		"""
-		Recursively gets all sub-directories
-		:return: (tuple[Directory, ...]) Dirness
+		:return: (tuple[Directory, ...]) All sub-directories of this directory
 		"""
 
 		try:
@@ -302,8 +300,8 @@ class Directory:
 
 	def exists(self) -> bool:
 		"""
-		Checks if the object at path is a directory
-		:return: (bool) Existedness
+		Existedness
+		:return: (bool) If the object at path is a directory
 		"""
 
 		return os.path.isdir(self.__dpath__)
@@ -390,32 +388,32 @@ class Directory:
 
 	def dirpath(self) -> str:
 		"""
-		Gets the internal path
-		:return: (str) Pathness
+		Pathness
+		:return: (str) The internal path
 		"""
 
 		return self.__dpath__
 
 	def abspath(self) -> str:
 		"""
-		Gets the internal path as an absolute path
-		:return: (str) Pathness
+		Pathness
+		:return: (str) The internal path as an absolute path
 		"""
 
 		return os.path.abspath(self.__dpath__)
 
 	def realpath(self) -> str:
 		"""
-		Gets the internal path as a real path
-		:return: (str) Pathness
+		Pathness
+		:return: (str) The internal path as a real path
 		"""
 
 		return os.path.realpath(self.__dpath__)
 
 	def dirname(self) -> str:
 		"""
-		Gets the name of this directory
-		:return: (str) nameness
+		Nameness
+		:return: (str) The name of this directory
 		"""
 
 		return self.__dpath__.split('/')[-2]

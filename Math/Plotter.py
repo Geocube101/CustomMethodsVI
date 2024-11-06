@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import colorsys
 import sys
 import typing
 import tkinter as tk
@@ -14,13 +15,14 @@ import numpy.polynomial.polyutils
 import math
 import warnings
 import scipy.optimize
+import scipy.interpolate
 import enum
 
 import CustomMethodsVI.FileSystem as FileSystem
 import CustomMethodsVI.Math.Vector as Vector
 
-from CustomMethodsVI.Iterable import frange
-from CustomMethodsVI.Decorators import Overload
+from CustomMethodsVI.Iterable import frange, minmax
+# from CustomMethodsVI.Decorators import Overload
 
 
 class AxisPlot2D:
@@ -652,7 +654,7 @@ class Plot2D:
 		legend_padding = round(legend_padding / 2)
 		start_y: int = 15
 		start_x: int = 15
-		legend_items: dict[str, tuple[str, int | None, typing.Any]] = self.__legend__()
+		legend_items: dict[str, tuple[int | None, typing.Any]] = self.__legend__()
 
 		for i in range(legend_window_size[0]):
 			legend_base[i, :2, :3] = np.uint8(0x66)
@@ -662,7 +664,7 @@ class Plot2D:
 			legend_base[:2, i, :3] = np.uint8(0x66)
 			legend_base[-2:, i, :3] = np.uint8(0x66)
 
-		for point_name, (_, point_color, point_value) in legend_items.items():
+		for point_name, (point_color, point_value) in legend_items.items():
 			point_color = 0x222222 if not isinstance(point_color, int) else int(point_color)
 			r: np.ndarray = np.full((20, 50, 1), (point_color >> 16) & 0xFF, dtype=np.uint8)
 			g: np.ndarray = np.full((20, 50, 1), (point_color >> 8) & 0xFF, dtype=np.uint8)
@@ -689,7 +691,7 @@ class Plot2D:
 	def __image__(self) -> tuple[np.ndarray, tuple[int, int], tuple[float, float], int, int]:
 		"""
 		Generates the base image for this plot
-		:return: (numpy.ndarray) The blank, base image
+		:return: (tuple[numpy.ndarray, tuple[int, int], tuple[float, float], int, int) A tuple containing the blank, base image, the draw size, the draw border, and the window and draw size units
 		"""
 
 		window_size_unit: int = round(1024 * self.__scale__)
@@ -789,10 +791,10 @@ class Plot2D:
 			start_x: int = 10
 			start_y: int = 10
 			legend_canvas: tk.Canvas = next(x for x in legend.winfo_children() if isinstance(x, tk.Canvas))
-			legend_items: dict[str, tuple[str, int | None, typing.Any]] = self.__legend__()
+			legend_items: dict[str, tuple[int | None, typing.Any]] = self.__legend__()
 
 			for i, point_name in enumerate(legend_items):
-				_, point_color, point_value = legend_items[point_name]
+				point_color, point_value = legend_items[point_name]
 				color: str = f'#{hex(point_color)[2:].zfill(6)}'
 				legend_canvas.create_rectangle(start_x, start_y, start_x + 50, start_y + 20, outline='#eeeeee', fill=color)
 				text: int = legend_canvas.create_text(start_x + 60, start_y + 10, fill=color, text='Default' if len(point_name) == 0 else point_name, font=('', 12), anchor=tkc.W)
@@ -818,10 +820,10 @@ class Plot2D:
 
 		return root, legend
 
-	def __legend__(self) -> dict[str, tuple[str, int | None, typing.Any]]:
+	def __legend__(self) -> dict[str, tuple[int | None, typing.Any]]:
 		"""
 		Generates the legend items used by Plot2D::legend_image
-		:return: (dict[str, tuple[str, int | None, typing.Any]]) A dictionary - { item_name: (item_name, item_color, item_value) }
+		:return: (dict[str, tuple[int | None, typing.Any]]) A dictionary - { item_name: (item_color, item_value) }
 		"""
 
 		return {}
@@ -844,7 +846,7 @@ class Plot2D:
 		assert point_size is None or point_size is ... or isinstance(point_size, int) and point_size > 0, f'{type(self).__name__}::plot_info - \'size\' must be an int greater than 0 or None'
 		assert extra is None or extra is ... or isinstance(extra, dict), f'{type(self).__name__}::point_info - \'extra\' must be a dict or None'
 
-		extra_data: dict = ({} if extra is None else extra) | extra_kwargs
+		extra_data: dict = ({} if extra is None or extra is ... else extra) | extra_kwargs
 
 		if color is not None and color is not ...:
 			hex_color: int = 0
@@ -1487,8 +1489,8 @@ class CartesianScatterPlot2D(MultiPlot2D, AxisPlot2D):
 
 		return base_image, draw_size, draw_border, window_size_unit, draw_size_unit
 
-	def __legend__(self, plot_names: tuple[str, ...] = ()) -> dict[str, tuple[str, int, int | float | complex | None]]:
-		return {plot_name: (plot_name, self.__plot_info__[plot_name]['color'], None) for plot_name in (plot_names if len(plot_names) else self.__plot_info__.keys())}
+	def __legend__(self, plot_names: tuple[str, ...] = ()) -> dict[str, tuple[int, int | float | complex | None]]:
+		return {plot_name: (self.__plot_info__[plot_name]['color'], None) for plot_name in (plot_names if len(plot_names) else self.__plot_info__.keys())}
 
 	@staticmethod
 	def polyfits(*_) -> tuple[str, ...]:
@@ -1573,6 +1575,9 @@ class CartesianScatterPlot2D(MultiPlot2D, AxisPlot2D):
 				pass
 
 			x += step
+
+	def graph_normal(self, mean: float, standard_deviation: float) -> None:
+		pass
 
 	def linear_regression(self) -> tuple[str | None, float | None, typing.Callable]:
 		"""
@@ -1815,8 +1820,8 @@ class PolarScatterPlot2D(MultiPlot2D, AxisPlot2D):
 
 		return base_image, draw_size, draw_border, window_size_unit, draw_size_unit
 
-	def __legend__(self, plot_names: tuple[str, ...] = ()) -> dict[str, tuple[str, int, int | float | complex | None]]:
-		return {plot_name: (plot_name, self.__plot_info__[plot_name]['color'], None) for plot_name in (plot_names if len(plot_names) else self.__plot_info__.keys())}
+	def __legend__(self, plot_names: tuple[str, ...] = ()) -> dict[str, tuple[int, int | float | complex | None]]:
+		return {plot_name: (self.__plot_info__[plot_name]['color'], None) for plot_name in (plot_names if len(plot_names) else self.__plot_info__.keys())}
 
 	def new_plot(self, name: str, *, color: tuple[float | int, float | int, float | int] | str | int = 0x000000, overwrite: bool = False, make_active: bool = True, label_points: bool = False, point_size: int = 15, point_shape: str = 'square', line_join_type: str = None, line_join_width: int = 1, extra: dict = None, **extra_kwargs) -> None:
 		"""
@@ -1880,7 +1885,7 @@ class PolarScatterPlot2D(MultiPlot2D, AxisPlot2D):
 
 		min_, max_ = tuple(float(x) * (math.pi / 180) for x in bounds)
 		theta: float = min_
-		step = ((max_ - min_) / 1e3) if step is None else (step * (math.pi / 180))
+		step = ((max_ - min_) / 1e3) if step is None or step is ... else (step * (math.pi / 180))
 
 		while theta <= max_:
 			try:
@@ -1890,156 +1895,6 @@ class PolarScatterPlot2D(MultiPlot2D, AxisPlot2D):
 				pass
 
 			theta += step
-
-
-class BarPlot2D(Plot2D, AxisPlot2D):
-	"""
-		[BarPlot2D(Plot2D, AxisPlot2D)] - Bar Graph Plotter plotting values in 2D space
-		"""
-
-	def __init__(self):
-		"""
-		[BarPlot2D(Plot2D, AxisPlot2D)] - Bar Graph Plotter plotting values in 2D space
-		- Constructor -
-		"""
-
-		Plot2D.__init__(self)
-		AxisPlot2D.__init__(self)
-		self.__points__: dict[typing.Any, float] = {}
-		self.__point_colors__: dict[typing.Any, int] = {}
-		self.__total__: float | None = None
-		self.__add_axis__('xy', min_=0, max_=10)
-		self.axis_info('x', minor_spacing=1, major_spacing=1)
-
-	def __legend__(self) -> dict[str, tuple[str, int, int | float | complex | None]]:
-		return {point_name: (point_name, self.__point_colors__[point_name], point_value) for point_name, point_value in self.__points__.items()}
-
-	def __image__(self) -> tuple[np.ndarray, tuple[int, int], tuple[float, float], int, int]:
-		base_image: np.ndarray
-		draw_size: tuple[int, int]
-		draw_border: tuple[float, float]
-		window_size_unit: int
-		draw_size_unit: int
-		base_image, draw_size, draw_border, window_size_unit, draw_size_unit = super().__image__()
-		border: tuple[float, float] = (draw_border[0] / 2, draw_border[1] / 2)
-		bounds: tuple[int, int, int, int] = (round(border[0]), round(border[1]), round(border[0] + draw_size[0]), round(border[1] + draw_size[1]))
-		max_x: int = len(self.__points__)
-		max_y: float | None = max(point[1] for point in self.__points__.items()) if max_x else None
-
-		if max_x > 0 and max_y is not None:
-			self.axis_info('x', min_=0, max_=max_x, minor_spacing=1, major_spacing=1)
-			self.axis_info('y', min_=0, max_=max_y)
-
-		self.__draw_linear_axis__('x', base_image, draw_size, draw_border, (draw_size[0] // 2, draw_size[0]))
-		self.__draw_linear_axis__('y', base_image, draw_size, draw_border, (0, draw_size[1] // 2), angle=90)
-
-		image = PIL.Image.fromarray(base_image)
-		drawer = PIL.ImageDraw.Draw(image)
-
-		for point_name, point_value in self.__points__.items():
-			pass
-
-		base_image = np.array(image)
-		return base_image, draw_size, draw_border, window_size_unit, draw_size_unit
-
-	def add_points(self, *points: tuple[typing.Any, float | int] | tuple[typing.Any, float | int, int | str | tuple[int, int, int]] | Vector.Vector, **bound_points: float | int | tuple[float | int, int | str | tuple[int, int, int]]) -> None:
-		"""
-		Adds points to the plot
-		For 3D tuples and 3D vectors, the 3rd value must be either an rgb color tuple, hex-string, or color-int
-		For all tuples and vectors, the first value will be used as the key
-		:param points: (*tuple[float | int] or *Vector) A variadic list of either 2D tuples, 3D tuples, 2D vectors, or 3D vectors
-		:return: (None)
-		:raises AssertionError: If any arguments' type is incorrect
-		:raises TypeError: If a point is invalid
-		"""
-
-		for point in points:
-			if type(point) is tuple and 2 <= len(point) <= 3 and type(point[1]) in (float, int):
-				color: str | int | tuple[int, int, int] = point[2] if len(point) == 3 else 0xFFFFFF
-
-				if type(color) is str:
-					color = color[1:] if color[0] == '#' else color
-					color = ((int(color[0:2], 16) & 0xFF) << 16) | ((int(color[2:4], 16) & 0xFF) << 8) | (int(color[4:6], 16) & 0xFF)
-				elif type(color) is tuple and len(color) == 3:
-					color = ((color[0] & 0xFF) << 16) | ((color[1] & 0xFF) << 8) | (color[2] & 0xFF)
-				elif type(color) is not int:
-					raise ValueError(f'Unexpected color value: \'{color}\'')
-
-				assert point[1] > 0, 'Pie value cannot be less than or equal to 0'
-				self.__points__[point[0]] = point[1]
-				self.__point_colors__[point[0]] = color & 0xFFFFFF
-			elif type(point) is Vector.Vector and 2 <= point.dimension() <= 3:
-				assert point[1] > 0, 'Pie value cannot be less than or equal to 0'
-				self.__points__[point[0]] = point[1]
-				self.__point_colors__[point[0]] = (point[2] & 0xFFFFFF) if point.dimension() == 3 else 0xFFFFFF
-			else:
-				raise TypeError(f'{type(self).__name__}::add_points - \'*points\' point must be either a tuple of length 2 or a Math.Vector.Vector of dimension 2')
-
-		for key, value in bound_points.items():
-			key = key.replace('_', ' ')
-
-			if type(value) in (int, float):
-				assert value > 0, 'Pie value cannot be less than or equal to 0'
-				self.__points__[key] = value
-				self.__point_colors__[key] = 0xFFFFFF
-			elif type(value) is tuple and type(value[0]) in (int, float):
-				color: str | int | tuple[int, int, int] = value[1] if len(value) == 2 else 0xFFFFFF
-
-				if type(color) is str:
-					color = color[1:] if color[0] == '#' else color
-					color = ((int(color[0:2], 16) & 0xFF) << 16) | ((int(color[2:4], 16) & 0xFF) << 8) | (int(color[4:6], 16) & 0xFF)
-				elif type(color) is tuple and len(color) == 3:
-					color = ((color[0] & 0xFF) << 16) | ((color[1] & 0xFF) << 8) | (color[2] & 0xFF)
-				elif type(color) is not int:
-					raise ValueError(f'Unexpected color value: \'{color}\'')
-
-				assert value[0] > 0, 'Pie value cannot be less than or equal to 0'
-				self.__points__[key] = value[0]
-				self.__point_colors__[key] = color & 0xFFFFFF
-			else:
-				raise TypeError(f'{type(self).__name__}::add_points - \'**bound_points\' point must be a float, int, or tuple containing a float or int and a color')
-
-	def get_points(self, order: str | typing.Callable = None) -> tuple[tuple[typing.Any, float], ...] | set[tuple[typing.Any, float]]:
-		"""
-		Gets the internal list of points
-		:param order: (str or CALLABLE) If 'x', orders points based on their x values; If 'y', orders points based on their 'y' values; if a callable, sorts based on that function; Otherwise returns unordered points
-		:return: (tuple or set) A set if left unordered, otherwise an ordered tuple
-		:raises AssertionError: If order is not a valid axis and order it not callable
-		"""
-
-		if order is None:
-			return {(k, v) for k, v in self.__points__.items()}
-		else:
-			if order == 'x':
-				sorter: typing.Callable = lambda point: point[0]
-			elif order == 'y':
-				sorter: typing.Callable = lambda point: point[1]
-			else:
-				sorter: typing.Callable = order
-
-			assert callable(sorter), f'{type(self).__name__}::get_points - \'order\' must be a callable, \'x\', \'y\', or None'
-
-			return tuple(sorted(((k, v) for k, v in self.__points__.items()), key=sorter))
-
-
-class HistogramPlot2D(Plot2D, AxisPlot2D):
-	pass
-
-
-class DotPlot2D(Plot2D, AxisPlot2D):
-	pass
-
-
-class StackedDotPlot2D(Plot2D, AxisPlot2D):
-	pass
-
-
-class BoxPlot(MultiPlot2D, AxisPlot2D):
-	pass
-
-
-class DensityPlot(MultiPlot2D, AxisPlot2D):
-	pass
 
 
 class PiePlot2D(Plot2D):
@@ -2058,8 +1913,8 @@ class PiePlot2D(Plot2D):
 		self.__point_colors__: dict[typing.Any, int] = {}
 		self.__total__: float | None = None
 
-	def __legend__(self) -> dict[str, tuple[str, int, int | float | complex | None]]:
-		return {point_name: (point_name, self.__point_colors__[point_name], point_value) for point_name, point_value in self.__points__.items()}
+	def __legend__(self) -> dict[str, tuple[int, int | float | complex | None]]:
+		return {point_name: (self.__point_colors__[point_name], point_value) for point_name, point_value in self.__points__.items()}
 
 	def __image__(self) -> tuple[np.ndarray, tuple[int, int], tuple[float, float], int, int]:
 		base_image: np.ndarray
@@ -2215,3 +2070,422 @@ class PiePlot2D(Plot2D):
 
 		total: float = self.total()
 		return {k: v / total for k, v in self.__points__.items()}
+
+
+class BarPlot2D(Plot2D, AxisPlot2D):
+	"""
+	[BarPlot2D(Plot2D, AxisPlot2D)] - Bar Graph Plotter plotting values in 2D space
+	"""
+
+	def __init__(self):
+		"""
+		[BarPlot2D(Plot2D, AxisPlot2D)] - Bar Graph Plotter plotting values in 2D space
+		- Constructor -
+		"""
+
+		Plot2D.__init__(self)
+		AxisPlot2D.__init__(self)
+		self.__points__: dict[typing.Any, float] = {}
+		self.__point_colors__: dict[typing.Any, int] = {}
+		self.__add_axis__('xy', min_=0, max_=10, minor_spacing=1)
+
+	def __legend__(self) -> dict[str, tuple[int, int | float | complex | None]]:
+		return {point_name: (self.__point_colors__[point_name], point_value) for point_name, point_value in self.__points__.items()}
+
+	def __image__(self) -> tuple[np.ndarray, tuple[int, int], tuple[float, float], int, int]:
+		base_image: np.ndarray
+		draw_size: tuple[int, int]
+		draw_border: tuple[float, float]
+		window_size_unit: int
+		draw_size_unit: int
+		base_image, draw_size, draw_border, window_size_unit, draw_size_unit = super().__image__()
+		border: tuple[float, float] = (draw_border[0] / 2, draw_border[1] / 2)
+		bounds: tuple[int, int, int, int] = (round(border[0]), round(border[1]), round(border[0] + draw_size[0]), round(border[1] + draw_size[1]))
+		max_x: int = len(self.__points__)
+		max_y: float | None = max(point[1] for point in self.__points__.items()) + 1 if max_x else None
+		min_y: float | None = min(point[1] for point in self.__points__.items()) - 1 if max_x else None
+
+		if max_x > 0 and max_y is not None and min_y is not None:
+			self.axis_info('x', min_=0, max_=max_x, minor_spacing=1, major_spacing=1)
+			self.axis_info('y', min_=min_y, max_=max_y, minor_spacing=1, major_spacing=1)
+
+		spacing: int = (round(draw_size[0] / 2 / max_x)) if (max_x % 2 == 0) else 0
+		image = PIL.Image.fromarray(base_image)
+		drawer = PIL.ImageDraw.Draw(image)
+		general_width_pc: float = 0.9
+		rect_width: int = round(draw_size[0] / max_x)
+		rect_outer_width: float = rect_width * (1 - general_width_pc)
+		rect_inner_width: float = rect_width * general_width_pc
+		y2: int = draw_size[1] - round(draw_size[1] * ((-min_y) / (max_y - min_y)))
+
+		for index, (point_name, point_value) in enumerate(self.__points__.items()):
+			x1: int = round((rect_width * index) + rect_outer_width)
+			x2: int = round(x1 + rect_inner_width)
+			y1: int = y2 - round(draw_size[1] / (max_y - min_y) * point_value)
+			sy: int = y1 if y1 <= y2 else y2
+			ly: int = y1 if y1 > y2 else y2
+			drawer.rectangle((x1, sy, x2, ly), fill=f'#{hex(self.__point_colors__[point_name])[2:].zfill(6)}', outline='#eeeeee', width=2)
+
+		base_image = np.array(image)
+		self.__draw_linear_axis__('x', base_image, draw_size, draw_border, (draw_size[0] // 2 - spacing, y2))
+		self.__draw_linear_axis__('y', base_image, draw_size, draw_border, (0, y2), angle=90)
+		return base_image, draw_size, draw_border, window_size_unit, draw_size_unit
+
+	def add_points(self, *points: tuple[typing.Any, float | int] | tuple[typing.Any, float | int, int | str | tuple[int, int, int]] | Vector.Vector, **bound_points: float | int | tuple[float | int, int | str | tuple[int, int, int]]) -> None:
+		"""
+		Adds points to the plot
+		For 3D tuples and 3D vectors, the 3rd value must be either an rgb color tuple, hex-string, or color-int
+		For all tuples and vectors, the first value will be used as the key
+		:param points: (*tuple[float | int] or *Vector) A variadic list of either 2D tuples, 3D tuples, 2D vectors, or 3D vectors
+		:return: (None)
+		:raises AssertionError: If any arguments' type is incorrect
+		:raises TypeError: If a point is invalid
+		"""
+
+		for point in points:
+			if type(point) is tuple and 2 <= len(point) <= 3 and type(point[1]) in (float, int):
+				color: str | int | tuple[int, int, int] = point[2] if len(point) == 3 else 0xFFFFFF
+
+				if type(color) is str:
+					color = color[1:] if color[0] == '#' else color
+					color = ((int(color[0:2], 16) & 0xFF) << 16) | ((int(color[2:4], 16) & 0xFF) << 8) | (int(color[4:6], 16) & 0xFF)
+				elif type(color) is tuple and len(color) == 3:
+					color = ((color[0] & 0xFF) << 16) | ((color[1] & 0xFF) << 8) | (color[2] & 0xFF)
+				elif type(color) is not int:
+					raise ValueError(f'Unexpected color value: \'{color}\'')
+
+				assert point[1] > 0, 'Pie value cannot be less than or equal to 0'
+				self.__points__[point[0]] = point[1]
+				self.__point_colors__[point[0]] = color & 0xFFFFFF
+			elif type(point) is Vector.Vector and 2 <= point.dimension() <= 3:
+				assert point[1] > 0, 'Pie value cannot be less than or equal to 0'
+				self.__points__[point[0]] = point[1]
+				self.__point_colors__[point[0]] = (point[2] & 0xFFFFFF) if point.dimension() == 3 else 0xFFFFFF
+			else:
+				raise TypeError(f'{type(self).__name__}::add_points - \'*points\' point must be either a tuple of length 2 or a Math.Vector.Vector of dimension 2')
+
+		for key, value in bound_points.items():
+			key = key.replace('_', ' ')
+
+			if type(value) in (int, float):
+				#assert value > 0, 'Pie value cannot be less than or equal to 0'
+				self.__points__[key] = value
+				self.__point_colors__[key] = 0xFFFFFF
+			elif type(value) is tuple and type(value[0]) in (int, float):
+				color: str | int | tuple[int, int, int] = value[1] if len(value) == 2 else 0xFFFFFF
+
+				if type(color) is str:
+					color = color[1:] if color[0] == '#' else color
+					color = ((int(color[0:2], 16) & 0xFF) << 16) | ((int(color[2:4], 16) & 0xFF) << 8) | (int(color[4:6], 16) & 0xFF)
+				elif type(color) is tuple and len(color) == 3:
+					color = ((color[0] & 0xFF) << 16) | ((color[1] & 0xFF) << 8) | (color[2] & 0xFF)
+				elif type(color) is not int:
+					raise ValueError(f'Unexpected color value: \'{color}\'')
+
+				#assert value[0] > 0, 'Pie value cannot be less than or equal to 0'
+				self.__points__[key] = value[0]
+				self.__point_colors__[key] = color & 0xFFFFFF
+			else:
+				raise TypeError(f'{type(self).__name__}::add_points - \'**bound_points\' point must be a float, int, or tuple containing a float or int and a color')
+
+	def get_points(self, order: str | typing.Callable = None) -> tuple[tuple[typing.Any, float], ...] | set[tuple[typing.Any, float]]:
+		"""
+		Gets the internal list of points
+		:param order: (str or CALLABLE) If 'x', orders points based on their x values; If 'y', orders points based on their 'y' values; if a callable, sorts based on that function; Otherwise returns unordered points
+		:return: (tuple or set) A set if left unordered, otherwise an ordered tuple
+		:raises AssertionError: If order is not a valid axis and order it not callable
+		"""
+
+		if order is None:
+			return {(k, v) for k, v in self.__points__.items()}
+		else:
+			if order == 'x':
+				sorter: typing.Callable = lambda point: point[0]
+			elif order == 'y':
+				sorter: typing.Callable = lambda point: point[1]
+			else:
+				sorter: typing.Callable = order
+
+			assert callable(sorter), f'{type(self).__name__}::get_points - \'order\' must be a callable, \'x\', \'y\', or None'
+
+			return tuple(sorted(((k, v) for k, v in self.__points__.items()), key=sorter))
+
+
+class HistogramPlot2D(Plot2D, AxisPlot2D):
+	"""
+	[HistogramPlot2D(Plot2D, AxisPlot2D)] - Histogram Graph Plotter plotting values in 2D space
+	"""
+
+	def __init__(self, bin_count: int = 1):
+		"""
+		[HistogramPlot2D(Plot2D, AxisPlot2D)] - Histogram Graph Plotter plotting values in 2D space
+		- Constructor -
+		"""
+
+		if bin_count < 1:
+			raise ValueError(f'{type(self).__name__}::__init__ - \'bin_count\' must be an integer greater than or equal to one')
+
+		Plot2D.__init__(self)
+		AxisPlot2D.__init__(self)
+		self.__points__: list[float] = []
+		self.__bin_count__: int = int(bin_count)
+		self.__add_axis__('xy', min_=0, max_=10, minor_spacing=1, major_spacing=None)
+
+	def __legend__(self) -> dict[str, tuple[int, int | float | complex | None]]:
+		return {str(a): (self.__plot_info__['color'], b) for a, b in self.get_bin_counts().items()}
+
+	def __image__(self) -> tuple[np.ndarray, tuple[int, int], tuple[float, float], int, int]:
+		base_image: np.ndarray
+		draw_size: tuple[int, int]
+		draw_border: tuple[float, float]
+		window_size_unit: int
+		draw_size_unit: int
+		base_image, draw_size, draw_border, window_size_unit, draw_size_unit = super().__image__()
+		border: tuple[float, float] = (draw_border[0] / 2, draw_border[1] / 2)
+		bounds: tuple[int, int, int, int] = (round(border[0]), round(border[1]), round(border[0] + draw_size[0]), round(border[1] + draw_size[1]))
+		bins: dict[int, int] = self.get_bin_counts()
+		max_x: int = len(bins) + 2
+		max_y: float | None = max(bins.values()) + 1 if max_x else None
+		min_y: float | None = min(bins.values()) - 1 if max_x else None
+
+		if max_x > 0 and max_y is not None and min_y is not None:
+			self.axis_info('x', min_=0, max_=max_x)
+			self.axis_info('y', min_=min_y, max_=max_y)
+
+		spacing: int = (round(draw_size[0] / 2 / max_x)) if (max_x % 2 == 0) else 0
+		image = PIL.Image.fromarray(base_image)
+		drawer = PIL.ImageDraw.Draw(image)
+		rect_width: int = round(draw_size[0] / max_x)
+		y2: int = draw_size[1] - round(draw_size[1] * ((-min_y) / (max_y - min_y)))
+
+		for bindex, count in bins.items():
+			x1: int = round(rect_width * (bindex + 1))
+			x2: int = round(x1 + rect_width)
+			y1: int = y2 - round(draw_size[1] / (max_y - min_y) * count)
+			sy: int = y1 if y1 <= y2 else y2
+			ly: int = y1 if y1 > y2 else y2
+			drawer.rectangle((x1, sy, x2, ly), fill=f'#{hex(self.__plot_info__['color'])[2:].zfill(6)}', outline='#eeeeee', width=2)
+
+		base_image = np.array(image)
+		self.__draw_linear_axis__('x', base_image, draw_size, draw_border, (draw_size[0] // 2 - spacing, y2))
+		self.__draw_linear_axis__('y', base_image, draw_size, draw_border, (0, y2), angle=90)
+		return base_image, draw_size, draw_border, window_size_unit, draw_size_unit
+
+	def add_points(self, *points: float | int) -> None:
+		"""
+		Adds points to the plot
+		:param points: (*float or *int) A variadic list of integers or floats
+		:return: (None)
+		:raises AssertionError: If any arguments' type is incorrect
+		:raises TypeError: If a point is invalid
+		"""
+
+		self.__points__.extend(float(x) for x in points)
+
+	def get_points(self, order: typing.Optional[typing.Callable] = None) -> tuple[float, ...]:
+		"""
+		Gets the internal list of points
+		:param order: (str or CALLABLE) If 'x', orders points based on their x values; If 'y', orders points based on their 'y' values; if a callable, sorts based on that function; Otherwise returns unordered points
+		:return: (tuple or set) A set if left unordered, otherwise an ordered tuple
+		:raises AssertionError: If order is not a valid axis and order it not callable
+		"""
+
+		if order is None:
+			return tuple(self.__points__)
+		else:
+			assert callable(order), f'{type(self).__name__}::get_points - \'order\' must be a callable, \'x\', \'y\', or None'
+			return tuple(sorted(self.__points__, key=order))
+
+	def get_bin_counts(self) -> dict[int, int]:
+		"""
+		Gets the number of items in each bin
+		:return: (dict[int, int]) A dictionary mapping a bin number to the number of elements it contains
+		"""
+
+		return {a: len(b) for a, b in self.get_bin_values().items()}
+
+	def get_bin_totals(self) -> dict[int, float]:
+		"""
+		Gets the sum of items in each bin
+		:return: (dict[int, float]) A dictionary mapping a bin number to the total of elements it contains
+		"""
+
+		return {a: sum(b) if len(b) else 0 for a, b in self.get_bin_values().items()}
+
+	def get_bin_values(self) -> dict[int, tuple[float, ...]]:
+		"""
+		Gets the items in each bin
+		:return: (dict[int, tuple[float, ...]]) A dictionary mapping a bin number to the elements it contains
+		"""
+
+		if len(self.__points__) == 0:
+			return {}
+
+		vmin: float
+		vmax: float
+		vmin, vmax = minmax(self.__points__)
+		bin_width: float = (vmax - vmin) / self.__bin_count__
+		bins: dict[int, list[float]] = {}
+
+		for value in self.__points__:
+			bindex: int = math.floor(value / bin_width) - 1
+
+			if bindex in bins:
+				bins[bindex].append(value)
+			else:
+				bins[bindex] = [value]
+
+		kmin: int
+		kmax: int
+		kmin, kmax = minmax(bins.keys())
+		return {i: tuple(bins[i]) if i in bins else () for i in range(kmin, kmax + 1)}
+
+	@property
+	def bins(self) -> int:
+		"""
+		Gets the bin count of this histogram
+		:return: (int) Bin count
+		"""
+
+		return self.__bin_count__
+
+	@bins.setter
+	def bins(self, value: int) -> None:
+		"""
+		Sets the bin count of this histogram
+		:param value: (int) The new bin count
+		:return: (None)
+		:raises ValueError: If the specified value is less than one
+		"""
+
+		if value < 1:
+			raise ValueError(f'{type(self).__name__}::bins.setter - \'value\' must be an integer greater than or equal to one')
+
+		self.__bin_count__ = int(value)
+
+
+class DensityPlot2D(HistogramPlot2D):
+	def __image__(self) -> tuple[np.ndarray, tuple[int, int], tuple[float, float], int, int]:
+		base_image: np.ndarray
+		draw_size: tuple[int, int]
+		draw_border: tuple[float, float]
+		window_size_unit: int
+		draw_size_unit: int
+		base_image, draw_size, draw_border, window_size_unit, draw_size_unit = Plot2D.__image__(self)
+		border: tuple[float, float] = (draw_border[0] / 2, draw_border[1] / 2)
+		bounds: tuple[int, int, int, int] = (round(border[0]), round(border[1]), round(border[0] + draw_size[0]), round(border[1] + draw_size[1]))
+		bins: dict[int, int] = self.get_bin_counts()
+		max_x: int = len(bins) + 2
+		max_y: float | None = max(bins.values()) + 1 if max_x else None
+		min_y: float | None = min(bins.values()) - 1 if max_x else None
+
+		if max_x > 0 and max_y is not None and min_y is not None:
+			self.axis_info('x', min_=0, max_=max_x)
+			self.axis_info('y', min_=min_y, max_=max_y)
+
+		spacing: int = (round(draw_size[0] / 2 / max_x)) if (max_x % 2 == 0) else 0
+		rect_width: int = round(draw_size[0] / max_x)
+		y2: int = draw_size[1] - round(draw_size[1] * ((-min_y) / (max_y - min_y)))
+		line: list[tuple[int, int]] = [(0, y2)]
+		point_size: int = self.__plot_info__['point_size']
+		point_color: str = f'#{hex(self.__plot_info__['color'])[2:].zfill(6)}'
+
+		for bindex, count in bins.items():
+			x1: int = round(rect_width * (bindex + 1))
+			x2: int = round(x1 + rect_width)
+			x: int = round((x1 + x2) / 2)
+			y: int = y2 - round(draw_size[1] / (max_y - min_y) * count)
+			line.append((x, y))
+
+		line.append((draw_size[1], y2))
+		line_x: tuple[int, ...] = tuple(point[0] for point in line)
+		line_y: tuple[int, ...] = tuple(point[1] for point in line)
+		interpolator: typing.Callable = scipy.interpolate.interp1d(line_x, line_y, kind=2)
+		line_x: np.ndarray = np.linspace(*minmax(line_x), num=100)
+		line_y: np.ndarray = interpolator(line_x)
+		image: PIL.Image.Image = PIL.Image.fromarray(base_image)
+		drawer: PIL.ImageDraw.ImageDraw = PIL.ImageDraw.ImageDraw(image)
+
+		for i in range(len(line_x) - 1):
+			point1: tuple[int, int] = (int(line_x[i]), int(line_y[i]))
+			point2: tuple[int, int] = (int(line_x[i + 1]), int(line_y[i + 1]))
+			drawer.line((point1, point2), fill=point_color, width=max(1, point_size // 4))
+
+		for x, y in line:
+			drawer.circle((x, y), point_size // 2, fill=point_color, width=2, outline='#eeeeee')
+
+		base_image = np.array(image)
+
+		self.__draw_linear_axis__('x', base_image, draw_size, draw_border, (draw_size[0] // 2 - spacing, y2))
+		self.__draw_linear_axis__('y', base_image, draw_size, draw_border, (0, y2), angle=90)
+		return base_image, draw_size, draw_border, window_size_unit, draw_size_unit
+
+
+class DotPlot2D(HistogramPlot2D):
+	def __legend__(self) -> dict[str, tuple[int, int | float | complex | None]]:
+		legend: dict[str, tuple[int, int | float | complex | None]] = {}
+		bins: dict[int, int] = self.get_bin_counts()
+		highest_count: float = max(bins.values())
+		point_color: int = self.__plot_info__['color']
+		r: int = point_color >> 16 & 0xFF
+		g: int = point_color >> 8 & 0xFF
+		b: int = point_color & 0xFF
+		h, l, s = colorsys.rgb_to_hls(r, g, b)
+
+		for bindex, count in bins.items():
+			local_l: float = l * (count / highest_count)
+			r, g, b = colorsys.hls_to_rgb(h, local_l, s)
+			color_int: int = (int(r) << 16) | (int(g) << 8) | int(b)
+			legend[str(bindex)] = (color_int, count)
+
+		return legend
+
+	def __image__(self) -> tuple[np.ndarray, tuple[int, int], tuple[float, float], int, int]:
+		base_image: np.ndarray
+		draw_size: tuple[int, int]
+		draw_border: tuple[float, float]
+		window_size_unit: int
+		draw_size_unit: int
+		base_image, draw_size, draw_border, window_size_unit, draw_size_unit = Plot2D.__image__(self)
+		border: tuple[float, float] = (draw_border[0] / 2, draw_border[1] / 2)
+		bins: dict[int, int] = self.get_bin_counts()
+		max_x: int = len(bins)
+		max_y: float | None = max(bins.values()) + 1 if max_x else None
+		min_y: float | None = min(bins.values()) - 1 if max_x else None
+
+		if max_x > 0 and max_y is not None and min_y is not None:
+			self.axis_info('x', min_=0, max_=max_x)
+			self.axis_info('y', min_=min_y, max_=max_y)
+
+		spacing: int = (round(draw_size[0] / 2 / max_x)) if (max_x % 2 == 0) else 0
+		image = PIL.Image.fromarray(base_image)
+		drawer = PIL.ImageDraw.Draw(image)
+		highest_count: float = max(bins.values())
+		point_radius: int = round(self.__plot_info__['point_size'] / 2)
+		point_color: int = self.__plot_info__['color']
+		r: int = point_color >> 16 & 0xFF
+		g: int = point_color >> 8 & 0xFF
+		b: int = point_color & 0xFF
+		h, l, s = colorsys.rgb_to_hls(r, g, b)
+		rect_width: float = draw_size[0] / max_x
+		rect_half_width: float = draw_size[0] / max_x / 2
+		y: int = round(draw_size[1] / 2)
+
+		for bindex, count in bins.items():
+			local_l: float = l * (count / highest_count)
+			r, g, b = colorsys.hls_to_rgb(h, local_l, s)
+			x: int = round(rect_width * bindex + rect_half_width)
+			color_int: int = (int(r) << 16) | (int(g) << 8) | int(b)
+			drawer.circle((x, y), point_radius, fill=f'#{hex(color_int)[2:].zfill(6)}', outline='#eeeeee', width=2)
+
+		base_image = np.array(image)
+		self.__draw_linear_axis__('x', base_image, draw_size, draw_border, (draw_size[0] // 2 - spacing, draw_size[1]))
+		return base_image, draw_size, draw_border, window_size_unit, draw_size_unit
+
+
+class StackedDotPlot2D(Plot2D, AxisPlot2D):
+	pass
+
+
+class BoxPlot(MultiPlot2D, AxisPlot2D):
+	pass
