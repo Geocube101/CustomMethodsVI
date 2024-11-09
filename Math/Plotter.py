@@ -1136,6 +1136,26 @@ class MultiPlot2D(Plot2D):
 		if make_active:
 			self.__current_plot__ = name
 
+	def del_plot(self, *names: str) -> None:
+		'''
+		Deletes a plot from this plotter
+		:param names: (*str) The plot names to delete
+		:return: (None)
+		:raises AssertionError: If any arguments' type or value are incorrect
+		:raises NameError: If the specified plot does not exist
+		'''
+
+		for name in names:
+			assert isinstance(name, str), f'{type(self).__name__}::del_plot - \'name\' must be a string'
+
+			if name not in self.__plot_info__:
+				raise NameError(f'Plot \'{name}\' is not a plot in this plotter')
+			else:
+				if self.__current_plot__ == name:
+					self.__current_plot__ = ''
+
+				del self.__plot_info__[name]
+
 	def plot_info(self, *plot_names: str, color: typing.Optional[tuple[float | int, float | int, float | int] | str | int] = ..., label_points: typing.Optional[bool] = ..., point_size: typing.Optional[int] = ..., extra: typing.Optional[dict] = ..., **extra_kwargs) -> None:
 		"""
 		Sets information for the specified plots
@@ -1433,6 +1453,9 @@ class CartesianScatterPlot2D(MultiPlot2D, AxisPlot2D):
 		drawer: PIL.ImageDraw.ImageDraw = PIL.ImageDraw.ImageDraw(pilimage)
 
 		for point in (plot[x] for x in range(small, large + 1)):
+			if max_x - min_x == 0 or max_y - min_y == 0:
+				continue
+
 			xratio: float = (point[0] - min_x) / (max_x - min_x)
 			yratio: float = (point[1] - min_y) / (max_y - min_y)
 			screenx: int = round(xratio * draw_size[0] + border[0])
@@ -1450,7 +1473,9 @@ class CartesianScatterPlot2D(MultiPlot2D, AxisPlot2D):
 			if side_count >= 3:
 				drawer.regular_polygon((screenx, screeny, plot_info['point_size']), side_count, 0, color)
 
-		drawer.line(points, color, plot_info['extra']['line_join_width'], plot_info['extra']['line_join_type'])
+		join_width: int = plot_info['extra']['line_join_width'] if 'line_join_width' in plot_info['extra'] else 1
+		join_type: str = plot_info['extra']['line_join_type'] if 'line_join_type' in plot_info['extra'] else None
+		drawer.line(points, color, join_width, join_type)
 		result: np.ndarray = np.asarray(pilimage)
 		return cv2.addWeighted(base_image, 1, result, 1, 0)
 
@@ -1471,10 +1496,18 @@ class CartesianScatterPlot2D(MultiPlot2D, AxisPlot2D):
 			plot: set[tuple[float, float]] = self.__points__[plot_name]
 
 			if len(plot):
-				min_x = min(min_x, min(x[0] for x in plot)) if not x_haslowerbound else min_x
-				max_x = max(max_x, max(x[0] for x in plot)) if not x_hasupperbound else max_x
-				min_y = min(min_y, min(y[1] for y in plot)) if not y_haslowerbound else min_y
-				max_y = max(max_y, max(y[1] for y in plot)) if not y_hasupperbound else max_y
+				min_x = min(x[0] for x in plot) if not x_haslowerbound and min_x is None else min(min_x, min(x[0] for x in plot)) if not x_haslowerbound else min_x
+				max_x = max(x[0] for x in plot) if not x_hasupperbound and max_x is None else max(max_x, max(x[0] for x in plot)) if not x_hasupperbound else max_x
+				min_y = min(y[1] for y in plot) if not y_haslowerbound and min_y is None else min(min_y, min(y[1] for y in plot)) if not y_haslowerbound else min_y
+				max_y = max(y[1] for y in plot) if not y_hasupperbound and max_y is None else max(max_y, max(y[1] for y in plot)) if not y_hasupperbound else max_y
+
+		if max_x - min_x == 0:
+			max_x += 1
+			min_x -= 1
+
+		if max_y - min_y == 0:
+			max_y += 1
+			min_y -= 1
 
 		base_image, draw_size, draw_border, window_size_unit, draw_size_unit = super().__image__(plot_names, min_x, max_x, min_y, max_y)
 		border: tuple[float, float] = (draw_border[0] / 2, draw_border[1] / 2)
@@ -1561,7 +1594,7 @@ class CartesianScatterPlot2D(MultiPlot2D, AxisPlot2D):
 		assert callable(function), f'{type(self).__name__}::graph - \'function\' must be a callable accepting one float and returning one float'
 		assert step is None or step is ... or type(step) in (float, int) and step > 0, f'{type(self).__name__}::graph - \'step\' must be a float or int greater than 0'
 		assert self.axes_bounded('x'), 'X-Axis minimum and maximum values must be set'
-		assert self.axes_bounded('y'), 'Y-Axis minimum and maximum values must be set'
+		# assert self.axes_bounded('y'), 'Y-Axis minimum and maximum values must be set'
 
 		min_, max_ = self.axis_bounds('x')
 		x: float = min_

@@ -359,3 +359,16 @@ def DefaultOverload(function: typing.Callable):
 	redirect: typing.Callable = lambda *args, __caller=caller, **kwargs: __caller(*args, **kwargs)
 	__OverloadCaller.assoc(redirect, caller)
 	return redirect
+
+
+class AccessRestrictedClass(type):
+	pass
+
+
+def ARC(class_def):
+	return AccessRestrictedClass()
+
+
+def Protected(sub_class, type_check: bool = False):
+	print(variable_or_method)
+	pass

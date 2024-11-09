@@ -3,7 +3,6 @@ from __future__ import annotations
 import io
 import sys
 import typing
-import collections.abc
 import math
 import zlib
 import dill
@@ -1291,6 +1290,9 @@ class LinqStream(typing.Iterable):
 
 	def max(self, comparer: typing.Callable[[typing.Any, typing.Any], typing.Any] = None) -> typing.Any:
 		return max(self, key=comparer)
+
+	def sum(self) -> typing.Any:
+		return sum(self)
 
 	def collect(self, cls: type = tuple) -> typing.Iterable[typing.Any]:
 		return cls(self)

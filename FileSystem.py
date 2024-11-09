@@ -32,6 +32,12 @@ class File:
 	def __eq__(self, other: File) -> bool:
 		return self.__fpath__ == other.__fpath__ if isinstance(other, File) else NotImplemented
 
+	def __enter__(self):
+		return self
+
+	def __exit__(self, exc_type, exc_val, exc_tb):
+		pass
+
 	def rename(self, new_name: str) -> None:
 		"""
 		Renames this file to a new name
