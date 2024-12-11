@@ -608,7 +608,8 @@ class Assembler:
 
 		for i, (field, (size, value)) in enumerate(breakdown.items()):
 			signed: bool = size < 0
-			mask: int = (1 << abs(size)) - 1
+			size = abs(size)
+			mask: int = (1 << size) - 1
 			value &= mask
 			bin_: str = f'-{bin(abs(value))[2:].zfill(size)}' if signed and value < 0 else bin(value)[2:].zfill(size)
 			oct_: str = f'-{oct(abs(value))[2:]}' if signed and value < 0 else oct(value)[2:]
