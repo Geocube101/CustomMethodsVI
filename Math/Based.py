@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import typing
+
 from CustomMethodsVI.Decorators import Overload
 
 
@@ -9,7 +11,7 @@ class BaseNumber:
 	"""
 
 	@Overload(strict=True)
-	def __init__(self, base: int, digits: tuple[int, ...]):
+	def __init__(self, base: int, digits: typing.Iterable[int]):
 		"""
 		[BaseNumber] - Represents a number converted to base-N
 		- Constructor -
@@ -62,6 +64,26 @@ class BaseNumber:
 
 		return last - first
 
+	def half_compliment(self, size: typing.Optional[int] = ...) -> BaseNumber:
+		"""
+		Returns the half compliment of this number
+		:param size:
+		:return:
+		"""
+
+		deltas: list[int, ...] = [(self.__base__ - digit - 1) % self.__base__ for digit in self.__digits__]
+
+		while len(deltas) < size:
+			deltas.insert(0, self.__base__ - 1)
+
+		while len(deltas) > size and deltas[0] == 0:
+			deltas.pop(0)
+
+		return BaseNumber(self.__base__, deltas)
+
+	def full_compliment(self, size: typing.Optional[int] = ...) -> BaseNumber:
+		return self.half_compliment(size) + 1
+
 	def __repr__(self):
 		return str(self)
 
@@ -71,8 +93,10 @@ class BaseNumber:
 	def __int__(self) -> int:
 		return sum(d * self.__base__ ** i for i, d in enumerate(reversed(self.__digits__)))
 
-	def __add__(self, other: BaseNumber) -> BaseNumber:
-		if not isinstance(other, BaseNumber):
+	def __add__(self, other: BaseNumber | int) -> BaseNumber:
+		if isinstance(other, int):
+			other = BaseN(10).convert(other)
+		elif not isinstance(other, BaseNumber):
 			return NotImplemented
 
 		digits_b: tuple[int, ...] = other.to_base(self.__base__).__digits__

@@ -113,7 +113,10 @@ class __OverloadCaller:
 			elif annotation == typing.Callable:
 				return types.FunctionType, types.MethodType, types.BuiltinFunctionType, types.LambdaType, types.MethodDescriptorType
 			elif isinstance(annotation, str):
-				return deduce_annotation(eval(annotation))
+				try:
+					return deduce_annotation(eval(annotation))
+				except NameError:
+					return typing.Any,
 			else:
 				raise TypeError(f'Non-standard type hint: \'{annotation}\' ({type(annotation)})')
 
@@ -176,6 +179,7 @@ class __OverloadCaller:
 			for parameter_name, parameter in parameters.items():
 				if is_bound and not bound_removed and not (function.__name__.startswith('__') and function.__name__.endswith('__')):
 					bound_removed = True
+					arguments[parameter_name] = args.pop()
 					continue
 
 				if parameter.kind == parameter.POSITIONAL_OR_KEYWORD or parameter.kind == parameter.POSITIONAL_ONLY:
@@ -370,5 +374,5 @@ def ARC(class_def):
 
 
 def Protected(sub_class, type_check: bool = False):
-	print(variable_or_method)
+	#print(variable_or_method)
 	pass

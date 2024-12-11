@@ -23,7 +23,7 @@ class FlaskSocketioServer:
 	[FlaskSocketioServer] - Operations for socket-io server-side interface (Flask)
 	"""
 
-	def __init__(self, app: flask.Flask) -> None:
+	def __init__(self, app: flask.Flask, **kwargs) -> None:
 		"""
 		[FlaskSocketioServer] - Operations for socket-io server-side interface (Flask)
 		- Constructor -
@@ -31,10 +31,12 @@ class FlaskSocketioServer:
 		"""
 
 		self.__app: flask.Flask = app
-		self.__socket: flask_socketio.SocketIO = flask_socketio.SocketIO(app)
+		self.__socket: flask_socketio.SocketIO = flask_socketio.SocketIO(app, **kwargs)
 		self.__spaces: list[FlaskSocketioNamespace] = [FlaskSocketioNamespace(self, '/')]
 		self.__state: bool = False
 		self.__async_listener: threading.Thread | None = None
+		self.__host: str = ...
+		self.__port: int = ...
 
 	def __enter__(self, app: flask.Flask) -> 'FlaskSocketioServer':
 		return FlaskSocketioServer(app)
@@ -61,6 +63,8 @@ class FlaskSocketioServer:
 		self.__state = True
 
 		try:
+			self.__host = host
+			self.__port = port
 			self.__socket.run(self.__app, host=host, port=port, **kwargs)
 		except (KeyboardInterrupt, SystemExit):
 			pass
@@ -149,6 +153,14 @@ class FlaskSocketioServer:
 	@property
 	def closed(self) -> bool:
 		return not self.__state
+
+	@property
+	def host(self) -> str | None:
+		return None if self.__host is None or self.__host is ... else str(self.__host)
+
+	@property
+	def port(self) -> int | None:
+		return None if self.__port is None or self.__port is ... else int(self.__port)
 
 
 class FlaskSocketioNamespace:

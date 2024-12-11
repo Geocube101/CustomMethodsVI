@@ -608,7 +608,7 @@ class Assembler:
 
 		for i, (field, (size, value)) in enumerate(breakdown.items()):
 			signed: bool = size < 0
-			mask: int = (2 << abs(size)) - 1
+			mask: int = (1 << abs(size)) - 1
 			value &= mask
 			bin_: str = f'-{bin(abs(value))[2:].zfill(size)}' if signed and value < 0 else bin(value)[2:].zfill(size)
 			oct_: str = f'-{oct(abs(value))[2:]}' if signed and value < 0 else oct(value)[2:]
@@ -618,9 +618,9 @@ class Assembler:
 			end: str = ' │ ' if i + 1 < len(breakdown) else ''
 			lines[0] += f'{field.rjust(longest, " ")}{end}'
 			lines[1] += '─' * (longest + 1) + ('┼─' if i + 1 < len(breakdown) else '')
-			lines[2] += f'{bin_.zfill(longest)}{end}'
-			lines[3] += f'{oct_.zfill(longest)}{end}'
-			lines[4] += f'{dec_.zfill(longest)}{end}'
-			lines[5] += f'{hex_.zfill(longest)}{end}'
+			lines[2] += f'{bin_.rjust(longest)}{end}'
+			lines[3] += f'{oct_.rjust(longest)}{end}'
+			lines[4] += f'{dec_.rjust(longest)}{end}'
+			lines[5] += f'{hex_.rjust(longest)}{end}'
 
 		print(msg + '\n'.join(lines))

@@ -521,6 +521,35 @@ class FileStream(Stream):
 		return self
 
 
+class LogFileStream(FileStream):
+	"""
+	[LogFileStream(FileStream)] - Stream for log file IO
+	"""
+
+	def __init__(self, path: str, mode: str, encoding: str = 'utf-8', header_format: str = '[ %Y/%m/%d - %H:%M:%S:%f ] [ %L ]: '):
+		"""
+		[LogFileStream(FileStream)] - Stream for log file IO
+		- Constructor -
+		:param path: (str) The filepath
+		:param mode: (str) The stream IO mode
+		:param encoding: (str) For non-binary streams, the encoding to use
+		"""
+
+		super().__init__(path, mode, encoding)
+		self.__header_format__: str = str(header_format)
+		self.__write_header__: bool = True
+		print(print in globals())
+
+	def write(self, __buffer: str | bytes) -> LogFileStream:
+		pass
+
+	def reopen(self, mode: str, encoding: str = 'utf8') -> LogFileStream:
+		self.__write_header__ = True
+		super().reopen(mode, encoding)
+		return self
+
+
+
 class ListStream(Stream):
 	"""
 	[ListStream(Stream)] - Basic FIFO stream using a list for it's internal buffer

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import datetime
+import typing
 
 from CustomMethodsVI import Stream
 
@@ -27,10 +28,21 @@ class File:
 			raise IsADirectoryError(f'The object at "{self.__fpath__}" is a directory')
 
 	def __repr__(self) -> str:
-		return f'<FILE: "{self.__fpath__}">'
+		return f'<{type(self).__name__.upper()}: "{self.__fpath__}">'
 
 	def __eq__(self, other: File) -> bool:
 		return self.__fpath__ == other.__fpath__ if isinstance(other, File) else NotImplemented
+
+	def __hash__(self) -> int:
+		base: int = 0
+
+		for char in self.__fpath__:
+			base = base << 16 | ord(char)
+
+		return base
+
+	def __str__(self) -> str:
+		return self.__fpath__
 
 	def __enter__(self):
 		return self
@@ -46,6 +58,14 @@ class File:
 		"""
 
 		os.rename(self.__fpath__, self.parentdir().file(new_name).__fpath__)
+
+	def single_write(self, data: str | bytes, encoding: str = 'utf-8') -> None:
+		with self.open('wb' if isinstance(data, (bytes, bytearray)) else 'w', encoding) as f:
+			f.write(data)
+
+	def single_append(self, data: str | bytes, encoding: str = 'utf-8') -> None:
+		with self.open('ab' if isinstance(data, (bytes, bytearray)) else 'a', encoding) as f:
+			f.write(data)
 
 	def exists(self) -> bool:
 		"""
@@ -155,6 +175,10 @@ class File:
 
 		return os.path.basename(self.__fpath__)
 
+	def single_read(self, as_bytes: bool = False, encoding: str = 'utf-8') -> str | bytes:
+		with self.open('rb' if as_bytes else 'r', encoding) as f:
+			return f.read()
+
 	def parentdir(self) -> Directory:
 		"""
 		Returns the containing directory
@@ -215,24 +239,35 @@ class Directory:
 	[Directory] - Represents a single directory
 	"""
 
-	def __init__(self, path: str):
+	def __init__(self, path: str | Directory):
 		"""
 		[Directory] - Represents a single directory
 		- Constructor -
-		:param path: (str) The path of the file
+		:param path: (str | Directory) The path of the file or another directory object
 		:raises OSError: If the file at the specified path is a file
 		"""
 
-		self.__dpath__ = str(path).replace('\\', '/').rstrip('/') + '/'
+		self.__dpath__ = path.__dpath__ if isinstance(path, type(self)) else str(path).replace('\\', '/').rstrip('/') + '/'
 
 		if os.path.isfile(self.__dpath__):
 			raise OSError(f'The object at "{self.__dpath__}" is a file')
 
 	def __repr__(self) -> str:
-		return f'<DIRECTORY: "{self.__dpath__}">'
+		return f'<{type(self).__name__.upper()}: "{self.__dpath__}">'
 
 	def __eq__(self, other: Directory) -> bool:
 		return self.__dpath__ == other.__dpath__ if isinstance(other, Directory) else NotImplemented
+
+	def __hash__(self) -> int:
+		base: int = 0
+
+		for char in self.__dpath__:
+			base = base << 16 | ord(char)
+
+		return base
+
+	def __str__(self) -> str:
+		return self.__dpath__
 
 	def rename(self, new_name: str) -> None:
 		"""
@@ -243,7 +278,7 @@ class Directory:
 
 		os.rename(self.__dpath__, self.up().directory(new_name).__dpath__)
 
-	def copyto(self, dst: str | Directory) -> False:
+	def copyto(self, dst: str | Directory) -> None:
 		"""
 		Copies this directory to the specified directory
 		:param dst: (str | Directory) The directory or path to copy to
@@ -423,3 +458,46 @@ class Directory:
 		"""
 
 		return self.__dpath__.split('/')[-2]
+
+
+class LoggingDirectory(Directory):
+	"""
+	[LoggingDirectory(Directory)] - Represents a directory for log files
+	"""
+
+	def file(self, path: str) -> LogFile:
+		"""
+		Returns a new 'LogFile' pointing to the specified relative path
+		The file may not exist and no new file is created
+		:param path: (str) The relative path
+		:return: (File) A new File object
+		"""
+
+		return LogFile(self.__dpath__ + path.replace('\\', '/').lstrip('/'))
+
+	def new_log(self, timestamp: typing.Optional[datetime.datetime] = ..., time_format: str = '%Y-%m-%d_%H-%M-%S-%f') -> LogFile:
+		timestamp: datetime.datetime = datetime.datetime.now() if timestamp is None or timestamp is ... else timestamp
+		assert isinstance(timestamp, datetime.datetime)
+		return self.file(f'{timestamp.strftime(time_format)}.log')
+
+	def logfiles(self) -> tuple[LogFile, ...]:
+		"""
+		:return: (tuple[LogFile, ...]) All sub-files of this directory
+		"""
+
+		try:
+			data: tuple[str, list[str], list[str]] = next(os.walk(self.__dpath__, True))
+			return tuple(LogFile(data[0] + x) for x in data[2] if x[x.rindex('.') + 1:] == 'log')
+		except StopIteration:
+			return tuple()
+
+
+class LogFile(File):
+	"""
+	[LogFile(File)] - Represents a single log file object
+	"""
+
+	def open(self, mode='r', encoding: str = 'utf-8', header_format: str = '') -> Stream.LogFileStream:
+		fstream = Stream.LogFileStream(self.__fpath__, mode, encoding, header_format)
+		self.__streams__.append(fstream)
+		return fstream
