@@ -7,7 +7,6 @@ import os
 import signal
 import threading
 import time
-import traceback
 
 import socketio
 import flask_socketio
