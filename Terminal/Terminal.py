@@ -38,7 +38,7 @@ import CustomMethodsVI.Connection as Connection
 
 from CustomMethodsVI.Terminal.Enums import *
 from CustomMethodsVI.Terminal.Struct import Color, BorderInfo, MouseInfo, FontInfoEx, Font, WidgetStruct, AnsiStr, SerializableCallable
-from CustomMethodsVI.Iterable import SpinList
+from CustomMethodsVI.Iterable import SpinQueue
 
 
 class Terminal:
@@ -94,8 +94,8 @@ class Terminal:
 		self.__root__ = curses.initscr()
 		self.__scroll__: list[int, int] = [0, 0]
 		self.__last_mouse_info__: MouseInfo = MouseInfo(-1, 0, 0, 0, 0)
-		self.__event_queue__: SpinList[int] = SpinList(10)
-		self.__global_event_queue__: SpinList[int] = SpinList(10)
+		self.__event_queue__: SpinQueue[int] = SpinQueue(10)
+		self.__global_event_queue__: SpinQueue[int] = SpinQueue(10)
 		self.__colors__: dict[int, int] = {}
 		self.__color_usage__: dict[int, int] = {}
 		self.__color_times__: dict[int, float] = {}
@@ -103,7 +103,7 @@ class Terminal:
 		self.__color_pair_usage__: dict[int, int] = {}
 		self.__color_pair_times__: dict[int, float] = {}
 		self.__max_workers__: int = 10
-		self.__update_times__: SpinList[tuple[float, float]] = SpinList(50)
+		self.__update_times__: SpinQueue[tuple[float, float]] = SpinQueue(50)
 		self.__tick__: int = 0
 		self.__auto_scroll__: int = 10
 		self.__tab_size__: int = 4
@@ -263,7 +263,7 @@ class Terminal:
 		curses.curs_set(0 if visibility == 0 else visibility if flash_rate <= 0 else (visibility if self.__tick__ % (flash_rate * 2) > flash_rate else 0))
 
 		# Close closed windows
-		closed_windows: tuple[int] = tuple(_id for _id, window in self.__windows__.items() if window.closed)
+		closed_windows: tuple[int, ...] = tuple(_id for _id, window in self.__windows__.items() if window.closed)
 
 		for closed_window in closed_windows:
 			if self.__windows__[closed_window].remote_exit_reason is not None:
@@ -656,13 +656,13 @@ class Terminal:
 				win32gui.ShowWindow(hwnd, win32con.SW_SHOWDEFAULT)
 
 	def getch(self) -> int | None:
-		return self.__event_queue__.pop(0) if len(self.__event_queue__) else None
+		return self.__event_queue__.pop() if len(self.__event_queue__) else None
 
 	def peekch(self) -> int | None:
 		return self.__event_queue__[-1] if len(self.__event_queue__) else None
 
 	def getgch(self) -> int | None:
-		return self.__global_event_queue__.pop(0) if len(self.__global_event_queue__) else None
+		return self.__global_event_queue__.pop() if len(self.__global_event_queue__) else None
 
 	def peekgch(self) -> int | None:
 		return self.__global_event_queue__[-1] if len(self.__global_event_queue__) else None

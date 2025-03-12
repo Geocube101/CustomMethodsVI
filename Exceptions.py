@@ -74,12 +74,27 @@ class AmbiguousError(ValueError):
 
 class AlreadyDefinedError(BaseException):
 	"""
-	[AlreadyDefinedError] - Exception representing data already set or defined
+	[AlreadyDefinedError(BaseException)] - Exception representing data already set or defined
 	"""
 
 	def __init__(self, what: str = ''):
 		"""
-		[AlreadyDefinedError] - Exception representing data already set or defined
+		[AlreadyDefinedError(BaseException)] - Exception representing data already set or defined
+		- Constructor -
+		:param what: The message
+		"""
+
+		super().__init__(what)
+
+
+class IterableEmptyException(Exception):
+	"""
+	[IterableEmptyException(Exception)] - Exception representing attempt to pull from empty iterable
+	"""
+
+	def __init__(self, what: str = ''):
+		"""
+		[IterableEmptyException(Exception)] - Exception representing attempt to pull from empty iterable
 		- Constructor -
 		:param what: The message
 		"""

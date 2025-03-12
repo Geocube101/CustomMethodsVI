@@ -16,6 +16,8 @@ import CustomMethodsVI.Terminal.Struct as Struct
 
 
 if __name__ == '__main__':
+	res: int = -1
+
 	try:
 		parent_pid: int
 		conn: Connection.WinNamedPipe
@@ -61,8 +63,10 @@ if __name__ == '__main__':
 		terminal: Terminal.WindowTerminal.SubprocessTerminal = Terminal.WindowTerminal.SubprocessTerminal(conn, widget_conn, width, height, font)
 
 		def on_exit(*_) -> None:
+			global res
+
 			terminal.end(-1)
-			res: int = terminal.wait()
+			res = terminal.wait()
 
 			if not conn.closed:
 				conn.send((0, True, terminal.exit_reason))
@@ -72,8 +76,6 @@ if __name__ == '__main__':
 			if not widget_conn.closed:
 				widget_conn.close()
 
-			sys.exit(res)
-
 		if os.name == 'nt':
 			import win32api
 			win32api.SetConsoleCtrlHandler(on_exit, True)
@@ -81,7 +83,7 @@ if __name__ == '__main__':
 			import signal
 			signal.signal(signal.SIGHUP, on_exit)
 
-		res: int = terminal.mainloop(tps, before_draw=functions['before_draw'] if 'before_draw' in functions else ..., after_draw=functions['after_draw'] if 'after_draw' in functions else ...)
+		res = terminal.mainloop(tps, before_draw=functions['before_draw'] if 'before_draw' in functions else ..., after_draw=functions['after_draw'] if 'after_draw' in functions else ...)
 
 		if not conn.closed:
 			conn.send((0, True, terminal.exit_reason))
@@ -94,8 +96,9 @@ if __name__ == '__main__':
 		if res != 0:
 			input('...')
 
-		sys.exit(res)
 	except (KeyboardInterrupt, Exception) as e:
 		curses.endwin()
 		print(''.join(traceback.format_exception(e)))
 		input('...')
+	finally:
+		sys.exit(res)

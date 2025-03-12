@@ -5,6 +5,7 @@ from collections import OrderedDict
 
 from CustomMethodsVI.Math.Based import BaseN, BaseNumber
 from CustomMethodsVI.Decorators import Overload, DefaultOverload
+from dotenv.parser import parse_value
 
 
 class Assembler:
@@ -168,7 +169,7 @@ class Assembler:
 				cond: int = Assembler.__CONDITIONS__.index(cond_str)
 				cmd: int = Assembler.__DATA_PROCESSING__.index(full_cmd)
 				rd, rn, *args = args
-				Rn: int = parse_register(rn)
+				Rn: int = parse_value(rn) if full_cmd == 'MOV' and rn.startswith('#') else parse_register(rn)
 				Rd: int = parse_register(rd)
 				src12: int = 0
 				is_immediate: bool
@@ -216,7 +217,19 @@ class Assembler:
 						src12 = src12 << 4 | (Rm & 0xF)
 
 				elif len(args) == 0 and full_cmd == 'MOV':
-					is_immediate = True
+					is_immediate = rn.startswith('#')
+
+					if not is_immediate:
+						basen: BaseNumber = BaseN(2).convert(Rn)
+						assert basen.precision() <= 8, 'Immediate operand is not 8-bit precision'
+						binary: str = str(basen).rjust(8, '0')
+						is_immediate = True
+						shamt: int = len(binary) - binary.rindex('1') - 1
+						shamt = shamt if shamt % 2 == 0 else shamt - 1
+						rot: int = ((32 - shamt) // 2) % 16
+						src12 = src12 << 4 | (rot & 0xF)
+						src12 = src12 << 8 | (Rn >> shamt & 0xFF)
+						Rn = 0
 
 				else:
 					raise ValueError('Invalid number of arguments')

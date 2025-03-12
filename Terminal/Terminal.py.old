@@ -36,7 +36,7 @@ import CustomMethodsVI.Connection as Connection
 
 from CustomMethodsVI.Terminal.Enums import *
 from CustomMethodsVI.Terminal.Struct import Color, BorderInfo, MouseInfo, FontInfoEx, Font, WidgetStruct, AnsiStr, SerializableCallable
-from CustomMethodsVI.Iterable import SpinList
+from CustomMethodsVI.Iterable import SpinQueue
 from CustomMethodsVI.Decorators import Overload
 
 
@@ -87,14 +87,14 @@ class Terminal:
 		self.__root__ = curses.initscr()
 		self.__scroll__: list[int, int] = [0, 0]
 		self.__last_mouse_info__: MouseInfo = MouseInfo(-1, 0, 0, 0, 0)
-		self.__event_queue__: SpinList[int] = SpinList(10)
-		self.__global_event_queue__: SpinList[int] = SpinList(10)
+		self.__event_queue__: SpinQueue[int] = SpinQueue(10)
+		self.__global_event_queue__: SpinQueue[int] = SpinQueue(10)
 		self.__colors__: dict[int, int] = {}
 		self.__color_usage__: dict[int, int] = {}
 		self.__color_times__: dict[int, float] = {}
 		self.__color_pairs__: dict[tuple[int, int], int] = {}
 		self.__max_workers__: int = 10
-		self.__update_times__: SpinList[tuple[float, float]] = SpinList(50)
+		self.__update_times__: SpinQueue[tuple[float, float]] = SpinQueue(50)
 		self.__tick__: int = 0
 		self.__auto_scroll__: int = 10
 		self.__tab_size__: int = 4

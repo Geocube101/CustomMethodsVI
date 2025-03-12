@@ -5,182 +5,115 @@ import multiprocessing.synchronize
 import os
 import threading
 import struct
+import time
+
+import CustomMethodsVI.Stream as Stream
 
 
 class ReaderWriterLock:
-	class ReaderLock:
-		def __init__(self, src: ReaderWriterLock):
-			assert isinstance(src, ReaderWriterLock)
+	class __ThreadInfo__:
+		def __init__(self, initial_thread: int, is_writer: bool):
+			self.__thread_queue__: list[int] = [initial_thread]
+			self.__is_writer__: bool = bool(is_writer)
 
-			self.__rwlock__: ReaderWriterLock = src
-			self.__count__: int = 0
+		def __repr__(self) -> str:
+			if self.is_writer:
+				return f'Writer @ {self.__thread_queue__[0]}'
+			else:
+				return f'Reader(s) @ {self.__thread_queue__}'
 
-		def __del__(self):
-			if self.__count__ > 0:
-				self.__rwlock__.release_reader()
-
-		def __enter__(self) -> ReaderWriterLock.ReaderLock:
-			self.acquire()
-			return self
-
-		def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-			self.release()
-
-		def acquire(self) -> None:
-			if self.__count__ == 0:
-				self.__rwlock__.acquire_reader()
-
-			self.__count__ += 1
-
-		def release(self) -> None:
-			if self.__count__ == 1:
-				self.__rwlock__.release_reader()
-
-			if self.__count__ > 0:
-				self.__count__ -= 1
-
-	class WriterLock:
-		def __init__(self, src: ReaderWriterLock):
-			assert isinstance(src, ReaderWriterLock)
-
-			self.__rwlock__: ReaderWriterLock = src
-			self.__count__: int = 0
-
-		def __del__(self):
-			if self.__count__ > 0:
-				self.__rwlock__.release_writer()
-
-		def __enter__(self) -> ReaderWriterLock.WriterLock:
-			self.acquire()
-			return self
-
-		def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-			self.release()
-
-		def acquire(self) -> None:
-			if self.__count__ == 0:
-				self.__rwlock__.acquire_writer()
-
-			self.__count__ += 1
-
-		def release(self) -> None:
-			if self.__count__ == 1:
-				self.__rwlock__.release_writer()
-
-			if self.__count__ > 0:
-				self.__count__ -= 1
+		@property
+		def is_writer(self) -> bool:
+			return self.__is_writer__
 
 	def __init__(self):
-		self.__mutex__: multiprocessing.synchronize.RLock = multiprocessing.RLock()
-		self.__readers_active__ = multiprocessing.Value('Q', 0)
-		self.__writers_pending__ = multiprocessing.Value('Q', 0)
-		self.__writer_active__ = multiprocessing.Value('B', 0)
-		self.__condition__ = multiprocessing.Condition(self.__mutex__)
-		self.__process_local_readers__: list[int] = []
-		self.__process_local_writers__: list[int] = []
+		self.__queued_threads__: list[ReaderWriterLock.__ThreadInfo__] = []
+		self.__lock__: threading.RLock = threading.RLock()
 
 	def __del__(self):
-		tid: int = threading.current_thread().native_id
+		self.__lock__.acquire()
+		remaining: int = len(self.__queued_threads__)
+		self.__lock__.release()
 
-		while tid in self.__process_local_readers__:
-			self.release_reader()
-
-		while tid in self.__process_local_writers__:
-			self.release_writer()
+		if remaining > 0:
+			raise IOError('Reader writer lock incomplete')
 
 	def acquire_reader(self) -> None:
-		self.__mutex__.acquire()
+		thread_id: int = threading.current_thread().native_id
+		self.__lock__.acquire()
+		thread_info: ReaderWriterLock.__ThreadInfo__ = Stream.LinqStream(self.__queued_threads__).last_or_default()
+		writer_active: bool = Stream.LinqStream(self.__queued_threads__).filter(lambda info: info.is_writer).any()
 
-		try:
-			while self.__writers_pending__.value > 0 or self.__writer_active__.value == 1:
-				self.__condition__.wait()
+		if writer_active and (thread_info is None or thread_info.is_writer):
+			self.__queued_threads__.append(ReaderWriterLock.__ThreadInfo__(thread_id, False))
+		elif writer_active:
+			thread_info.__thread_queue__.append(thread_id)
+		elif thread_info is None:
+			self.__queued_threads__.append(ReaderWriterLock.__ThreadInfo__(thread_id, False))
+		else:
+			thread_info.__thread_queue__.append(thread_id)
 
-			with self.__readers_active__.get_lock():
-				self.__readers_active__.value += 1
+		thread_info = Stream.LinqStream(self.__queued_threads__).first_or_default()
 
-			self.__process_local_readers__.append(threading.current_thread().native_id)
-		except (SystemExit, KeyboardInterrupt) as e:
-			raise e
-		finally:
-			self.__mutex__.release()
-
-	def release_reader(self) -> None:
-		tid: int = threading.current_thread().native_id
-
-		if tid not in self.__process_local_readers__:
+		if thread_id in thread_info.__thread_queue__:
+			self.__lock__.release()
 			return
 
-		self.__mutex__.acquire()
+		while True:
+			self.__lock__.release()
+			time.sleep(0.000001)
+			self.__lock__.acquire()
+			thread_info = Stream.LinqStream(self.__queued_threads__).first_or_default()
 
-		try:
-			with self.__readers_active__.get_lock():
-				self.__readers_active__.value -= 1
+			if thread_id in thread_info.__thread_queue__:
+				break
 
-			if self.__readers_active__.value == 0:
-				self.__condition__.notify()
-
-			self.__process_local_readers__.remove(tid)
-		except (SystemExit, KeyboardInterrupt) as e:
-			raise e
-		finally:
-			self.__mutex__.release()
+		self.__lock__.release()
 
 	def acquire_writer(self) -> None:
-		self.__mutex__.acquire()
+		thread_id: int = threading.current_thread().native_id
+		self.__lock__.acquire()
+		thread_info: ReaderWriterLock.__ThreadInfo__ = ReaderWriterLock.__ThreadInfo__(thread_id, True)
+		self.__queued_threads__.append(thread_info)
 
-		try:
-			with self.__writers_pending__.get_lock():
-				self.__writers_pending__.value += 1
+		while True:
+			self.__lock__.release()
+			time.sleep(0.000001)
+			self.__lock__.acquire()
+			thread_info = Stream.LinqStream(self.__queued_threads__).first_or_default()
 
-			while self.__readers_active__.value > 0 or self.__writer_active__.value == 1:
-				self.__condition__.wait()
+			if thread_id in thread_info.__thread_queue__:
+				break
 
-			with self.__writers_pending__.get_lock():
-				self.__writers_pending__.value -= 1
+		self.__lock__.release()
 
-			with self.__writer_active__.get_lock():
-				self.__writer_active__.value = 1
+	def release_reader(self) -> None:
+		thread_id: int = threading.current_thread().native_id
+		self.__lock__.acquire()
+		thread_info: ReaderWriterLock.__ThreadInfo__ = Stream.LinqStream(self.__queued_threads__).first_or_default()
 
-			self.__process_local_writers__.append(threading.current_thread().native_id)
-		except (SystemExit, KeyboardInterrupt) as e:
-			raise e
-		finally:
-			self.__mutex__.release()
-
-	def release_writer(self) -> None:
-		tid: int = threading.current_thread().native_id
-
-		if tid not in self.__process_local_writers__:
+		if thread_info is None or thread_info.is_writer or thread_id not in thread_info.__thread_queue__:
+			self.__lock__.release()
 			return
 
-		self.__mutex__.acquire()
+		thread_info.__thread_queue__.remove(thread_id)
 
-		try:
-			with self.__writer_active__.get_lock():
-				self.__writer_active__.value = 0
+		if len(thread_info.__thread_queue__) == 0:
+			self.__queued_threads__.pop(0)
 
-			self.__condition__.notify()
-			self.__process_local_writers__.remove(tid)
-		except (SystemExit, KeyboardInterrupt) as e:
-			raise e
-		finally:
-			self.__mutex__.release()
+		self.__lock__.release()
 
-	@property
-	def readers(self) -> tuple[int, ...]:
-		return tuple(self.__process_local_readers__)
+	def release_writer(self) -> None:
+		thread_id: int = threading.current_thread().native_id
+		self.__lock__.acquire()
+		thread_info: ReaderWriterLock.__ThreadInfo__ = Stream.LinqStream(self.__queued_threads__).first_or_default()
 
-	@property
-	def writers(self) -> tuple[int, ...]:
-		return tuple(self.__process_local_writers__)
+		if thread_info is None or not thread_info.is_writer or thread_id not in thread_info.__thread_queue__:
+			self.__lock__.release()
+			return
 
-	@property
-	def reader_lock(self) -> ReaderWriterLock.ReaderLock:
-		return ReaderWriterLock.ReaderLock(self)
-
-	@property
-	def writer_lock(self) -> ReaderWriterLock.WriterLock:
-		return ReaderWriterLock.WriterLock(self)
+		self.__queued_threads__.pop(0)
+		self.__lock__.release()
 
 
 class SpinLock:

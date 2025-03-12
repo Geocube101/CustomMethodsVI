@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections.abc
 import io
 import sys
 import typing
@@ -9,6 +10,8 @@ import dill
 import pickle
 import threading
 import multiprocessing
+
+import CustomMethodsVI.Exceptions as Exceptions
 
 
 class StreamError(IOError):
@@ -92,13 +95,20 @@ class Stream(io.BufferedIOBase):
 		:return: (ANY) The resulting data
 		"""
 
+		items: list = [__data]
+
 		for callback in self.__buffer_reader__:
 			if callable(callback):
-				__data = callback(__data)
+				results: list = []
 
-		return __data
+				for data in items:
+					results.extend(callback(data))
 
-	def __writer_stack__(self, __object: typing.Any) -> typing.Any:
+				items = results
+
+		return items
+
+	def __writer_stack__(self, __object: typing.Any) -> list:
 		"""
 		INTERNAL METHOD; DO NOT USE
 		Executes the reader callback stack on read data
@@ -106,11 +116,18 @@ class Stream(io.BufferedIOBase):
 		:return: (ANY) The resulting object
 		"""
 
+		items: list = [__object]
+
 		for callback in self.__buffer_writer__:
 			if callable(callback):
-				__object = callback(__object)
+				results: list = []
 
-		return __object
+				for obj in items:
+					results.extend(callback(obj))
+
+				items = results
+
+		return items
 
 	def __auto_flush__(self, ignore_invalid: bool = False) -> None:
 		"""
@@ -549,7 +566,6 @@ class LogFileStream(FileStream):
 		return self
 
 
-
 class ListStream(Stream):
 	"""
 	[ListStream(Stream)] - Basic FIFO stream using a list for it's internal buffer
@@ -573,6 +589,10 @@ class ListStream(Stream):
 		"""
 
 		return len(self.__buffer__)
+
+	def __iter__(self):
+		while not self.empty():
+			yield self.read(1)
 
 	def empty(self) -> bool:
 		"""
@@ -637,7 +657,8 @@ class ListStream(Stream):
 		count: int = len(self.__buffer__) if __size is ... or __size is None or int(__size) < 0 else int(__size)
 		temp: tuple[typing.Any, ...] = tuple(self.__buffer__[:count])
 		del self.__buffer__[:count]
-		return self.__reader_stack__(temp)
+		result: tuple[typing.Any, ...] = tuple((y := self.__reader_stack__(x))[0 if len(y) == 1 else slice(None)] for x in temp)
+		return result[0] if __size == 1 else result
 
 	def peek(self, __size: typing.Optional[int] = ...) -> tuple[typing.Any, ...] | typing.Any:
 		"""
@@ -654,9 +675,10 @@ class ListStream(Stream):
 
 		count: int = len(self.__buffer__) if __size is ... or __size is None or int(__size) < 0 else int(__size)
 		temp: tuple[typing.Any, ...] = tuple(self.__buffer__[:count])
-		return self.__reader_stack__(temp)
+		result: tuple[typing.Any, ...] = tuple((y := self.__reader_stack__(x))[0 if len(y) == 1 else slice(None)] for x in temp)
+		return result[0] if __size == 1 else result
 
-	def write(self, __object: typing.Any, *, ignore_invalid = False) -> ListStream:
+	def write(self, __object: typing.Any, *, ignore_invalid=False) -> ListStream:
 		"""
 		Writes an object to the internal queue
 		:param __object: (ANY) The object to write
@@ -671,7 +693,7 @@ class ListStream(Stream):
 			raise StreamError('Stream is not writable')
 
 		if self.__max_len__ < 0 or len(self.__buffer__) < self.__max_len__:
-			self.__buffer__.append(self.__writer_stack__(__object))
+			self.__buffer__.extend(self.__writer_stack__(__object))
 			self.__auto_flush__(ignore_invalid)
 			return self
 
@@ -764,7 +786,8 @@ class OrderedStream(ListStream):
 		else:
 			del self.__buffer__[-count:]
 
-		return self.__reader_stack__(temp)
+		result: tuple[typing.Any, ...] = tuple((y := self.__reader_stack__(x))[0 if len(y) == 1 else slice(None)] for x in temp)
+		return result[0] if __size == 1 else result
 
 	def peek(self, __size: typing.Optional[int] = ...) -> tuple[typing.Any, ...] | typing.Any:
 		if not self.__state__:
@@ -774,7 +797,8 @@ class OrderedStream(ListStream):
 
 		count: int = len(self.__buffer__) if __size is ... or __size is None or int(__size) < 0 else int(__size)
 		temp: tuple[typing.Any, ...] = tuple(self.__buffer__[:count] if self.__fifo__ else reversed(self.__buffer__[-count:]))
-		return self.__reader_stack__(temp)
+		result: tuple[typing.Any, ...] = tuple((y := self.__reader_stack__(x))[0 if len(y) == 1 else slice(None)] for x in temp)
+		return result[0] if __size == 1 else result
 
 	@property
 	def is_fifo(self) -> bool:
@@ -835,7 +859,7 @@ class ByteStream(TypedStream, io.BytesIO):
 	"""
 
 	@staticmethod
-	def __buffer_writer_cb__(__object: bytes | bytearray | int | str) -> bytes:
+	def __buffer_writer_cb__(__object: bytes | bytearray | int | str) -> typing.Iterator[int] | typing.Generator[int, None, None]:
 		"""
 		INTERNAL METHOD; DO NOT USE
 		Converts data to write into a bytes object
@@ -843,13 +867,13 @@ class ByteStream(TypedStream, io.BytesIO):
 		:return: (bytes) The resulting bytes object
 		"""
 
-		if type(__object) is int:
-			byte_count: int = max(1, math.ceil((__object.bit_length()) / 8))
-			return (__object if __object >= 0 else int(pow(2, byte_count * 8)) + __object).to_bytes(byte_count, sys.byteorder, signed=False)
-		elif type(__object) is str:
-			return __object.encode()
+		if isinstance(__object, int):
+			byte_count: int = max(1, math.ceil((__object.bit_length()) / 8)) + (__object < 0)
+			return iter(__object.to_bytes(byte_count, sys.byteorder, signed=__object < 0))
+		elif isinstance(__object, str):
+			return iter(__object.encode())
 		else:
-			return bytes(__object)
+			return iter(bytes(__object))
 
 	def __init__(self, max_length: int = -1, fifo: bool = True):
 		"""
@@ -861,7 +885,6 @@ class ByteStream(TypedStream, io.BytesIO):
 
 		super().__init__((bytes, bytearray, int, str), max_length, fifo)
 		self.__buffer_writer__.append(ByteStream.__buffer_writer_cb__)
-		self.__buffer_reader__.append(b''.join)
 
 	def read(self, __size: typing.Optional[int] = ...) -> bytes:
 		"""
@@ -871,7 +894,7 @@ class ByteStream(TypedStream, io.BytesIO):
 		:raises StreamError: If this stream is closed or not readable
 		"""
 
-		return super().read(__size)
+		return bytes(super().read(__size))
 
 	def peek(self, __size: typing.Optional[int] = ...) -> bytes:
 		"""
@@ -881,7 +904,7 @@ class ByteStream(TypedStream, io.BytesIO):
 		:raises StreamError: If this stream is closed or not readable
 		"""
 
-		return super().peek(__size)
+		return bytes(super().peek(__size))
 
 
 class StringStream(OrderedStream):
@@ -909,7 +932,7 @@ class StringStream(OrderedStream):
 		:raises StreamError: If this stream is closed or not readable
 		"""
 
-		return super().read(__size)
+		return ''.join(super().read(__size))
 
 	def peek(self, __size: typing.Optional[int] = ...) -> str:
 		"""
@@ -1306,13 +1329,36 @@ class LinqStream(typing.Iterable):
 		return sum(1 for _ in self)
 
 	def first(self) -> typing.Any:
-		return next(self)
+		try:
+			return next(self)
+		except StopIteration:
+			raise Exceptions.IterableEmptyException('Collection is empty') from None
 
 	def first_or_default(self, default: typing.Any = None) -> typing.Any:
 		try:
 			return next(self)
 		except StopIteration:
 			return default
+
+	def last(self) -> typing.Any:
+		element: typing.Any = None
+		has_one: bool = False
+
+		for element in self:
+			has_one = True
+
+		if not has_one:
+			raise Exceptions.IterableEmptyException('Collection is empty') from None
+
+		return element
+
+	def last_or_default(self, default: typing.Any = None) -> typing.Any:
+		element: typing.Any = default
+
+		for element in self:
+			pass
+
+		return element
 
 	def min(self, comparer: typing.Callable[[typing.Any, typing.Any], typing.Any] = None) -> typing.Any:
 		return min(self, key=comparer)
@@ -1323,8 +1369,22 @@ class LinqStream(typing.Iterable):
 	def sum(self) -> typing.Any:
 		return sum(self)
 
-	def collect(self, cls: type = tuple) -> typing.Iterable[typing.Any]:
-		return cls(self)
+	def collect(self, collector: type | Stream = tuple, *args, **kwargs) -> typing.Iterable[typing.Any] | Stream:
+		if isinstance(collector, type) and issubclass(collector, Stream):
+			stream: Stream = collector(*args, **kwargs)
+
+			for elem in self:
+				stream.write(elem)
+
+			return stream
+		elif isinstance(collector, type) and issubclass(collector, (typing.Iterable, collections.abc.Sequence, collections.abc.Iterable)):
+			return collector(self, *args, **kwargs)
+		elif isinstance(collector, Stream):
+			for elem in self:
+				collector.write(elem)
+			return collector
+		else:
+			raise TypeError('Specified collector is not an iterable class or CustomMethodsVI.Stream object')
 
 	def select(self, mapper: typing.Callable[[typing.Any], typing.Any]) -> __TransformStream__:
 		assert callable(mapper)

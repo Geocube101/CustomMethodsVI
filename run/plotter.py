@@ -56,4 +56,4 @@ def dot():
 
 
 if __name__ == '__main__':
-	linear_scatter()
+	dot()

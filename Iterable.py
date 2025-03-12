@@ -8,14 +8,15 @@ import threading
 import warnings
 
 from CustomMethodsVI.Decorators import Overload
+from CustomMethodsVI.Stream import LinqStream
 
 
-class Iterable(collections.abc.Sequence, collections.abc.Sized):
+class Iterable[T](collections.abc.Sequence, collections.abc.Sized, typing.Iterable):
 	"""
 	[Iterable(collections.abc.Sequence, collections.abc.Sized)] Base iterable class for CMVI iterables
 	"""
 
-	def __init__(self, collection: typing.Sized | typing.Iterable):
+	def __init__(self, collection: typing.Sized[T] | typing.Iterable[T]):
 		"""
 		[Iterable(collections.abc.Sequence, collections.abc.Sized)] Base iterable class for CMVI iterables
 		- Constructor -
@@ -24,7 +25,7 @@ class Iterable(collections.abc.Sequence, collections.abc.Sized):
 
 		self.__buffer__: list = list(collection)
 
-	def __contains__(self, item: typing.Any) -> bool:
+	def __contains__(self, item: T) -> bool:
 		"""
 		Checks if an item exists within this collection
 		:param item: (ANY) The item to search for
@@ -33,55 +34,55 @@ class Iterable(collections.abc.Sequence, collections.abc.Sized):
 
 		return item in self.__buffer__
 
-	def __eq__(self, other: Iterable) -> bool:
+	def __eq__(self, other: Iterable[T]) -> bool:
 		"""
 		Checks if this instance matches another Iterable instance
-		:param other: (Iterable) The other instance to compare
+		:param other: (Iterable) The callback instance to compare
 		:return: (bool) True if both are an Iterable and their contents are equal
 		"""
 
 		return self.__buffer__ == other.__buffer__ if isinstance(other, type(self)) else False
 
-	def __ne__(self, other: Iterable) -> bool:
+	def __ne__(self, other: Iterable[T]) -> bool:
 		"""
 		Checks if this instance doesn't match another Iterable instance
-		:param other: (Iterable) The other instance to compare
+		:param other: (Iterable) The callback instance to compare
 		:return: (bool) False if both are an Iterable and their contents are equal
 		"""
 
 		return not self == other
 
-	def __gt__(self, other: Iterable) -> bool:
+	def __gt__(self, other: Iterable[T]) -> bool:
 		"""
 		Compares two Iterable instances based on their length
-		:param other: (Iterable) The other instance
+		:param other: (Iterable) The callback instance
 		:return: (bool) If this length is greater
 		"""
 
 		return len(self) > len(other) if type(other) is type(self) else NotImplemented
 
-	def __lt__(self, other: Iterable) -> bool:
+	def __lt__(self, other: Iterable[T]) -> bool:
 		"""
 		Compares two Iterable instances based on their length
-		:param other: (Iterable) The other instance
+		:param other: (Iterable) The callback instance
 		:return: (bool) If this length is lesser
 		"""
 
 		return len(self) < len(other) if type(other) is type(self) else NotImplemented
 
-	def __ge__(self, other: Iterable) -> bool:
+	def __ge__(self, other: Iterable[T]) -> bool:
 		"""
 		Compares two Iterable instances based on their length
-		:param other: (Iterable) The other instance
+		:param other: (Iterable) The callback instance
 		:return: (bool) If this length is greater or equal
 		"""
 
 		return len(self) >= len(other) if type(other) is type(self) else NotImplemented
 
-	def __le__(self, other: Iterable) -> bool:
+	def __le__(self, other: Iterable[T]) -> bool:
 		"""
 		Compares two Iterable instances based on their length
-		:param other: (Iterable) The other instance
+		:param other: (Iterable) The callback instance
 		:return: (bool) If this length is lesser or equal
 		"""
 
@@ -118,7 +119,7 @@ class Iterable(collections.abc.Sequence, collections.abc.Sized):
 
 		return str(self.__buffer__)
 
-	def __iter__(self) -> typing.Iterator:
+	def __iter__(self) -> typing.Iterator[T]:
 		"""
 		Returns an iterator for this list
 		:return: (Generator) The iterator
@@ -153,7 +154,7 @@ class Iterable(collections.abc.Sequence, collections.abc.Sized):
 
 		self.__buffer__.remove(None)
 
-	def __setitem__(self, key: int | tuple[int, ...] | slice, value) -> None:
+	def __setitem__(self, key: int | tuple[int, ...] | slice, value: T) -> None:
 		"""
 		Sets one or more items in this collection
 		:param key: (int | tuple[int] | slice) The index or indices to modify
@@ -179,7 +180,7 @@ class Iterable(collections.abc.Sequence, collections.abc.Sized):
 		else:
 			raise TypeError('TypeError: list indices must be integers or slices, not float')
 
-	def __getitem__(self, item: int | slice | tuple[int, ...]) -> typing.Any | Iterable[typing.Any, ...]:
+	def __getitem__(self, item: int | slice | tuple[int, ...]) -> T | Iterable[T]:
 		"""
 		Gets one or more items in this collection
 		:param item: (int | tuple[int] | slice) The index or indices to get
@@ -240,7 +241,7 @@ class Iterable(collections.abc.Sequence, collections.abc.Sized):
 
 		self.__buffer__.reverse()
 
-	def count(self, item) -> int:
+	def count(self, item: T) -> int:
 		"""
 		Gets the number of times an item occurs in this list
 		:param item: (ANY) The item to search for
@@ -249,7 +250,7 @@ class Iterable(collections.abc.Sequence, collections.abc.Sized):
 
 		return self.__buffer__.count(item)
 
-	def index(self, item, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
+	def index(self, item: T, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
 		"""
 		Gets the index of an item in the list
 		:param item: (ANY) The item to search for
@@ -261,7 +262,7 @@ class Iterable(collections.abc.Sequence, collections.abc.Sized):
 
 		return self.__buffer__.index(item, start, stop)
 
-	def find(self, item, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
+	def find(self, item: T, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
 		"""
 		Gets the index of an item in the list
 		:param item: (ANY) The item to search for
@@ -282,7 +283,7 @@ class Iterable(collections.abc.Sequence, collections.abc.Sized):
 
 		return -1
 
-	def copy(self) -> Iterable:
+	def copy(self) -> Iterable[T]:
 		"""
 		Returns a copy of this collection
 		:return: (Iterable) Copyness
@@ -291,10 +292,19 @@ class Iterable(collections.abc.Sequence, collections.abc.Sized):
 		return type(self)(self.__buffer__.copy())
 
 
-class SortableIterable(Iterable):
+class LinqIterable[T](Iterable, LinqStream):
+	def __init__(self, collection: typing.Sized | typing.Iterable[T]):
+		LinqStream.__init__(self, self)
+		Iterable.__init__(self, collection)
+
+
+class SortableIterable[T](LinqIterable):
 	"""
 	[SortableIterable(Iterable)] - Class representing an iterable containing sorting functions
 	"""
+
+	def __init__(self, collection: typing.Sized | typing.Iterable[T]):
+		LinqIterable.__init__(self, collection)
 
 	def sort(self, *, key: typing.Optional[typing.Callable] = ..., reverse: typing.Optional[bool] = False) -> None:
 		"""
@@ -307,12 +317,12 @@ class SortableIterable(Iterable):
 		self.__buffer__.sort(key=key, reverse=reverse)
 
 
-class SortedList(SortableIterable):
+class SortedList[T](SortableIterable):
 	"""
 	[SortedList(Iterable)] - A list using binary search to maintain a sorted list of elements
 	"""
 
-	def __init__(self, *args):
+	def __init__(self, *args: T | typing.Iterable[T]):
 		"""
 		[SortedList(Iterable)] - A list using binary search to search and maintain a sorted list of elements
 		- Constructor -
@@ -337,7 +347,7 @@ class SortedList(SortableIterable):
 			except TypeError as e:
 				raise TypeError(f'One or more objects are incomparable') from e
 
-	def __contains__(self, item: typing.Any) -> bool:
+	def __contains__(self, item: T) -> bool:
 		"""
 		Uses binary search to check if an item exists within this collection
 		:param item: (ANY) The item to search for
@@ -346,7 +356,7 @@ class SortedList(SortableIterable):
 
 		return self.bin_search(item) != -1
 
-	def __add__(self, other: typing.Iterable) -> SortedList:
+	def __add__(self, other: typing.Iterable[T]) -> SortedList[T]:
 		"""
 		Adds the elements of the second iterable to this collection
 		:param other: (ITERABLE) The iterable to add
@@ -357,7 +367,7 @@ class SortedList(SortableIterable):
 
 		return self.extended(other) if hasattr(other, '__iter__') else NotImplemented
 
-	def __iadd__(self, other: typing.Iterable) -> SortedList:
+	def __iadd__(self, other: typing.Iterable[T]) -> SortedList[T]:
 		"""
 		Adds the elements of the second iterable to this collection in place
 		:param other: (ITERABLE) The collection to add
@@ -372,7 +382,7 @@ class SortedList(SortableIterable):
 		else:
 			return NotImplemented
 
-	def __radd__(self, other: typing.Iterable) -> SortedList:
+	def __radd__(self, other: typing.Iterable[T]) -> SortedList[T]:
 		"""
 		Adds the elements of the second iterable to this collection
 		:param other: (ITERABLE) The collection to add
@@ -383,7 +393,7 @@ class SortedList(SortableIterable):
 
 		return self.extended(other) if hasattr(other, '__iter__') else NotImplemented
 
-	def __mul__(self, times: int) -> SortedList:
+	def __mul__(self, times: int) -> SortedList[T]:
 		"""
 		Duplicates the elements in this collection
 		:param times: (int) The number of times to duplicate
@@ -405,7 +415,7 @@ class SortedList(SortableIterable):
 		else:
 			return NotImplemented
 
-	def __imul__(self, times: int) -> SortedList:
+	def __imul__(self, times: int) -> SortedList[T]:
 		"""
 		Duplicates the elements in this collection in place
 		:param times: (int) The number of times to duplicate
@@ -426,7 +436,7 @@ class SortedList(SortableIterable):
 		else:
 			return NotImplemented
 
-	def __rmul__(self, times: int) -> SortedList:
+	def __rmul__(self, times: int) -> SortedList[T]:
 		"""
 		Duplicates the elements in this collection
 		:param times: (int) The number of times to duplicate
@@ -448,7 +458,7 @@ class SortedList(SortableIterable):
 		else:
 			return NotImplemented
 
-	def __setitem__(self, key, value) -> None:
+	def __setitem__(self, key: int | slice | tuple[int | slice, ...], value: T) -> None:
 		"""
 		SHOULD NOT BE USED - Alias for SortedList::append
 		Adds an item into the collection using binary search
@@ -463,7 +473,7 @@ class SortedList(SortableIterable):
 		warnings.warn('\\\\\\\nDirect insertion in binary-sorted collection\nUse \'SortedList::append\' instead \\\\\\', UserWarning, stacklevel=2)
 		self.append(value)
 
-	def append(self, item: typing.Any) -> None:
+	def append(self, item: T) -> None:
 		"""
 		Appends an item to this collection
 		:param item: (ANY) The item to append
@@ -507,7 +517,7 @@ class SortedList(SortableIterable):
 		except TypeError:
 			raise TypeError(f'Incomparable object of type \'{type(item)}\' is not storable')
 
-	def extend(self, iterable: typing.Iterable) -> None:
+	def extend(self, iterable: typing.Iterable[T]) -> None:
 		"""
 		Appends a collection of items to this collection in-place
 		:param iterable: (ITERABLE) The collection to append
@@ -519,7 +529,7 @@ class SortedList(SortableIterable):
 		for e in iterable:
 			self.append(e)
 
-	def remove(self, item: typing.Any) -> None:
+	def remove(self, item: T) -> None:
 		"""
 		Removes the first occurrence item from the collection
 		:param item: (ANY) The item to remove
@@ -529,7 +539,7 @@ class SortedList(SortableIterable):
 		if item in self:
 			self.__buffer__.remove(item)
 
-	def remove_all(self, item: typing.Any) -> None:
+	def remove_all(self, item: T) -> None:
 		"""
 		Removes all occurrences item from the collection
 		:param item: (ANY) The item to remove
@@ -539,7 +549,7 @@ class SortedList(SortableIterable):
 		while item in self:
 			self.__buffer__.remove(item)
 
-	def resort(self, *iterables) -> None:
+	def resort(self, *iterables: typing.Iterable[T]) -> None:
 		"""
 		Resorts the entire collection, appending the supplied values from '*iterables' if provided
 		:param iterables: (*ITERABLES) The extra collections to append before resort
@@ -555,7 +565,7 @@ class SortedList(SortableIterable):
 
 		self.__buffer__.sort()
 
-	def set_resort(self, *iterables) -> None:
+	def set_resort(self, *iterables: typing.Iterable[T]) -> None:
 		"""
 		Resorts the entire collection, appending the supplied values from '*iterables' if provided and removing duplicates
 		:param iterables: (*ITERABLES) The extra collections to append before resort
@@ -573,7 +583,7 @@ class SortedList(SortableIterable):
 
 		self.__buffer__ = list(sorted(buffer))
 
-	def bin_search(self, item: typing.Any, lower: typing.Optional[int] = ..., upper: typing.Optional[int] = ...) -> int:
+	def bin_search(self, item: T, lower: typing.Optional[int] = ..., upper: typing.Optional[int] = ...) -> int:
 		"""
 		Performs an O(log(n)) binary search for the specified item
 		:param item: (ANY) The item to search for
@@ -601,7 +611,7 @@ class SortedList(SortableIterable):
 				__upper = mid
 				mid = (__lower + __upper) // 2
 
-	def lin_search(self, item: typing.Any, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
+	def lin_search(self, item: T, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
 		"""
 		Performs an O(n) linear search for the specified item
 		:param item: (ANY) The item to search for
@@ -619,7 +629,7 @@ class SortedList(SortableIterable):
 
 		return -1
 
-	def rlin_search(self, item: typing.Any, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
+	def rlin_search(self, item: T, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
 		"""
 		Performs an O(n) reversed linear search for the specified item
 		:param item: (ANY) The item to search for
@@ -637,7 +647,7 @@ class SortedList(SortableIterable):
 
 		return -1
 
-	def index(self, item: typing.Any, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...):
+	def index(self, item: T, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...):
 		"""
 		Gets the index of an item in the collection using binary search
 		:param item: (ANY) The item to search for
@@ -654,7 +664,7 @@ class SortedList(SortableIterable):
 
 		return position
 
-	def count(self, item: typing.Any) -> int:
+	def count(self, item: T) -> int:
 		"""
 		Gets the number of times an item occurs in this collection using binary search
 		:param item: (ANY) The item to search for
@@ -677,7 +687,7 @@ class SortedList(SortableIterable):
 
 		return (forward - 1) - (backward + 1) + 1
 
-	def get_bounds(self, item: typing.Any) -> tuple[int, int]:
+	def get_bounds(self, item: T) -> tuple[int, int]:
 		"""
 		Gets the start and end index for an item in this collection
 		:param item: (ANY) The item to search for
@@ -701,7 +711,7 @@ class SortedList(SortableIterable):
 
 		return backward + 1, forward - 1
 
-	def extended(self, iterable: typing.Iterable) -> SortedList:
+	def extended(self, iterable: typing.Iterable[T]) -> SortedList[T]:
 		"""
 		Appends a collection of items to a copy of this collection
 		:param iterable: (ITERABLE) The collection to append
@@ -714,7 +724,7 @@ class SortedList(SortableIterable):
 		copied.extend(iterable)
 		return copied
 
-	def removed_duplicates(self) -> SortedList:
+	def removed_duplicates(self) -> SortedList[T]:
 		"""
 		Removes all duplicates from this collection
 		:return: (SortedList) A copy  of this collection with all duplicates removed
@@ -722,7 +732,7 @@ class SortedList(SortableIterable):
 
 		return SortedList(set(self.__buffer__))
 
-	def reversed(self) -> ReverseSortedList:
+	def reversed(self) -> ReverseSortedList[T]:
 		"""
 		Reverses this collection
 		:return: (ReverseSortedList) A reversed collection
@@ -730,7 +740,7 @@ class SortedList(SortableIterable):
 
 		return ReverseSortedList(self.__buffer__)
 
-	def pop(self, index: typing.Optional[int] = ...) -> typing.Any:
+	def pop(self, index: typing.Optional[int] = ...) -> T:
 		"""
 		Deletes and returns a single item from this collection
 		:param index: (int?) The index to remove or the last element if not supplied
@@ -740,12 +750,12 @@ class SortedList(SortableIterable):
 		return self.__buffer__.pop(-1 if index is ... or index is None else int(index))
 
 
-class ReverseSortedList(SortableIterable):
+class ReverseSortedList[T](SortableIterable):
 	"""
 	[ReverseSortedList(SortedList)] - A list using binary search to maintain a reverse sorted list of elements
 	"""
 
-	def __init__(self, *args):
+	def __init__(self, *args: T | typing.Iterable[T]):
 		"""
 		[ReverseSortedList(SortedList)] - A list using binary search to search and maintain a reverse sorted list of elements
 		- Constructor -
@@ -772,7 +782,7 @@ class ReverseSortedList(SortableIterable):
 			except TypeError as e:
 				raise TypeError(f'One or more objects are incomparable') from e
 
-	def append(self, item: typing.Any) -> None:
+	def append(self, item: T) -> None:
 		"""
 		Appends an item to this collection
 		:param item: (ANY) The item to append
@@ -816,7 +826,7 @@ class ReverseSortedList(SortableIterable):
 		except TypeError:
 			raise TypeError(f'Incomparable object of type \'{type(item)}\' is not storable')
 
-	def resort(self, *iterables) -> None:
+	def resort(self, *iterables: typing.Iterable[T]) -> None:
 		"""
 		Resorts the entire collection, appending the supplied values from '*iterables' if provided
 		:param iterables: (*ITERABLES) The extra collections to append before resort
@@ -832,7 +842,7 @@ class ReverseSortedList(SortableIterable):
 
 		self.__buffer__.sort(reverse=True)
 
-	def set_resort(self, *iterables) -> None:
+	def set_resort(self, *iterables: typing.Iterable[T]) -> None:
 		"""
 		Resorts the entire collection, appending the supplied values from '*iterables' if provided and removing duplicates
 		:param iterables: (*ITERABLES) The extra collections to append before resort
@@ -850,7 +860,7 @@ class ReverseSortedList(SortableIterable):
 
 		self.__buffer__ = list(sorted(buffer, reverse=True))
 
-	def bin_search(self, item: typing.Any, lower: typing.Optional[int] = ..., upper: typing.Optional[int] = ...) -> int:
+	def bin_search(self, item: T, lower: typing.Optional[int] = ..., upper: typing.Optional[int] = ...) -> int:
 		"""
 		Performs an O(log(n)) binary search for the specified item
 		:param item: (ANY) The item to search for
@@ -878,7 +888,7 @@ class ReverseSortedList(SortableIterable):
 				__upper = mid
 				mid = (__lower + __upper) // 2
 
-	def get_bounds(self, item: typing.Any) -> tuple[int, int]:
+	def get_bounds(self, item: T) -> tuple[int, int]:
 		"""
 		Gets the start and end index for an item in this collection
 		:param item: (ANY) The item to search for
@@ -902,7 +912,7 @@ class ReverseSortedList(SortableIterable):
 
 		return backward + 1, forward - 1
 
-	def removed_duplicates(self) -> ReverseSortedList:
+	def removed_duplicates(self) -> ReverseSortedList[T]:
 		"""
 		Removes all duplicates from this collection
 		:return: (SortedList) A copy  of this list with all duplicates removed
@@ -910,7 +920,7 @@ class ReverseSortedList(SortableIterable):
 
 		return ReverseSortedList(set(self.__buffer__))
 
-	def reversed(self) -> SortedList:
+	def reversed(self) -> SortedList[T]:
 		"""
 		Reverses this collection
 		:return: (SortedList) A reversed list
@@ -1013,7 +1023,7 @@ class String(Iterable):
 	def __add__(self, other: str | bytes | bytearray | String) -> String:
 		"""
 		Adds a string, bytes-like or String instance to this String
-		:param other: (str | bytes | bytearray | String) The other string to add
+		:param other: (str | bytes | bytearray | String) The callback string to add
 		:return: (String) A new String instance
 		"""
 
@@ -1033,7 +1043,7 @@ class String(Iterable):
 	def __iadd__(self, other: str | bytes | bytearray | String) -> String:
 		"""
 		Adds a string, bytes-like or String instance to this String in-place
-		:param other: (str | bytes | bytearray | String) The other string to add
+		:param other: (str | bytes | bytearray | String) The callback string to add
 		:return: (String) This instance
 		"""
 
@@ -1266,12 +1276,12 @@ class String(Iterable):
 		return self[start:start + length]
 
 
-class FixedArray(SortableIterable):
+class FixedArray[T](SortableIterable):
 	"""
 	[FixedArray(SortableIterable)] - Class representing an array of a fixed size
 	"""
 
-	def __init__(self, iterable_or_size: typing.Iterable | int):
+	def __init__(self, iterable_or_size: typing.Iterable[T] | int):
 		"""
 		[FixedArray(SortableIterable)] - Class representing an array of a fixed size
 		- Constructor -
@@ -1313,55 +1323,107 @@ class FixedArray(SortableIterable):
 			self.__buffer__[i] = None
 
 
-class SpinList(SortableIterable):
+class SpinQueue[T](SortableIterable):
 	"""
-	[SpinList(SortableIterable)] - Class representing a queue-like array of a maximum size
+	[SpinQueue(SortableIterable)] - Class representing a queue-like array of a maximum size
 	"""
 
-	def __init__(self, iterable_or_size: typing.Iterable | int):
+	def __init__(self, iterable_or_size: typing.Iterable[T] | int):
 		"""
-		[SpinList(SortableIterable)] - Class representing a queue-like array of a maximum size
+		[SpinQueue(SortableIterable)] - Class representing a queue-like array of a maximum size
 		- Constructor -
 		:param iterable_or_size: (ITERABLE | int) The iterable or number of elements this list contains
 		"""
 
 		if type(iterable_or_size) is int:
-			super().__init__([])
+			super().__init__([None] * iterable_or_size)
 			self.__max_size__: int = iterable_or_size
+			self.__count__: int = 0
+			self.__offset__: int = 0
 		else:
 			super().__init__(iterable_or_size)
 			self.__max_size__: int = len(self.__buffer__)
+			self.__count__: int = 0
+			self.__offset__: int = 0
 
-	def append(self, item: typing.Any) -> tuple[bool, typing.Any]:
+	def __iter__(self):
+		for i in range(self.__count__):
+			yield self[i]
+
+	def __len__(self) -> int:
+		return self.__count__
+
+	def __str__(self) -> str:
+		return str(list(self))
+
+	def __repr__(self) -> str:
+		return str(self)
+
+	def __getitem__(self, index: int) -> T:
+		if not isinstance(index, int):
+			raise TypeError(f'SpinQueue indices must be of type int, got \'{type(index)}\'')
+		elif index >= self.__count__:
+			raise IndexError(f'Specified index \'{index}\' is out of bounds for SpinQueue of count \'{self.__count__}\'')
+
+		return self.__buffer__[(self.__offset__ + ((self.__count__ + index) if index < 0 else index)) % self.__max_size__]
+
+	def __setitem__(self, index: int, value: T) -> None:
+		if not isinstance(index, int):
+			raise TypeError(f'SpinQueue indices must be of type int, got \'{type(index)}\'')
+		elif index >= self.__count__:
+			raise IndexError(f'Specified index \'{index}\' is out of bounds for SpinQueue of count \'{self.__count__}\'')
+
+		self.__buffer__[(self.__offset__ + index) % self.__max_size__] = value
+
+	def append(self, item: T) -> tuple[bool, T]:
 		"""
 		Pushes an item onto the queue and returns the first item if max size is exceeded
 		:param item: (ANY) The item to append
 		:return: (tuple[bool, ANY]) A tuple indicating whether an item was popped and the item
 		"""
 
-		if len(self) == self.__max_size__:
-			end: typing.Any = self.__buffer__.pop(0)
-			self.__buffer__.append(item)
-			return True, end
-		else:
-			self.__buffer__.append(item)
-			return False, None
+		overwrite: bool = self.__count__ == self.__max_size__
+		position: int = (self.__offset__ + self.__count__) % self.__max_size__
+		old_elem: T = self.__buffer__[position] if overwrite else None
+		self.__buffer__[position] = item
+		# print(overwrite, item)
+		self.__count__ += not overwrite
+		self.__offset__ += overwrite
+		return overwrite, old_elem
 
-	def pop(self, __index: typing.Optional[int] = None) -> typing.Any:
+	def clear(self) -> None:
+		self.__count__ = 0
+		self.__offset__ = 0
+
+		for i in range(self.__max_size__):
+			self.__buffer__[i] = None
+
+	def pop(self) -> T:
 		"""
 		Pops an item from the queue
-		:param __index: (int) The index to pop
 		:return: (ANY) The popped item
 		"""
-		return self.__buffer__.pop(__index)
+
+		if self.__count__ == 0:
+			raise IndexError('Pop from empty queue')
+
+		self.__count__ -= 1
+		position: int = (self.__offset__ + self.__count__) % self.__max_size__
+		elem: T = self.__buffer__[position]
+		self.__buffer__[position] = None
+		return elem
+
+	@property
+	def maxlen(self) -> int:
+		return self.__max_size__
 
 
-class ThreadedGenerator:
+class ThreadedGenerator[T]:
 	"""
 	[ThreadedGenerator] - Special generator using threading.Thread threads
 	"""
 
-	def __init__(self, generator: typing.Generator | typing.Iterable):
+	def __init__(self, generator: typing.Generator | typing.Iterable[T]):
 		"""
 		[ThreadedGenerator] - Special generator using threading.Thread threads
 		- Constructor -
@@ -1396,7 +1458,7 @@ class ThreadedGenerator:
 			self.__state = False
 			self.__exec = e
 
-	def __next__(self) -> typing.Any:
+	def __next__(self) -> T:
 		"""
 		Waits until a new value is available or until internal thread is closed
 		Returns next value or raises StopIteration

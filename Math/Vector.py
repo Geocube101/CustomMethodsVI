@@ -17,7 +17,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 	@classmethod
 	def orthogonal(cls: type, vector_0: Vector, vector_1: Vector, *vectors: Vector) -> bool:
 		"""
-		Determines if all specified vectors are 90 degrees rotated from each other
+		Determines if all specified vectors are 90 degrees rotated from each callback
 		:param vector_0: (Vector) The first vector
 		:param vector_1: (Vector) The next vector
 		:param vectors: (*Vector) All remaining vectors
@@ -37,7 +37,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 	@classmethod
 	def orthonormal(cls: type, vector_0: Vector, vector_1: Vector, *vectors: Vector):
 		"""
-		Determines if all specified vectors are 90 degrees rotated from each other and all vectors are a unit vector
+		Determines if all specified vectors are 90 degrees rotated from each callback and all vectors are a unit vector
 		:param vector_0: (Vector) The first vector
 		:param vector_1: (Vector) The next vector
 		:param vectors: (*Vector) All remaining vectors
@@ -152,8 +152,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		For scalars: Each element is added by this value
 		For Vectors: Each element added respectively
 		:param other: (Vector or float or int) The item to add
-		:return: (Vector) The new vector or 'NotImplemented' if 'other' is not a Vector, float, or int
-		:raises AssertionError: If other vector's dimensions differ from this
+		:return: (Vector) The new vector or 'NotImplemented' if 'callback' is not a Vector, float, or int
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		if isinstance(other, type(self)):
@@ -170,8 +170,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		For scalars: Each element is subtracted by this value
 		For Vectors: Each element subtracted respectively
 		:param other: (Vector or float or int) The item to subtract
-		:return: (Vector) The new vector or 'NotImplemented' if 'other' is not a Vector, float, or int
-		:raises AssertionError: If other vector's dimensions differ from this
+		:return: (Vector) The new vector or 'NotImplemented' if 'callback' is not a Vector, float, or int
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		if isinstance(other, type(self)):
@@ -188,8 +188,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		For scalars: Each element is multiplied by this value
 		For Vectors: Each element multiplied respectively
 		:param other: (Vector or float or int) The item to multiply
-		:return: (Vector) The new vector or 'NotImplemented' if 'other' is not a Vector, float, or int
-		:raises AssertionError: If other vector's dimensions differ from this
+		:return: (Vector) The new vector or 'NotImplemented' if 'callback' is not a Vector, float, or int
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		if isinstance(other, type(self)):
@@ -206,8 +206,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		For scalars: Each element is divided by this value
 		For Vectors: Each element divided respectively
 		:param other: (Vector or float or int) The item to divide
-		:return: (Vector) The new vector or 'NotImplemented' if 'other' is not a Vector, float, or int
-		:raises AssertionError: If other vector's dimensions differ from this
+		:return: (Vector) The new vector or 'NotImplemented' if 'callback' is not a Vector, float, or int
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		if isinstance(other, type(self)):
@@ -224,8 +224,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		For scalars: Each element is divided by this value
 		For Vectors: Each element divided respectively
 		:param other: (Vector or float or int) The item to divide
-		:return: (Vector) The new vector or 'NotImplemented' if 'other' is not a Vector, float, or int
-		:raises AssertionError: If other vector's dimensions differ from this
+		:return: (Vector) The new vector or 'NotImplemented' if 'callback' is not a Vector, float, or int
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		if isinstance(other, type(self)):
@@ -243,8 +243,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		For scalars: Each element is modulo divided by this value
 		For Vectors: Each element modulo divided respectively
 		:param other: (Vector or float or int) The item to modulo divide
-		:return: (Matrix) The matrix containing the modulo and quotient or 'NotImplemented' if 'other' is not a Vector, float, or int
-		:raises AssertionError: If other vector's dimensions differ from this
+		:return: (Matrix) The matrix containing the modulo and quotient or 'NotImplemented' if 'callback' is not a Vector, float, or int
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		raise NotImplementedError('Required matrix class not implemented')
@@ -255,8 +255,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		For scalars: Each element is modded by this value
 		For Vectors: Each element modded respectively
 		:param other: (Vector or float or int) The item to modulo
-		:return: (Vector) The new vector or 'NotImplemented' if 'other' is not a Vector, float, or int
-		:raises AssertionError: If other vector's dimensions differ from this
+		:return: (Vector) The new vector or 'NotImplemented' if 'callback' is not a Vector, float, or int
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		if isinstance(other, type(self)):
@@ -274,7 +274,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		For Vectors: Each element exponentiated respectively
 		:param other: (Vector or float or int) The item to exponentiate
 		:return: (Vector) The new vector
-		:raises AssertionError: If other vector's dimensions differ from this
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		if isinstance(other, type(self)):
@@ -291,8 +291,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		For scalars: Each element is added to this value
 		For Vectors: Each element added respectively
 		:param other: (Vector or float or int) The item to add
-		:return: (Vector) The new vector or 'NotImplemented' if 'other' is not a Vector, float, or int
-		:raises AssertionError: If other vector's dimensions differ from this
+		:return: (Vector) The new vector or 'NotImplemented' if 'callback' is not a Vector, float, or int
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		return self + other
@@ -303,8 +303,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		For scalars: Each element is subtracted from this value
 		For Vectors: Each element subtracted respectively
 		:param other: (Vector or float or int) The item to subtract
-		:return: (Vector) The new vector or 'NotImplemented' if 'other' is not a Vector, float, or int
-		:raises AssertionError: If other vector's dimensions differ from this
+		:return: (Vector) The new vector or 'NotImplemented' if 'callback' is not a Vector, float, or int
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		if isinstance(other, type(self)):
@@ -321,8 +321,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		For scalars: Each element is multiplied by this value
 		For Vectors: Each element multiplied respectively
 		:param other: (Vector or float or int) The item to multiply
-		:return: (Vector) The new vector or 'NotImplemented' if 'other' is not a Vector, float, or int
-		:raises AssertionError: If other vector's dimensions differ from this
+		:return: (Vector) The new vector or 'NotImplemented' if 'callback' is not a Vector, float, or int
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		return self * other
@@ -333,8 +333,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		For scalars: Each element is divided from this value
 		For Vectors: Each element divided respectively
 		:param other: (Vector or float or int) The item to divide
-		:return: (Vector) The new vector or 'NotImplemented' if 'other' is not a Vector, float, or int
-		:raises AssertionError: If other vector's dimensions differ from this
+		:return: (Vector) The new vector or 'NotImplemented' if 'callback' is not a Vector, float, or int
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		if isinstance(other, type(self)):
@@ -351,8 +351,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		For scalars: Each element is divided from this value
 		For Vectors: Each element divided respectively
 		:param other: (Vector or float or int) The item to divide
-		:return: (Vector) The new vector or 'NotImplemented' if 'other' is not a Vector, float, or int
-		:raises AssertionError: If other vector's dimensions differ from this
+		:return: (Vector) The new vector or 'NotImplemented' if 'callback' is not a Vector, float, or int
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		if isinstance(other, type(self)):
@@ -370,8 +370,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		For scalars: Each element is modulo divided from this value
 		For Vectors: Each element modulo divided respectively
 		:param other: (Vector or float or int) The item to modulo divide
-		:return: (Matrix) The matrix containing the modulo and quotient or 'NotImplemented' if 'other' is not a Vector, float, or int
-		:raises AssertionError: If other vector's dimensions differ from this
+		:return: (Matrix) The matrix containing the modulo and quotient or 'NotImplemented' if 'callback' is not a Vector, float, or int
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		raise NotImplementedError('Required matrix class not implemented')
@@ -382,8 +382,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		For scalars: Each element is modded from this value
 		For Vectors: Each element modded respectively
 		:param other: (Vector or float or int) The item to modulo
-		:return: (Vector) The new vector or 'NotImplemented' if 'other' is not a Vector, float, or int
-		:raises AssertionError: If other vector's dimensions differ from this
+		:return: (Vector) The new vector or 'NotImplemented' if 'callback' is not a Vector, float, or int
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		if isinstance(other, type(self)):
@@ -401,7 +401,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		For Vectors: Each element exponentiated respectively
 		:param other: (Vector or float or int) The item to exponentiate
 		:return: (Vector) The new vector
-		:raises AssertionError: If other vector's dimensions differ from this
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		if isinstance(other, type(self)):
@@ -414,12 +414,12 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 	def __lt__(self, other: Vector | float | int) -> bool:
 		"""
-		Determines if the length of this vector is less than 'other'
-		For scalars: This length is less than 'other'
-		For Vectors: This length is less than 'other.length()'
+		Determines if the length of this vector is less than 'callback'
+		For scalars: This length is less than 'callback'
+		For Vectors: This length is less than 'callback.length()'
 		:param other: (Vector or float or int) The item to compare
 		:return: (bool) Comparison
-		:raises AssertionError: If other vector's dimensions differ from this
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		if isinstance(other, type(self)):
@@ -432,12 +432,12 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 	def __le__(self, other: Vector | float | int) -> bool:
 		"""
-		Determines if the length of this vector is less than or equal to 'other'
-		For scalars: This length is less than or equal to 'other'
-		For Vectors: This length is less than or equal to 'other.length()'
+		Determines if the length of this vector is less than or equal to 'callback'
+		For scalars: This length is less than or equal to 'callback'
+		For Vectors: This length is less than or equal to 'callback.length()'
 		:param other: (Vector or float or int) The item to compare
 		:return: (bool) Comparison
-		:raises AssertionError: If other vector's dimensions differ from this
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		if isinstance(other, type(self)):
@@ -450,12 +450,12 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 	def __gt__(self, other: Vector | float | int) -> bool:
 		"""
-		Determines if the length of this vector is greater than 'other'
-		For scalars: This length is greater than 'other'
-		For Vectors: This length is greater than 'other.length()'
+		Determines if the length of this vector is greater than 'callback'
+		For scalars: This length is greater than 'callback'
+		For Vectors: This length is greater than 'callback.length()'
 		:param other: (Vector or float or int) The item to compare
 		:return: (bool) Comparison
-		:raises AssertionError: If other vector's dimensions differ from this
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		if isinstance(other, type(self)):
@@ -468,12 +468,12 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 	def __ge__(self, other: Vector | float | int) -> bool:
 		"""
-		Determines if the length of this vector is greater than or equal to 'other'
-		For scalars: This length is greater than or equal to 'other'
-		For Vectors: This length is greater than or equal to 'other.length()'
+		Determines if the length of this vector is greater than or equal to 'callback'
+		For scalars: This length is greater than or equal to 'callback'
+		For Vectors: This length is greater than or equal to 'callback.length()'
 		:param other: (Vector or float or int) The item to compare
 		:return: (bool) Comparison
-		:raises AssertionError: If other vector's dimensions differ from this
+		:raises AssertionError: If callback vector's dimensions differ from this
 		"""
 
 		if isinstance(other, type(self)):
@@ -486,8 +486,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 	def __eq__(self, other: Vector | float | int) -> bool:
 		"""
-		Determines if 'this' equals 'other'
-		For scalars: This length is equal to 'other'
+		Determines if 'this' equals 'callback'
+		For scalars: This length is equal to 'callback'
 		For Vectors: The dimensions and components of these vectors are equal
 		:param other: (Vector or float or int) The item to compare
 		:return: (bool) Comparison
@@ -502,8 +502,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 	def __ne__(self, other: Vector | float | int) -> bool:
 		"""
-		Determines if 'this' is not equal to 'other'
-		For scalars: This length is not equal to 'other'
+		Determines if 'this' is not equal to 'callback'
+		For scalars: This length is not equal to 'callback'
 		For Vectors: The dimensions and components of these vectors are not equal
 		:param other: (Vector or float or int) The item to compare
 		:return: (bool) Comparison
@@ -619,8 +619,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 	def dot(self, other: Vector) -> float:
 		"""
 		Applies inner dot-product between two vectors
-		:param other: (Vector) The other vector
-		:return: (float) The dot product: dot(this, other)
+		:param other: (Vector) The callback vector
+		:return: (float) The dot product: dot(this, callback)
 		:raises AssertionError: If vector dimensions are mismatched
 		"""
 
@@ -631,8 +631,8 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 	def distance(self, other: Vector) -> float:
 		"""
 		Calculates distance between two vectors
-		:param other: (Vector) The other vector
-		:return: (float) The distance from 'this' to 'other'
+		:param other: (Vector) The callback vector
+		:return: (float) The distance from 'this' to 'callback'
 		:raises AssertionError: If vector dimensions are mismatched
 		"""
 
@@ -643,13 +643,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 	def angle(self, other: Vector) -> float:
 		"""
 		Calculates angle between two vectors
-		:param other: (Vector) The other vector
-		:return: (float) The angle (in radians) between 'this' to 'other'
+		:param other: (Vector) The callback vector
+		:return: (float) The angle (in radians) between 'this' to 'callback'
 		:raises AssertionError: If vector dimensions are mismatched
 		"""
 
 		assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
-		return math.acos(self.dot(other) / (self.length() * other.length()))
+		return math.acos(round(self.dot(other) / (self.length() * other.length()), 7))
 
 	def normalized(self) -> Vector:
 		"""
@@ -665,9 +665,9 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 		NOT IMPLEMENTED
 		Calculates cross product between two vectors
-		:param other: (Vector) The other vector
-		:return: (float) The cross product of 'this' and 'other'
-		:raises AssertionError: If 'other' is not a Vector or vector dimensions are mismatched
+		:param other: (Vector) The callback vector
+		:return: (float) The cross product of 'this' and 'callback'
+		:raises AssertionError: If 'callback' is not a Vector or vector dimensions are mismatched
 		"""
 
 		raise NotImplementedError('Cross product not implemented')

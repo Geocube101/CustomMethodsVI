@@ -16,7 +16,7 @@ import CustomMethodsVI.Terminal.Enums as Enums
 
 from CustomMethodsVI.Terminal.Struct import Color, MouseInfo, BorderInfo, AnsiStr
 from CustomMethodsVI.Exceptions import InvalidArgumentException
-from CustomMethodsVI.Iterable import SpinList
+from CustomMethodsVI.Iterable import SpinQueue
 from CustomMethodsVI.Concurrent import ThreadedPromise, Promise
 from CustomMethodsVI.Connection import WinNamedPipe
 
@@ -3659,8 +3659,8 @@ class Image(Widget):
 
 		self.__do_subpad__: bool = bool(use_subpad)
 		self.__window__: _curses.window | None = None
+		self.__pixel_div__: tuple[int, typing.Optional[int]] = (-1, div)
 		self.__update_draw_image__(image, div, width - 2, height - 2)
-		self.__pixel_div__: int = div
 		self.__border__: tuple[BorderInfo | None, BorderInfo | None, BorderInfo | None] = (border, highlight_border, active_border)
 		self.__bg_color__: tuple[Color, Color, Color] = (color_bg, highlight_color_bg, active_color_bg)
 
@@ -3683,14 +3683,15 @@ class Image(Widget):
 				self.__img_actual__: str | AnsiStr | numpy.ndarray | PIL.Image.Image = image
 				image: numpy.ndarray = numpy.array(pilimage).astype(numpy.uint8)
 				image = cv2.resize(image, dsize=(width, height), interpolation=cv2.INTER_CUBIC)
+				true_div: int = -1
 
 				if div is None or div is ...:
 					divs: tuple[int, ...] = (4, 8, 16, 32, 64, 128)
 					topmost: Terminal.Terminal = self.topmost_parent()
 					available: int = min(curses.COLORS - len(topmost.__colors__), curses.COLOR_PAIRS - len(topmost.__color_pairs__))
 
-					for div in divs:
-						div_image: numpy.ndarray = image if div <= 0 else (image // div * div + div // 2)
+					for true_div in divs:
+						div_image: numpy.ndarray = image if true_div <= 0 else (image // true_div * true_div + true_div // 2)
 						r: numpy.ndarray = div_image[:, :, 0].astype(numpy.uint32)
 						g: numpy.ndarray = div_image[:, :, 1].astype(numpy.uint32)
 						b: numpy.ndarray = div_image[:, :, 2].astype(numpy.uint32)
@@ -3700,19 +3701,19 @@ class Image(Widget):
 						if len(colors) <= available:
 							break
 				else:
-					div: int = int(div)
+					true_div: int = int(div)
 
-				image = image if div <= 0 else (image // div * div + div // 2)
+				image = image if true_div <= 0 else (image // true_div * true_div + true_div // 2)
 				grayscale: numpy.ndarray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 				chars: tuple[str, ...] = (' ', '`', '.', '-', '~', '+', '*', '<', '>', ':', '!', ';', '|', '/', '%', '?', '#', '$', '@')
 				image_str: list[str] = []
 
 				for y in range(height):
 					for x in range(width):
-						if div > 0:
+						if true_div > 0:
 							r, g, b = image[y, x, :]
 							image_str.append(f'\033[38;2;{int(r)};{int(g)};{int(b)}m█')
-						elif div == 0:
+						elif true_div == 0:
 							l: int = grayscale[y, x]
 							image_str.append(f'\033[38;2;{int(l)};{int(l)};{int(l)}m█')
 						else:
@@ -3721,13 +3722,14 @@ class Image(Widget):
 							image_str.append(char)
 					image_str.append('\n')
 
-				self.__image__: AnsiStr = AnsiStr(''.join(image_str))
-				self.__raw_image__: tuple[numpy.ndarray, numpy.ndarray] = (image, grayscale)
+				self.__image__ = AnsiStr(''.join(image_str))
+				self.__raw_image__ = (image, grayscale)
+				self.__pixel_div__ = (true_div, div)
 			except (IOError, OSError):
 				self.__image__: AnsiStr = AnsiStr('')
 				self.__raw_image__ = None
 		else:
-			self.__image__: AnsiStr = AnsiStr('')
+			self.__image__ = AnsiStr('')
 			self.__raw_image__ = None
 
 		if not self.__do_subpad__:
@@ -3853,7 +3855,7 @@ class Image(Widget):
 		highlight_border = None if highlight_border is None else BorderInfo('', ']', '', '[', '', '', '', '') if highlight_border is ... and height == 1 else BorderInfo('═', '║', '═', '║', '╗', '╝', '╚', '╔') if highlight_border is ... else highlight_border
 		active_border = None if active_border is None else BorderInfo('', ']', '', '[', '', '', '', '') if active_border is ... and height == 1 else BorderInfo('═', '║', '═', '║', '╗', '╝', '╚', '╔') if active_border is ... else active_border
 
-		if image is not ... or div != self.__pixel_div__:
+		if image is not ... or div != self.__pixel_div__[1]:
 			image = self.__img_actual__ if image is None or image is ... else image
 			w, h = self.size
 			self.__update_draw_image__(image, self.__pixel_div__ if div is ... else None if div is None else int(div), w - 2, h - 2)
@@ -3887,7 +3889,7 @@ class Image(Widget):
 		return self.__border__[1]
 
 	@property
-	def div(self) -> int:
+	def div(self) -> tuple[int, typing.Optional[int]]:
 		return self.__pixel_div__
 
 	@property
@@ -3936,7 +3938,7 @@ class SubTerminal(Widget):
 		self.__scroll__: list[int, int] = [0, 0]
 		self.__cursor__: tuple[int, int, int, int] = (0, 0, 0, 0)
 		self.__last_mouse_info__: MouseInfo = MouseInfo(-1, 0, 0, 0, 0)
-		self.__event_queue__: SpinList[int] = SpinList(10)
+		self.__event_queue__: SpinQueue[int] = SpinQueue(10)
 		self.__auto_scroll__: int = 10
 		self.__tab_size__: int = 4
 		self.__active_page__: SubTerminal | None = None
@@ -4272,7 +4274,7 @@ class SubTerminal(Widget):
 					subterm.redraw()
 
 	def getch(self) -> int | None:
-		return self.__event_queue__.pop(0) if len(self.__event_queue__) else None
+		return self.__event_queue__.pop() if len(self.__event_queue__) else None
 
 	def peekch(self) -> int | None:
 		return self.__event_queue__[-1] if len(self.__event_queue__) else None

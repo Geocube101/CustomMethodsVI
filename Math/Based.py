@@ -188,3 +188,7 @@ class BaseN:
 			return BaseNumber(self.__base__, tuple(reversed(digits)))
 		else:
 			raise TypeError(f"Expected type 'int' or type 'BaseNumber', got '{type(x).__name__}'")
+
+	@property
+	def base(self) -> int:
+		return self.__base__

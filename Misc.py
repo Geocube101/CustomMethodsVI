@@ -1,7 +1,9 @@
 import time
 import math
+import typing
 
-import CustomMethodsVI.Exceptions
+import CustomMethodsVI.Exceptions as Exceptions
+import CustomMethodsVI.Decorators as Decorators
 
 
 def raise_if(expression: bool, exception: BaseException = AssertionError('Assertion Failed')) -> None:
@@ -13,7 +15,7 @@ def raise_if(expression: bool, exception: BaseException = AssertionError('Assert
 	"""
 
 	if not isinstance(exception, BaseException):
-		raise CustomMethodsVI.Exceptions.InvalidArgumentException(raise_if, 'exception', type(exception))
+		raise Exceptions.InvalidArgumentException(raise_if, 'exception', type(exception))
 	elif expression:
 		raise exception
 
@@ -27,7 +29,7 @@ def raise_ifn(expression: bool, exception: BaseException = AssertionError('Asser
 	"""
 
 	if not isinstance(exception, BaseException):
-		raise CustomMethodsVI.Exceptions.InvalidArgumentException(raise_if, 'exception', type(exception))
+		raise Exceptions.InvalidArgumentException(raise_if, 'exception', type(exception))
 	elif not expression:
 		raise exception
 
@@ -88,3 +90,23 @@ def convert_scientific(value: float | int, places: int, e: str = " E "):
 	sign: str = '-' if value < 0 else ''
 	value = value / pow(10, l10)
 	return f'{sign}{round(value, places)}{e}{l10}'
+
+
+@Decorators.Overload
+def minmax(a: typing.Any, b: typing.Any) -> tuple[typing.Any, typing.Any]:
+	return (a, b) if a <= b else (b, a)
+
+@Decorators.DefaultOverload
+def minmax(collection: typing.Iterable[typing.Any]) -> tuple[typing.Any, typing.Any]:
+	iterator: typing.Iterator[typing.Any] = iter(collection)
+	lowest = highest = next(iterator)
+
+	try:
+		while True:
+			current = next(iterator)
+			lowest = min(lowest, current)
+			highest = max(highest, current)
+	except StopIteration:
+		pass
+
+	return lowest, highest
