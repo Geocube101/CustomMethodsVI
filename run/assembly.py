@@ -28,8 +28,8 @@ def get_input_question(prompt: str) -> bool:
 
 
 if __name__ == '__main__':
-	is_encoding: bool = get_input_question('Encoding Instruction(s)?: ')
-	from_file: bool = get_input_question('Read Instructions From File?: ')
+	is_encoding: bool = get_input_question('Encoding Instruction(s)? (Y/N): ')
+	from_file: bool = get_input_question('Read Instructions From File? (Y/N): ')
 	outfile: typing.Optional[File] = None
 	input_instructions: list[str] = []
 	output_assembly: list[int] = []
