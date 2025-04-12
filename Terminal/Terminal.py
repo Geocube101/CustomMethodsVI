@@ -3,8 +3,6 @@ from __future__ import annotations
 import curses
 import _curses
 import curses.ascii
-import ctypes
-import ctypes.wintypes
 import datetime
 import sys
 import typing
@@ -24,11 +22,16 @@ import base64
 import pickle
 import psutil
 import signal
-import pywintypes
 
-import win32con
-import win32gui
-import win32console
+if os.name == 'nt':
+	import ctypes
+	import ctypes.wintypes
+
+	import pywintypes
+
+	import win32con
+	import win32gui
+	import win32console
 
 import CustomMethodsVI.Terminal.Widgets as Widgets
 import CustomMethodsVI.Exceptions as Exceptions

@@ -1,12 +1,18 @@
-import json
-import cv2
-import sys
+import time
+import math
+import typing
 
-from CustomMethodsVI.FileSystem import *
-from CustomMethodsVI.Stream import *
-from CustomMethodsVI.CacheArch import CacheArchitecture
-from CustomMethodsVI.Math.Based import BaseNumber, BaseN
-
+import CustomMethodsVI.Misc
+from CustomMethodsVI.Math.Plotter import *
+from CustomMethodsVI.Stream import StringStream
+from Stream import ByteStream
 
 if __name__ == '__main__':
-	print(LoggingDirectory(r'C:\Users\geoga\AppData\Roaming\SpaceEngineers').logfiles())
+	# print(LoggingDirectory(r'C:\Users\geoga\AppData\Roaming\SpaceEngineers').logfiles())
+
+	# plotter = Plot2D()
+	# plotter.show()
+
+	ss = StringStream()
+	ss.write('Hello World')
+	print(ss.read())

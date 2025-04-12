@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import typing
 import typeguard
 
@@ -15,29 +16,29 @@ class KVP:
 		Responsible for storing a value and its associated format specifier
 		"""
 
-		def __init__(self, value: int | float | str | None, formatter: str):
-			self.value: int | float | str | None = value
+		def __init__(self, value: bool | int | float | str | bytes | None, formatter: str):
+			self.value: bool | int | float | str | bytes | None = value
 			self.formatter: str = formatter
 
 		def valid(self) -> bool:
-			return self.formatter in ('B', 'I', 'X', 'O', 'F', 'D', 'S', '') and (self.value is None or isinstance(self.value, (float, int, str)))
+			return self.formatter in ('B', 'I', 'L', 'O', 'F', 'D', 'S', 'X', '') and (self.value is None or isinstance(self.value, (bool, float, int, str, bytes)))
 
 	class __ListWrapper__[T](typing.Sized, typing.Iterable[T]):
 		def __init__(self, list_: list):
 			self.__reference__: list[KVP.__FormatMarker__] = list_
 
-		def __getitem__(self, item: int) -> int | float | str | None:
+		def __getitem__(self, item: int) -> bool | int | float | str | bytes | None:
 			return self.__reference__[item].value
 
-		def __setitem__(self, key: int, value: int | float | str | None) -> None:
-			valid_types: tuple[type, ...] = (int, float, str, type(None))
+		def __setitem__(self, key: int, value: bool | int | float | str | bytes | None) -> None:
+			valid_types: tuple[type, ...] = (bool, int, float, str, bytes, type(None))
 
 			if isinstance(value, valid_types):
 				self.__reference__[key] = KVP.__mark_formatter__(value)
 			else:
 				raise ValueError(f'Expected either an int, float, str, or None; got \'{type(value)}\'')
 
-		def __iter__(self) -> typing.Iterator[int | float | str | None]:
+		def __iter__(self) -> typing.Iterator[bool, int | float | str | bytes | None]:
 			for item in self.__reference__:
 				yield item.value
 
@@ -50,16 +51,16 @@ class KVP:
 		def __str__(self) -> str:
 			return str([x.value for x in self.__reference__])
 
-		def append(self, value: int | float | str | None) -> None:
+		def append(self, value: bool | int | float | str | bytes | None) -> None:
 			self.__reference__.append(KVP.__mark_formatter__(value))
 
 		def clear(self) -> None:
 			self.__reference__.clear()
 
-		def copy(self) -> list[int | float | str | None]:
+		def copy(self) -> list[bool | int | float | str | bytes | None]:
 			return [x.value for x in self.__reference__]
 
-		def count(self, item: int | float | str | None) -> int:
+		def count(self, item: bool | int | float | str | bytes | None) -> int:
 			count: int = 0
 
 			for x in self.__reference__:
@@ -67,30 +68,30 @@ class KVP:
 
 			return count
 
-		def extend(self, iterable: typing.Iterable[int | float | str | None]) -> None:
+		def extend(self, iterable: typing.Iterable[bool | int | float | str | bytes | None]) -> None:
 			for item in iterable:
 				if item is None or isinstance(item, (int, float, str)):
 					self.__reference__.append(KVP.__mark_formatter__(item))
 				else:
 					raise ValueError(f'Expected either an int, float, str, or None; got \'{type(item)}\'')
 
-		def index(self, item: int | float | str | None) -> int:
+		def index(self, item: bool | int | float | str | bytes | None) -> int:
 			for i, x in enumerate(self.__reference__):
 				if x.value == item:
 					return i
 
 			return -1
 
-		def insert(self, index: int, item: int | float | str | None) -> None:
+		def insert(self, index: int, item: bool | int | float | str | bytes | None) -> None:
 			if item is None or isinstance(item, (int, float, str)):
 				self.__reference__.insert(index, KVP.__mark_formatter__(item))
 			else:
 				raise ValueError(f'Expected either an int, float, str, or None; got \'{type(item)}\'')
 
-		def pop(self, index: int = -1) -> int | float | str | None:
+		def pop(self, index: int = -1) -> bool | int | float | str | bytes | None:
 			return self.__reference__.pop(index).value
 
-		def remove(self, item: int | float | str | None) -> None:
+		def remove(self, item: bool | int | float | str | bytes | None) -> None:
 			for i, x in enumerate(self.__reference__):
 				if x.value == item:
 					self.__reference__.pop(i)
@@ -101,7 +102,7 @@ class KVP:
 		def reverse(self) -> None:
 			self.__reference__.reverse()
 
-		def sort(self, *, key: typing.Optional[typing.Callable[[int | float | str | None], typing.Any]] = None, reverse: bool = False) -> None:
+		def sort(self, *, key: typing.Optional[typing.Callable[[bool | int | float | str | bytes | None], typing.Any]] = None, reverse: bool = False) -> None:
 			def sorter(wrapper: KVP.__FormatMarker__) -> typing.Any:
 				if key is not None and key is not ...:
 					return key(wrapper.value)
@@ -164,7 +165,7 @@ class KVP:
 						return KVP.__FormatMarker__(int(value), 'I')
 					except ValueError:
 						raise KVPDecodeError(f'Failed to format value \'{value}\' as integer-10 - LINE.{line_number + 1} {line}')
-			elif formatter == '&X':
+			elif formatter == '&L':
 				if len(bit_length_str := formatter[2:]):
 					try:
 						bit_length = int(bit_length_str)
@@ -214,6 +215,8 @@ class KVP:
 					return KVP.__FormatMarker__(float(value), 'D')
 				except ValueError:
 					raise KVPDecodeError(f'Failed to format value \'{value}\' as double - LINE.{line_number + 1} {line}')
+			elif formatter == '&X':
+				return  KVP.__FormatMarker__(base64.b64decode(value.encode()), 'X')
 			elif formatter == '&S':
 				return KVP.__FormatMarker__(value, 'S')
 			elif formatter == '&':
@@ -221,9 +224,9 @@ class KVP:
 			else:
 				raise KVPDecodeError(f'Formatter is invalid: \'{formatter}\'; expected one of [ B, I, X, O, F, D, S ] - LINE.{line_number + 1} {line}')
 
-		def _decode_inner(inner_line: str | None) -> 'tuple[str, dict[str, list[KVP.__FormatMarker__] | dict]]':
+		def _decode_inner(inner_line: str | None) -> tuple[str, dict[str, list[KVP.__FormatMarker__] | dict]]:
 			namespace_name: str = '' if inner_line is None else inner_line[2:]
-			inner_result: 'dict[str, list[KVP.__FormatMarker__] | dict]' = {}
+			inner_result: dict[str, list[KVP.__FormatMarker__] | dict] = {}
 
 			for line in lines:
 				if len(line) == 0:
@@ -288,7 +291,7 @@ class KVP:
 
 		line_number: int = 1
 		lines: typing.Generator[str] = _line_getter()
-		result: 'dict[str, list[KVP.__FormatMarker__] | KVP]'
+		result: dict[str, list[KVP.__FormatMarker__] | KVP]
 		_, result = _decode_inner(None)
 		return cls(root_name, result)
 
@@ -308,7 +311,7 @@ class KVP:
 			return False
 
 	@staticmethod
-	def __mark_formatter__(val: 'int | float | str | None | KVP.__FormatMarker__') -> KVP.__FormatMarker__:
+	def __mark_formatter__(val: bool | int | float | str | bytes | None | KVP.__FormatMarker__) -> KVP.__FormatMarker__:
 		"""
 		INTERNAL METHOD; DO NOT USE
 		Appends the format specifier to a value for storage in a KVP object
@@ -316,18 +319,22 @@ class KVP:
 		:return: (---) The marked value
 		"""
 
-		if type(val) is int:
+		if isinstance(val, bool):
+			return KVP.__FormatMarker__(val, 'B')
+		elif isinstance(val, int):
 			return KVP.__FormatMarker__(val, 'I')
-		elif type(val) is float:
+		elif isinstance(val, float):
 			return KVP.__FormatMarker__(val, 'F')
 		elif val is None:
 			return KVP.__FormatMarker__(val, '')
-		elif type(val) is KVP.__FormatMarker__:
+		elif isinstance(val, KVP.__FormatMarker__):
 			return val
+		elif isinstance(val, bytes):
+			return KVP.__FormatMarker__(val, 'X')
 		else:
 			return KVP.__FormatMarker__(str(val), 'S')
 
-	def __init__(self, namespace_name: str | None, data: dict[str, list[int | float | str | None] | list[KVP.__FormatMarker__] | KVP | dict]):
+	def __init__(self, namespace_name: str | None, data: dict[str, list[int | float | str | bytes | None] | list[KVP.__FormatMarker__] | KVP | dict]):
 		"""
 		[KVP] - Class providing parsing capabilities for the custom KeyValuePair (KVP) data storage format
 		- Constructor -
@@ -339,12 +346,12 @@ class KVP:
 		"""
 
 		assert type(data) is dict, 'Not a dictionary'
-		valid_types: tuple[type, ...] = (int, float, str, type(None), type(self))
+		valid_types: tuple[type, ...] = (bool, int, float, str, type(None), type(self), bytes, bytearray)
 		super().__setattr__('__initialized__', False)
 		self.__mapping__: dict[str, list[KVP.__FormatMarker__] | KVP] = {}
 		self.__namespace__: str = f'KVP @ {hex(id(self))} (ROOT)' if namespace_name is None else str(namespace_name)
 		key: str
-		value: typing.Iterable[KVP.__FormatMarker__ | int | float | str | None] | KVP | dict | int | float | str | None | KVP.__FormatMarker__
+		value: typing.Iterable[KVP.__FormatMarker__ | bool | int | float | str | bytes | None] | KVP | dict | bool | int | float | str | bytes | None | KVP.__FormatMarker__
 
 		for key, value in data.items():
 			if type(value) is dict:
@@ -378,12 +385,16 @@ class KVP:
 			formatter: str = value.formatter
 			value: str = value.value
 
-			if formatter == 'X':
+			if formatter == 'B':
+				return str(bool(value)).lower()
+			elif formatter == 'L':
 				return f'{value:X}'
 			elif formatter == 'O':
 				return f'{value:O}'
 			elif formatter == 'S':
 				return f'"{value}"' if '\'' in value else f'"""{value}"""' if '\'' in value and '"' in value else f'\'{value}\''
+			elif formatter == 'X':
+				return f'b"{value}"'
 			else:
 				return str(value)
 
@@ -392,15 +403,15 @@ class KVP:
 	def __contains__(self, item: str) -> bool:
 		return item in self.__mapping__
 
-	def __getitem__(self, item: str) -> KVP.__ListWrapper__[int | float | str | None] | KVP:
+	def __getitem__(self, item: str) -> KVP.__ListWrapper__[bool | int | float | str | bytes | None] | KVP:
 		value = self.__mapping__[item]
 		return KVP.__ListWrapper__(value) if type(value) is list else value
 
-	def __getattr__(self, item: str) -> list[int | float | str | None] | KVP:
+	def __getattr__(self, item: str) -> list[bool | int | float | str | bytes | None] | KVP:
 		return self[item]
 
-	def __setitem__(self, key: str, value: list[int | float | str | None] | int | float | str | None | KVP | dict):
-		valid_types: tuple[type, ...] = (int, float, str, type(None), type(self))
+	def __setitem__(self, key: str, value: list[bool | int | float | str | bytes | None] | bool | int | float | str | bytes | None | KVP | dict):
+		valid_types: tuple[type, ...] = (bool, int, float, str, type(None), type(self))
 		key = str(key)
 
 		if isinstance(value, dict):
@@ -418,7 +429,7 @@ class KVP:
 			self.__mapping__[key] = [KVP.__mark_formatter__(value)]
 
 		else:
-			raise ValueError(f'Expected either an int, float, str, or None, an iterable of such, another KVP object, or a dictionary that can be converted to a KVP object; got \'{type(value)}\'')
+			raise ValueError(f'Expected either a bool, int, float, str, or None, an iterable of such, another KVP object, or a dictionary that can be converted to a KVP object; got \'{type(value)}\'')
 
 	def __setattr__(self, key: str, value):
 		if super().__getattribute__('__initialized__'):
@@ -462,19 +473,23 @@ class KVP:
 			formatter = value.formatter
 			value = value.value
 
-			if formatter == 'X':
+			if formatter == 'B':
+				return str(bool(value)).lower()
+			elif formatter == 'L':
 				return f'{value:X}'
 			elif formatter == 'O':
 				return f'{value:O}'
 			elif formatter == 'S':
 				return f'"{value}"' if '\'' in value else f'"""{value}"""' if '\'' in value and '"' in value else f'\'{value}\''
+			elif formatter == 'X':
+				return f'b"{value}"'
 			else:
 				return str(value)
 
 		def _printer(namespace: KVP, indent: int = 1) -> None:
 			tab: str = '\t' * indent
 			k: str
-			v: list[int | float | str | None] | int | float | str | None | KVP
+			v: list[bool | int | float | str | bytes | None] | bool | int | float | str | bytes | None | KVP
 
 			for k, v in namespace.__mapping__.items():
 				if type(v) is type(self):
@@ -498,8 +513,10 @@ class KVP:
 			formatter = value.formatter
 			value = value.value
 
-			if formatter == 'X':
-				return f'{value:X}&X'
+			if formatter == 'B':
+				return f'{"true" if value else "false"}&B'
+			elif formatter == 'L':
+				return f'{value:X}&L'
 			elif formatter == 'O':
 				return f'{value:O}&O'
 			elif formatter == 'F':
@@ -508,8 +525,8 @@ class KVP:
 				return f'{value}&{formatter}' if explicit_str_format else f'{value}'
 			elif formatter == 'I':
 				return f'{value}&I'
-			elif formatter == '':
-				return ''
+			elif formatter == 'X':
+				return f'{base64.b64encode(value).decode()}&X'
 			else:
 				raise KVPEncodeError(f'Invalid format specifier: \'{formatter}\'')
 
