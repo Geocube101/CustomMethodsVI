@@ -114,6 +114,8 @@ class __OverloadCaller:
 					return deduce_annotation(eval(annotation))
 				except NameError:
 					return typing.Any,
+			elif annotation is None:
+				return type(None),
 			else:
 				raise TypeError(f'Non-standard type hint: \'{annotation}\' ({type(annotation)})')
 
