@@ -1,4 +1,5 @@
 import curses
+import os
 import sys
 
 import CustomMethodsVI.Terminal.Enums as Enums
@@ -34,7 +35,7 @@ if __name__ == '__main__':
 	term.scroll_speed(10)
 	term.font(Struct.Font('Courier New', (4, 8), 400))
 
-	img: Widgets.Image = term.add_image(10, 5, 100, 50, r"C:\Users\geoga\Pictures\nuclear.png")
+	#img: Widgets.Image = term.add_image(10, 5, 100, 50, r"C:\Users\geoga\Pictures\nuclear.png" if os.name == 'nt' else '/mnt/c/Users/geoga/Pictures/nuclear.png')
 	term.update_type(Enums.WINUPDATE_MOUSEIN)
 
 	sys.exit(term.mainloop(100, after_draw=mainloop))

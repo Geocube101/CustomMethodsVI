@@ -5,6 +5,8 @@ import os
 
 
 def main():
+	program: list[str] = ['py', '-m', 'pip', 'install', None] if os.name == 'nt' else ['pip', 'install', None]
+
 	try:
 		os.system('')
 
@@ -23,7 +25,8 @@ def main():
 					exec(f'import {package.replace("-", "_")}')
 					print('\033[38;2;75;100;255mAlready Installed\033[0m')
 				except ImportError:
-					result = subprocess.run(['py', '-m', 'pip', 'install', name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+					program[-1] = name
+					result = subprocess.run(program, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 					if result.returncode == 0:
 						print('\033[38;2;0;255;0mSuccess\033[0m')

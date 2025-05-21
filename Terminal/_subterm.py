@@ -20,8 +20,8 @@ if __name__ == '__main__':
 
 	try:
 		parent_pid: int
-		conn: Connection.WinNamedPipe
-		widget_conn: Connection.WinNamedPipe
+		conn: Connection.NamedPipe
+		widget_conn: Connection.NamedPipe
 		tps: int
 		width: int
 		height: int

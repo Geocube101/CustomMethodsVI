@@ -616,8 +616,6 @@ class SocketioClient:
 
 if sys.platform == 'win32':
 	import base64
-	import builtins
-	import ctypes.wintypes
 	import datetime
 	import pickle
 	import pywintypes
@@ -879,3 +877,233 @@ if sys.platform == 'win32':
 		@property
 		def is_server(self) -> bool:
 			return self.__isserver__
+
+	NamedPipe = WinNamedPipe
+
+else:
+	import CustomMethodsVI.FileSystem as FileSystem
+	import CustomMethodsVI.Stream as Stream
+
+	class UnixNamedPipe:
+		"""
+		[UnixNamedPipe] - A unix-only duplex named pipe implementation
+		"""
+
+		def __init__(self):
+			"""
+			[UnixNamedPipe] - A unix-only duplex named pipe implementation
+			- Constructor -
+			"""
+
+			self.__pipename__: str = f'/tmp/pipe_{hex(id(self))}::{datetime.datetime.now(datetime.timezone.utc).timestamp()}'
+
+			if os.path.exists(self.__pipename__):
+				raise IOError(f'Failed to create named pipe - ALREADY_EXISTS')
+
+			os.mkfifo(self.__pipename__)
+			self.__conn__: Stream.FileStream = Stream.FileStream(self.__pipename__, 'rb+')
+			self.__isserver__: bool = True
+			self.__open__: bool = not self.__conn__.closed
+
+			if self.__conn__.closed:
+				raise IOError(f'Failed to create named pipe - PIPE_OPEN_FAIL')
+
+		def __del__(self) -> None:
+			try:
+				if not self.closed:
+					self.close()
+			except (IOError, AttributeError):
+				pass
+
+		def __setstate__(self, state: dict[str, typing.Any]) -> None:
+			"""
+			Deserializing function for setting from pickled state
+			:param state: (dict[str, ANY]) The pickled state
+			:return: (None)
+			"""
+
+			self.__dict__.update(state)
+			self.__conn__: Stream.FileStream = Stream.FileStream(self.__pipename__, 'rb+')
+			self.__isserver__: bool = False
+
+			if self.__conn__.closed:
+				raise IOError(f'Failed to connect to named pipe - PIPE_OPEN_FAIL')
+
+		def __getstate__(self) -> dict[str, typing.Any]:
+			"""
+			Serializing function for retrieving pickle safe state
+			:return: (dict[str, ANY]) The pickle-able state
+			"""
+
+			attributes: dict[str, typing.Any] = self.__dict__.copy()
+			del attributes['__open__']
+			return attributes
+
+		def __repr__(self) -> str:
+			return str(self)
+
+		def __str__(self) -> str:
+			return f'<UnixNamedPipe[{self.__pipename__}-{"SERVER" if self.__isserver__ else "CLIENT"}] @ {hex(id(self))}>'
+
+		def close(self) -> None:
+			"""
+			Closes the pipe
+			All in-writing information is lost
+			:return: (None)
+			:raises IOError: If the pipe is already closed
+			"""
+
+			if self.closed:
+				raise IOError('Pipe already closed')
+			elif self.__isserver__:
+				self.__conn__.close()
+				os.unlink(self.__pipename__)
+			else:
+				self.__conn__.close()
+
+		def flush(self) -> None:
+			"""
+			Flushes all data into pipe
+			Blocks until data is written and read
+			:return: (None)
+			:raises IOError: If the pipe is closed
+			"""
+
+			if self.closed:
+				raise IOError('Pipe is closed')
+
+			self.__conn__.flush()
+
+		def poll(self) -> int:
+			"""
+			Polls the number of bytes waiting in the buffer
+			:return: (int) The number of in-waiting bytes
+			:raises IOError: If the pipe is closed
+			"""
+
+			if self.closed:
+				raise IOError('Pipe is closed')
+
+			return FileSystem.File(self.__pipename__).statsize()
+
+		def dup(self) -> UnixNamedPipe:
+			"""
+			Duplicates the pipe, returning a client-side pipe connection
+			:return: (WinNamedPipe) The new pipe connection
+			:raises IOError: If the pipe failed to connect
+			"""
+
+			pipe: UnixNamedPipe = type(self).__new__(type(self))
+			pipe.__setstate__(self.__getstate__())
+			return pipe
+
+		def send(self, data: typing.Any) -> UnixNamedPipe:
+			"""
+			Sends an object over the pipe
+			Objects are serialized before transmission
+			To write raw binary data, see UnixNamedPipe::write
+			:param data: (ANY) The object to write
+			:return: (UnixNamedPipe) This instance
+			:raises IOError: If the pipe is closed or the write operation failed
+			"""
+
+			if self.closed:
+				raise IOError('Pipe is closed')
+
+			serialized: bytes = base64.b64encode(pickle.dumps(data))
+			payload: bytes = len(serialized).to_bytes(8, 'little', signed=False) + serialized
+			self.__conn__.write(payload)
+			return self
+
+		def write(self, data: bytes | bytearray) -> UnixNamedPipe:
+			"""
+			Writes binary data to the pipe
+			To send standard objects, see UnixNamedPipe::send
+			:param data: (bytes | bytearray) The bytes to write
+			:return: (UnixNamedPipe) This instance
+			:raises IOError: If the pipe is closed or the write operation failed
+			"""
+
+			if self.closed:
+				raise IOError('Pipe is closed')
+			elif not isinstance(data, (bytes, bytearray)):
+				raise Exceptions.InvalidArgumentException(WinNamedPipe.write, 'data', type(data), (bytes, bytearray))
+
+			data: bytes = bytes(data)
+
+			if len(data) == 0:
+				return self
+
+			self.__conn__.write(data)
+			return self
+
+		def recv(self) -> typing.Any:
+			"""
+			Receives an object from the pipe
+			Objects are deserialized before returning
+			To read raw binary data, see UnixNamedPipe::read
+			:return: (ANY) The deserialized object
+			:raises IOError: If the pipe is closed or the read operation failed
+			"""
+
+			if self.closed:
+				raise IOError('Pipe is closed')
+
+			while (poll := self.poll()) < 8:
+				if poll <= -1:
+					raise BrokenPipeError('The pipe is invalid')
+
+				time.sleep(1e-6)
+
+			payload_length_b: bytes = self.__conn__.read(8)
+			payload_length: int = int.from_bytes(payload_length_b, 'little', signed=False)
+
+			while (poll := self.poll()) < payload_length:
+				if poll <= -1:
+					raise BrokenPipeError('The pipe is invalid')
+
+				time.sleep(1e-6)
+
+			payload: bytes = self.__conn__.read(payload_length)
+			return pickle.loads(base64.b64decode(payload))
+
+		def read(self, n: int = -1) -> bytes:
+			"""
+			Reads binary data from the pipe
+			To read standard objects, see UnixNamedPipe::recv
+			:param n: (int) The number of bytes to read or all data if less than 0
+			:return: (bytes) The read bytes
+			:raises IOError: If the pipe is closed or the read operation failed
+			"""
+
+			if self.closed:
+				raise IOError('Pipe is closed')
+
+			length: int = self.poll() if n < 0 else n
+
+			if length == 0:
+				return b''
+
+			while (poll := self.poll()) < length:
+				if poll <= -1:
+					raise BrokenPipeError('The pipe is invalid')
+
+				time.sleep(1e-6)
+
+			payload: bytes = self.__conn__.read(length)
+			return payload
+
+		@property
+		def closed(self) -> bool:
+			"""
+			Returns if this pipe connection is closed
+			:return: (bool) Closedness
+			"""
+
+			return self.__conn__.closed
+
+		@property
+		def is_server(self) -> bool:
+			return self.__isserver__
+
+	NamedPipe = UnixNamedPipe

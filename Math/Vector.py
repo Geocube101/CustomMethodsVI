@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import collections.abc
 import math
 import typing
-import collections.abc
 
 import CustomMethodsVI.Math as Math
 
@@ -17,7 +17,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 	@classmethod
 	def orthogonal(cls: type, vector_0: Vector, vector_1: Vector, *vectors: Vector) -> bool:
 		"""
-		Determines if all specified vectors are 90 degrees rotated from each callback
+		Determines if all specified vectors are 90 degrees rotated from each other
 		:param vector_0: (Vector) The first vector
 		:param vector_1: (Vector) The next vector
 		:param vectors: (*Vector) All remaining vectors
@@ -37,7 +37,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 	@classmethod
 	def orthonormal(cls: type, vector_0: Vector, vector_1: Vector, *vectors: Vector):
 		"""
-		Determines if all specified vectors are 90 degrees rotated from each callback and all vectors are a unit vector
+		Determines if all specified vectors are 90 degrees rotated from each other and all vectors are a unit vector
 		:param vector_0: (Vector) The first vector
 		:param vector_1: (Vector) The next vector
 		:param vectors: (*Vector) All remaining vectors
@@ -157,7 +157,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+			assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 			return Vector(a + b for a, b in zip(self.__dimensions, other.__dimensions))
 		elif isinstance(other, (float, int)):
 			return Vector(x + other for x in self.__dimensions)
@@ -175,7 +175,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+			assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 			return Vector(a - b for a, b in zip(self.__dimensions, other.__dimensions))
 		elif isinstance(other, (float, int)):
 			return Vector(x - other for x in self.__dimensions)
@@ -193,7 +193,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+			assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 			return Vector(a * b for a, b in zip(self.__dimensions, other.__dimensions))
 		elif isinstance(other, (float | int)):
 			return Vector(x * other for x in self.__dimensions)
@@ -211,7 +211,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+			assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 			return Vector(a / b for a, b in zip(self.__dimensions, other.__dimensions))
 		elif isinstance(other, (float | int)):
 			return Vector(x / other for x in self.__dimensions)
@@ -229,7 +229,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+			assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 			return Vector(a // b for a, b in zip(self.__dimensions, other.__dimensions))
 		elif isinstance(other, (float | int)):
 			return Vector(x // other for x in self.__dimensions)
@@ -260,7 +260,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+			assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 			return Vector(a % b for a, b in zip(self.__dimensions, other.__dimensions))
 		elif isinstance(other, (float | int)):
 			return Vector(x % other for x in self.__dimensions)
@@ -278,7 +278,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+			assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 			return Vector(pow(a, b, modulo) for a, b in zip(self.__dimensions, other.__dimensions))
 		elif isinstance(other, (float | int)):
 			return Vector(pow(x, other, modulo) for x in self.__dimensions)
@@ -308,7 +308,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+			assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 			return Vector(b - a for a, b in zip(self.__dimensions, other.__dimensions))
 		elif isinstance(other, (float | int)):
 			return Vector(other - x for x in self.__dimensions)
@@ -338,7 +338,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+			assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 			return Vector(b / a for a, b in zip(self.__dimensions, other.__dimensions))
 		elif isinstance(other, (float | int)):
 			return Vector(other / x for x in self.__dimensions)
@@ -356,7 +356,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+			assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 			return Vector(b // a for a, b in zip(self.__dimensions, other.__dimensions))
 		elif isinstance(other, (float | int)):
 			return Vector(other // x for x in self.__dimensions)
@@ -387,7 +387,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+			assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 			return Vector(b / a for a, b in zip(self.__dimensions, other.__dimensions))
 		elif isinstance(other, (float | int)):
 			return Vector(other % x for x in self.__dimensions)
@@ -405,7 +405,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+			assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 			return Vector(pow(b, a, modulo) for a, b in zip(self.__dimensions, other.__dimensions))
 		elif isinstance(other, (float | int)):
 			return Vector(pow(other, x, modulo) for x in self.__dimensions)
@@ -423,7 +423,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+			assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 			return self.length() < other.length()
 		elif isinstance(other, (float | int)):
 			return self.length() < other
@@ -441,7 +441,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+			assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 			return self.length() <= other.length()
 		elif isinstance(other, (float | int)):
 			return self.length() <= other
@@ -459,7 +459,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+			assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 			return self.length() > other.length()
 		elif isinstance(other, (float | int)):
 			return self.length() > other
@@ -477,7 +477,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+			assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 			return self.length() >= other.length()
 		elif isinstance(other, (float | int)):
 			return self.length() >= other
@@ -494,7 +494,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		if isinstance(other, type(self)):
-			return self.dimension() == other.dimension() and self.__dimensions == other.__dimensions
+			return self.dimension == other.dimension and self.__dimensions == other.__dimensions
 		elif isinstance(other, (float | int)):
 			return self.length() == other
 		else:
@@ -594,18 +594,10 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		return Vector(math.ceil(x) for x in self.__dimensions)
 
 	def __repr__(self) -> str:
-		return f'<{type(self).__name__} {self.dimension()}D at {hex(id(self))}>'
+		return f'<{type(self).__name__} {self.dimension}D at {hex(id(self))}>'
 
 	def __str__(self) -> str:
 		return f'〈{", ".join(str(x) for x in self.__dimensions)}〉'
-
-	def dimension(self) -> int:
-		"""
-		Gets the total dimension of this vector
-		:return: (int) Dimensioness
-		"""
-
-		return len(self.__dimensions)
 
 	def length(self) -> float:
 		"""
@@ -624,7 +616,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:raises AssertionError: If vector dimensions are mismatched
 		"""
 
-		assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+		assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 		return sum(a * b for a, b in zip(self.__dimensions, other.__dimensions))
 
 	@Overload
@@ -636,7 +628,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:raises AssertionError: If vector dimensions are mismatched
 		"""
 
-		assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+		assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 		return (other - self).length()
 
 	@Overload
@@ -648,7 +640,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:raises AssertionError: If vector dimensions are mismatched
 		"""
 
-		assert self.dimension() == other.dimension(), 'Mismatched vector dimensions'
+		assert self.dimension == other.dimension, 'Mismatched vector dimensions'
 		return math.acos(round(self.dot(other) / (self.length() * other.length()), 7))
 
 	def normalized(self) -> Vector:
@@ -661,16 +653,44 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		return self / length
 
 	@Overload
-	def cross(self, other: Vector) -> Vector:
+	def hodge_star(self, *others: Vector) -> Vector:
 		"""
-		NOT IMPLEMENTED
-		Calculates cross product between two vectors
-		:param other: (Vector) The callback vector
-		:return: (float) The cross product of 'this' and 'callback'
+		Calculates hodge product between n-1 vectors
+		:param others: (*Vector) The other vectors to compute against (The number of vectors must equal this vector's dimension minus 1)
+		:return: (float) The hodge product of 'this' and 'callback'
 		:raises AssertionError: If 'callback' is not a Vector or vector dimensions are mismatched
 		"""
 
-		raise NotImplementedError('Cross product not implemented')
+		others: list[Vector] = [self, *others]
+		dimension: int = self.dimension
+		assert len(others) == dimension - 1, f'Need {dimension - 1} vector(s) to compute {dimension} cross product'
+		components: list[float] = []
+
+		for i in range(dimension):
+			indices: tuple[int, ...] = tuple(j for j in range(dimension) if j != i)
+			component: float = math.prod(others[j][k] for j, k in enumerate(indices)) - math.prod(others[j][k] for j, k in enumerate(reversed(indices)))
+			components.append(component)
+
+		return Vector(components)
+
+	@Overload
+	def cross(self, other: Vector) -> Vector:
+		"""
+		Calculates cross product between vectors
+		:param other: (Vector) The other vector to compute against
+		:return: (float) The cross product of 'this' and 'callback'
+		:raises AssertionError: If 'callback' is not a Vector or vector dimensions are not 3D
+		"""
+
+		assert self.dimension == other.dimension and self.dimension == 3, 'Vector not 3D'
+
+		a1, a2, a3 = self
+		b1, b2, b3 = other
+
+		c1: float = a2 * b3
+		c2: float = a1 * b3
+		c3: float = a1 * b2
+		return Vector(c1, c2, c3) * self.length() * other.length() * math.sin(self.angle(other))
 
 	def components(self) -> tuple[float, ...]:
 		"""
@@ -712,4 +732,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		assert all(type(x) is type(self) for x in subspace), 'Subbspace is not a vector set'
 		u1, u2 = Vector.gram_schmidt(subspace[0], subspace[1])
 		return self.dot(u1) * u1 + self.dot(u2) * u2
+
+	@property
+	def dimension(self) -> int:
+		"""
+		Gets the total dimension of this vector
+		:return: (int) Dimensioness
+		"""
+
+		return len(self.__dimensions)
 

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import curses
-import ctypes.wintypes
 import importlib.util
+import os
 import sys
 import typing
 import types
@@ -738,27 +738,33 @@ class SerializableCallable:
 		return self.__callable__(*args, **kwargs)
 
 
-class COORD(ctypes.Structure):
-	_fields_ = [
-		("X", ctypes.wintypes.SHORT),
-		("Y", ctypes.wintypes.SHORT),
-	]
+if os.name == 'nt':
+	import ctypes.wintypes
+
+	class COORD(ctypes.Structure):
+		_fields_ = [
+			("X", ctypes.wintypes.SHORT),
+			("Y", ctypes.wintypes.SHORT),
+		]
 
 
-class FontInfoEx(ctypes.Structure):
-	_fields_ = (
-		("cbSize", ctypes.wintypes.ULONG),
-		("nFont", ctypes.wintypes.DWORD),
-		("dwFontSize", COORD),
-		("FontFamily", ctypes.wintypes.UINT),
-		("FontWeight", ctypes.wintypes.UINT),
-		("FaceName", ctypes.wintypes.WCHAR * 32)
-	)
+	class FontInfoEx(ctypes.Structure):
+		_fields_ = (
+			("cbSize", ctypes.wintypes.ULONG),
+			("nFont", ctypes.wintypes.DWORD),
+			("dwFontSize", COORD),
+			("FontFamily", ctypes.wintypes.UINT),
+			("FontWeight", ctypes.wintypes.UINT),
+			("FaceName", ctypes.wintypes.WCHAR * 32)
+		)
 
 
-class SECURITY_ATTRIBUTES(ctypes.Structure):
-	_fields_ = (
-		('nLength', ctypes.wintypes.DWORD),
-		('lpSecurityDescriptor', ctypes.wintypes.LPVOID),
-		('bInheritHandle', ctypes.wintypes.BOOL)
-	)
+	class SECURITY_ATTRIBUTES(ctypes.Structure):
+		_fields_ = (
+			('nLength', ctypes.wintypes.DWORD),
+			('lpSecurityDescriptor', ctypes.wintypes.LPVOID),
+			('bInheritHandle', ctypes.wintypes.BOOL)
+		)
+else:
+	class FontInfoEx:
+		pass

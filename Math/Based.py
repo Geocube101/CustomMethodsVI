@@ -31,7 +31,7 @@ class BaseNumber:
 		:return: (BaseNumber) Converted number
 		"""
 
-		return self if base == self.__base__ else BaseN(base).convert(int(self))
+		return BaseNumber(self.__base__, self.__digits__) if base == self.__base__ else BaseN(base).convert(int(self))
 
 	def digits(self) -> tuple[int, ...]:
 		"""
@@ -83,6 +83,16 @@ class BaseNumber:
 
 	def full_compliment(self, size: typing.Optional[int] = ...) -> BaseNumber:
 		return self.half_compliment(size) + 1
+
+	def of_size(self, size: int) -> BaseNumber:
+		"""
+		Returns the current number either truncated or extended to the specified number of digits
+		:param size: (int) The specified number of digits
+		:return: (BaseNumber) The new number
+		"""
+
+		digits: tuple[int, ...] = (*([0] * size), *self.__digits__)
+		return BaseNumber(self.__base__, digits[-size:])
 
 	def __repr__(self):
 		return str(self)

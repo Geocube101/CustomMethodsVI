@@ -58,25 +58,29 @@ class Terminal:
 
 	### Magic methods
 	def __init__(self, width: typing.Optional[int] = ..., height: typing.Optional[int] = ..., font: typing.Optional[Font] = ...):
-		os.system('chcp 65001')
-		kernel32 = ctypes.WinDLL('Kernel32.dll')
-		stdout = kernel32.GetStdHandle(-11)
+		if os.name == 'nt':
+			os.system('chcp 65001')
+			kernel32 = ctypes.WinDLL('Kernel32.dll')
+			stdout = kernel32.GetStdHandle(-11)
 
-		if not stdout:
-			raise RuntimeError('Failed to get STDOUT handle')
+			if not stdout:
+				raise RuntimeError('Failed to get STDOUT handle')
 
-		old_font: FontInfoEx = FontInfoEx()
-		old_font.cbSize = ctypes.sizeof(FontInfoEx)
-		res = kernel32.GetCurrentConsoleFontEx(stdout, False, ctypes.byref(old_font))
+			old_font: FontInfoEx = FontInfoEx()
+			old_font.cbSize = ctypes.sizeof(FontInfoEx)
+			res = kernel32.GetCurrentConsoleFontEx(stdout, False, ctypes.byref(old_font))
 
-		if not res:
-			raise RuntimeError('Failed to get font info')
+			if not res:
+				raise RuntimeError('Failed to get font info')
 
-		if font is not None and font is not ...:
-			self.font(font)
+			if font is not None and font is not ...:
+				self.font(font)
 
-		self.__old_font__: tuple[str, int, int, int, int] = (old_font.FaceName, old_font.dwFontSize.X, old_font.dwFontSize.Y, old_font.nFont, old_font.FontWeight)
-		self.__widgets__: dict[int, dict[int, typing.Type[Widgets.WIDGET_T | Widgets.Widget]]] = {}
+			self.__old_font__: tuple[str, int, int, int, int] = (old_font.FaceName, old_font.dwFontSize.X, old_font.dwFontSize.Y, old_font.nFont, old_font.FontWeight)
+		else:
+			self.__old_font__: tuple[str, int, int, int, int] = ('Consolas', 4, 8, 0, 400)
+
+		self.__widgets__: dict[int, dict[int, typing.Type[type[Widgets.Widget] | Widgets.Widget]]] = {}
 		self.__pages__: dict[int, dict[int, Widgets.SubTerminal]] = {}
 		self.__windows__: dict[int, WindowTerminal] = {}
 		self.__scheduled_callables__: dict[int, Terminal.ScheduledCallback] = {}
@@ -128,6 +132,7 @@ class Terminal:
 		curses.resize_term(h, w)
 
 		self.__highest_default_color__: int = min(256, curses.COLORS)
+		self.__highest_color_pair__: int = curses.COLOR_PAIRS
 
 		for i in range(self.__highest_default_color__):
 			try:
@@ -142,17 +147,24 @@ class Terminal:
 
 		for i in range(curses.COLOR_PAIRS):
 			fg, bg = curses.pair_content(i)
-			r, g, b = curses.color_content(fg)
-			color: Color = Color.fromcursesrgb(r, g, b)
 
-			if color.color not in self.__colors__:
-				self.__colors__[color.color] = fg
+			if fg < 0 or bg < 0:
+				continue
 
-			r, g, b = curses.color_content(bg)
-			color: Color = Color.fromcursesrgb(r, g, b)
+			try:
+				r, g, b = curses.color_content(fg)
+				color: Color = Color.fromcursesrgb(r, g, b)
 
-			if color.color not in self.__colors__:
-				self.__colors__[color.color] = bg
+				if color.color not in self.__colors__:
+					self.__colors__[color.color] = fg
+
+				r, g, b = curses.color_content(bg)
+				color: Color = Color.fromcursesrgb(r, g, b)
+
+				if color.color not in self.__colors__:
+					self.__colors__[color.color] = bg
+			except _curses.error:
+				self.__highest_color_pair__ = i
 
 		self.__root__.keypad(True)
 		self.__root__.idlok(True)
@@ -201,8 +213,8 @@ class Terminal:
 				return False
 
 	def __mainloop__(self, tick_rate: float, factor: float, rollover: int, before_draw: typing.Callable, after_draw: typing.Callable) -> None:
-		this_win = win32console.GetConsoleWindow()
-		foreground = win32gui.GetForegroundWindow()
+		this_win = win32console.GetConsoleWindow() if os.name == 'nt' else None
+		foreground = win32gui.GetForegroundWindow() if os.name == 'nt' else None
 		t1: int = time.perf_counter_ns()
 		do_update: bool = True
 		self.update_execute_pending_callbacks()
@@ -318,20 +330,25 @@ class Terminal:
 					pass
 
 		curses.endwin()
-		kernel32 = ctypes.WinDLL("Kernel32.dll")
-		stdout = kernel32.GetStdHandle(-11)
 
-		if not stdout:
-			return -2
+		if os.name == 'nt':
+			kernel32 = ctypes.WinDLL("Kernel32.dll")
+			stdout = kernel32.GetStdHandle(-11)
 
-		font: FontInfoEx = FontInfoEx()
-		font.cbSize = ctypes.sizeof(FontInfoEx)
-		font.FaceName = self.__old_font__[0]
-		font.dwFontSize.X = self.__old_font__[1]
-		font.dwFontSize.Y = self.__old_font__[2]
-		font.nFont = self.__old_font__[3]
-		font.FontWeight = self.__old_font__[4]
-		res = kernel32.SetCurrentConsoleFontEx(stdout, False, ctypes.byref(font))
+			if not stdout:
+				return -2
+
+			font: FontInfoEx = FontInfoEx()
+			font.cbSize = ctypes.sizeof(FontInfoEx)
+			font.FaceName = self.__old_font__[0]
+			font.dwFontSize.X = self.__old_font__[1]
+			font.dwFontSize.Y = self.__old_font__[2]
+			font.nFont = self.__old_font__[3]
+			font.FontWeight = self.__old_font__[4]
+			res = kernel32.SetCurrentConsoleFontEx(stdout, False, ctypes.byref(font))
+		else:
+			res = True
+
 		self.__enabled__ = 0 if self.__enabled__ is None else self.__enabled__
 		self.__full_end__ = self.__enabled__ if res else -2
 		return self.__full_end__
@@ -344,7 +361,7 @@ class Terminal:
 			lx, ly, lz = self.__last_mouse_info__.position
 			_id, _, _, _, bstate = curses.getmouse()
 			self.__last_mouse_info__ = MouseInfo(_id, lx, ly, lz, bstate)
-			topmost: Widgets.WIDGET_T = self.get_topmost_child_at(lx, ly)
+			topmost: Widgets.Widget = self.get_topmost_child_at(lx, ly)
 
 			if topmost is not None:
 				topmost.focus()
@@ -394,6 +411,9 @@ class Terminal:
 			old_bstate &= ~curses.BUTTON2_RELEASED
 		if old_bstate & curses.BUTTON3_RELEASED != 0:
 			old_bstate &= ~curses.BUTTON3_RELEASED
+
+		if os.name != 'nt':
+			return
 
 		hwnd: int = win32console.GetConsoleWindow()
 		wl, wt, wr, wb = win32gui.GetWindowRect(hwnd)
@@ -731,7 +751,7 @@ class Terminal:
 			self.__color_pair_usage__[color_pair] = self.__color_pair_usage__[color_pair] + 1 if color_pair in self.__color_pair_usage__ else 1
 			return color_pair
 		else:
-			color_pair: int = curses.COLOR_PAIRS - 1 - len(self.__color_pairs__)
+			color_pair: int = self.__highest_color_pair__ - 1 - len(self.__color_pairs__)
 
 			if color_pair < 1:
 				lowest_used: int = min(self.__color_pair_usage__.values())
@@ -768,20 +788,20 @@ class Terminal:
 		self.__exit_reason__ = None
 		self.__full_end__ = None
 
-		kernel32 = ctypes.WinDLL('Kernel32.dll')
-		stdout = kernel32.GetStdHandle(-11)
-		font: FontInfoEx = FontInfoEx()
-		font.cbSize = ctypes.sizeof(FontInfoEx)
-		font.FaceName = 'Unifont'
-		font.dwFontSize.X = 8
-		font.dwFontSize.Y = 16
-		res = kernel32.SetCurrentConsoleFontEx(stdout, False, ctypes.byref(font))
-		locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
-
-		if not res:
-			raise RuntimeError('Failed to set font info')
-
 		if os.name == 'nt':
+			kernel32 = ctypes.WinDLL('Kernel32.dll')
+			stdout = kernel32.GetStdHandle(-11)
+			font: FontInfoEx = FontInfoEx()
+			font.cbSize = ctypes.sizeof(FontInfoEx)
+			font.FaceName = 'Unifont'
+			font.dwFontSize.X = 8
+			font.dwFontSize.Y = 16
+			res = kernel32.SetCurrentConsoleFontEx(stdout, False, ctypes.byref(font))
+			locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+
+			if not res:
+				raise RuntimeError('Failed to set font info')
+
 			import win32api
 			win32api.SetConsoleCtrlHandler(self.__on_exit__, True)
 		else:
@@ -1020,6 +1040,9 @@ class Terminal:
 		return result
 
 	def font(self, font: typing.Optional[Font] = ...) -> Font | None:
+		if os.name != 'nt':
+			return
+
 		kernel32 = ctypes.WinDLL('Kernel32.dll')
 		stdout = kernel32.GetStdHandle(-11)
 
@@ -1082,7 +1105,7 @@ class Terminal:
 
 		return page
 
-	def get_widget(self, _id: int) -> typing.Type[Widgets.WIDGET_T]:
+	def get_widget(self, _id: int) -> typing.Type[type[Widgets.Widget]]:
 		for z_index, widgets in self.__widgets__.items():
 			if _id in widgets:
 				return widgets[_id]
@@ -1151,7 +1174,7 @@ class Terminal:
 	def add_button(self, x: int, y: int, width: int, height: int, text: str, *, z_index: int = 0, justify: int = CENTER, word_wrap: int = WORDWRAP_NONE,
 				   border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 				   color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-				   callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Widgets.Button:
+				   callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Widgets.Button:
 		widget: Widgets.Button = Widgets.Button(self, x, y, width, height, text, z_index=z_index, justify=justify, word_wrap=word_wrap,
 												border=border, highlight_border=highlight_border, active_border=active_border,
 												color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
@@ -1168,7 +1191,7 @@ class Terminal:
 	def add_toggle_button(self, x: int, y: int, width: int, height: int, text: str, *, z_index: int = 0, justify: int = CENTER, word_wrap: int = WORDWRAP_NONE,
 						  border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 						  color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-						  callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Widgets.ToggleButton:
+						  callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Widgets.ToggleButton:
 		widget: Widgets.ToggleButton = Widgets.ToggleButton(self, x, y, width, height, text, z_index=z_index, justify=justify, word_wrap=word_wrap,
 												border=border, highlight_border=highlight_border, active_border=active_border,
 												color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
@@ -1185,11 +1208,11 @@ class Terminal:
 	def add_checkbox(self, x: int, y: int, *, z_index: int = 0, text: str = '', active_text: str = 'X',
 					 border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 					 color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-					 callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Widgets.Checkbox:
+					 callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_checked: typing.Optional[typing.Callable[[type[Widgets.Widget], bool], None]] = ...) -> Widgets.Checkbox:
 		widget: Widgets.Checkbox = Widgets.Checkbox(self, x, y, z_index=z_index, text=text, active_text=active_text,
 													border=border, highlight_border=highlight_border, active_border=active_border,
 													color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
-													callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close)
+													callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close, on_checked=on_checked)
 		_id: int = id(widget)
 
 		if z_index in self.__widgets__:
@@ -1202,11 +1225,11 @@ class Terminal:
 	def add_inline_checkbox(self, x: int, y: int, *, z_index: int = 0, text: str = '', active_text: str = 'X',
 							border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 							color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-							callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Widgets.InlineCheckbox:
+							callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_checked: typing.Optional[typing.Callable[[type[Widgets.Widget], bool], None]] = ...) -> Widgets.InlineCheckbox:
 		widget: Widgets.InlineCheckbox = Widgets.InlineCheckbox(self, x, y, z_index=z_index, text=text, active_text=active_text,
 																border=border, highlight_border=highlight_border, active_border=active_border,
 																color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
-																callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close)
+																callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close, on_checked=on_checked)
 		_id: int = id(widget)
 
 		if z_index in self.__widgets__:
@@ -1217,7 +1240,7 @@ class Terminal:
 		return widget
 
 	def add_radial_spinner(self, x: int, y: int, *, z_index: int = 0, phases: typing.Iterable[str] = ('--', '\\', '|', '/'), bg_phase_colors: typing.Optional[Color_T] | typing.Iterable[typing.Optional[Color_T]] = ..., fg_phase_colors: typing.Optional[Color_T] | typing.Iterable[typing.Optional[Color_T]] = Color(0xFFFFFF),
-						   callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Widgets.RadialSpinner:
+						   callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Widgets.RadialSpinner:
 		widget: Widgets.RadialSpinner = Widgets.RadialSpinner(self, x, y, z_index=z_index, phases=phases, bg_phase_colors=bg_phase_colors, fg_phase_colors=fg_phase_colors,
 															  callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close)
 		_id: int = id(widget)
@@ -1232,7 +1255,7 @@ class Terminal:
 	def add_horizontal_slider(self, x: int, y: int, width: int, height: int, *, z_index: int = 0, fill_char: str = '|', _max: float = 10, _min: float = 0, on_input: typing.Callable[[Widgets.HorizontalSlider], None] = ...,
 							  border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 							  color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-							  callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Widgets.HorizontalSlider:
+							  callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Widgets.HorizontalSlider:
 		widget: Widgets.HorizontalSlider = Widgets.HorizontalSlider(self, x, y, width, height, z_index=z_index, fill_char=fill_char, _max=_max, _min=_min, on_input=on_input,
 																	border=border, highlight_border=highlight_border, active_border=active_border,
 																	color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
@@ -1249,7 +1272,7 @@ class Terminal:
 	def add_vertical_slider(self, x: int, y: int, width: int, height: int, *, z_index: int = 0, fill_char: str = '=', _max: float = 10, _min: float = 0, on_input: typing.Callable[[Widgets.VerticalSlider], None] = ...,
 							border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 							color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-							callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Widgets.VerticalSlider:
+							callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Widgets.VerticalSlider:
 		widget: Widgets.VerticalSlider = Widgets.VerticalSlider(self, x, y, width, height, z_index=z_index, fill_char=fill_char, _max=_max, _min=_min, on_input=on_input,
 																border=border, highlight_border=highlight_border, active_border=active_border,
 																color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
@@ -1266,7 +1289,7 @@ class Terminal:
 	def add_horizontal_progress_bar(self, x: int, y: int, width: int, height: int, *, z_index: int = 0, fill_char: str = '|', _max: float = 10, _min: float = 0,
 							border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 							color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-							callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Widgets.HorizontalProgressBar:
+							callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Widgets.HorizontalProgressBar:
 		widget: Widgets.HorizontalProgressBar = Widgets.HorizontalProgressBar(self, x, y, width, height, z_index=z_index, fill_char=fill_char, _max=_max, _min=_min,
 																border=border, highlight_border=highlight_border, active_border=active_border,
 																color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
@@ -1283,7 +1306,7 @@ class Terminal:
 	def add_vertical_progress_bar(self, x: int, y: int, width: int, height: int, *, z_index: int = 0, fill_char: str = '=', _max: float = 10, _min: float = 0,
 							border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 							color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-							callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Widgets.VerticalProgressBar:
+							callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Widgets.VerticalProgressBar:
 		widget: Widgets.VerticalProgressBar = Widgets.VerticalProgressBar(self, x, y, width, height, z_index=z_index, fill_char=fill_char, _max=_max, _min=_min,
 																border=border, highlight_border=highlight_border, active_border=active_border,
 																color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
@@ -1299,7 +1322,7 @@ class Terminal:
 
 	def add_text(self, x: int, y: int, width: int, height: int, text: str, *, z_index: int = 0, justify: int = NORTH_WEST, word_wrap: int = WORDWRAP_NONE,
 				 color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-				 callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Widgets.Text:
+				 callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Widgets.Text:
 		widget: Widgets.Text = Widgets.Text(self, x, y, width, height, text, z_index=z_index, justify=justify, word_wrap=word_wrap,
 											color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
 											callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close)
@@ -1312,10 +1335,10 @@ class Terminal:
 
 		return widget
 
-	def add_dropdown(self, x: int, y: int, width: int, height: int, choices: tuple[str | AnsiStr, ...], *, display_count: int | None = None, allow_scroll_rollover: bool = False, z_index: int = 0, justify: int = CENTER, word_wrap: int = WORDWRAP_WORD, on_select: typing.Optional[typing.Callable[[Widgets.WIDGET_T], bool | None]] = ...,
+	def add_dropdown(self, x: int, y: int, width: int, height: int, choices: tuple[str | AnsiStr, ...], *, display_count: int | None = None, allow_scroll_rollover: bool = False, z_index: int = 0, justify: int = CENTER, word_wrap: int = WORDWRAP_WORD, on_select: typing.Optional[typing.Callable[[type[Widgets.Widget]], bool | None]] = ...,
 				   border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 				   color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-				   callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Widgets.Dropdown:
+				   callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Widgets.Dropdown:
 		widget: Widgets.Dropdown = Widgets.Dropdown(self, x, y, width, height, choices, display_count=display_count, allow_scroll_rollover=allow_scroll_rollover, z_index=z_index, justify=justify, word_wrap=word_wrap, on_select=on_select,
 												border=border, highlight_border=highlight_border, active_border=active_border,
 												color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
@@ -1331,7 +1354,7 @@ class Terminal:
 
 	def add_entry(self, x: int, y: int, width: int, height: int, *, z_index: int = 0, word_wrap: int = WORDWRAP_WORD, justify: int = NORTH_WEST, replace_chars: str = '', placeholder: typing.Optional[str | AnsiStr] = ..., cursor_blink_speed: int = 0, on_text: typing.Optional[typing.Callable[[Widgets.Entry, bool], bool | str | AnsiStr | None]] = ..., on_input: typing.Optional[typing.Callable[[Widgets.Entry, str | AnsiStr, int], bool | str | AnsiStr | None]] = ...,
 				  color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-				  callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Widgets.Entry:
+				  callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Widgets.Entry:
 		widget: Widgets.Entry = Widgets.Entry(self, x, y, width, height, z_index=z_index, word_wrap=word_wrap, justify=justify, replace_chars=replace_chars, placeholder=placeholder, cursor_blink_speed=cursor_blink_speed, on_text=on_text, on_input=on_input,
 											  color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
 											  callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close)
@@ -1347,7 +1370,7 @@ class Terminal:
 	def add_image(self, x: int, y: int, width: int, height: int, image: str | AnsiStr | numpy.ndarray | PIL.Image.Image, *, z_index: int = 0, use_subpad: bool = True, div: typing.Optional[int] = ...,
 				   border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 				   color_bg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ...,
-				   callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Widgets.Image:
+				   callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Widgets.Image:
 		widget: Widgets.Image = Widgets.Image(self, x, y, width, height, image, z_index=z_index, div=div, use_subpad=use_subpad,
 												border=border, highlight_border=highlight_border, active_border=active_border,
 												color_bg=color_bg, highlight_color_bg=highlight_color_bg, active_color_bg=active_color_bg,
@@ -1363,7 +1386,7 @@ class Terminal:
 
 	def add_sub_terminal(self, x: int, y: int, width: int, height: int, *, title: typing.Optional[str] = ..., z_index: int = 0, transparent: bool = False,
 						 border: BorderInfo = ..., highlight_border: BorderInfo = ..., active_border: BorderInfo = ...,
-						 callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Widgets.SubTerminal:
+						 callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Widgets.SubTerminal:
 		terminal: Widgets.SubTerminal = Widgets.SubTerminal(self, x, y, width, height, title, z_index=z_index, transparent=transparent,
 															border=border, highlight_border=highlight_border, active_border=active_border,
 															callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close)
@@ -1386,9 +1409,9 @@ class Terminal:
 
 		return window
 
-	def add_widget(self, cls: typing.Type[Widgets.WIDGET_T], *args, z_index: int = 0, **kwargs) -> Widgets.WIDGET_T:
+	def add_widget[T: Widgets.Widget](self, cls: type[T], *args, z_index: int = 0, **kwargs) -> typing.Generic[T]:
 		assert issubclass(cls, Widgets.Widget)
-		widget: Widgets.WIDGET_T = cls(self, *args, **kwargs)
+		widget: Widgets.Widget = cls(self, *args, **kwargs)
 		_id: int = id(widget)
 
 		if z_index in self.__widgets__:
@@ -1447,10 +1470,10 @@ class Terminal:
 
 class WindowTerminal:
 	class SubprocessTerminal(Terminal):
-		def __init__(self, conn: Connection.WinNamedPipe, widget_conn: Connection.WinNamedPipe, width: typing.Optional[int] = ..., height: typing.Optional[int] = ..., font: typing.Optional[Font] = ...):
+		def __init__(self, conn: Connection.NamedPipe, widget_conn: Connection.NamedPipe, width: typing.Optional[int] = ..., height: typing.Optional[int] = ..., font: typing.Optional[Font] = ...):
 			super().__init__(width, height, font)
-			self.__conn__: Connection.WinNamedPipe = conn
-			self.__widget_pipe__: Connection.WinNamedPipe = widget_conn
+			self.__conn__: Connection.NamedPipe = conn
+			self.__widget_pipe__: Connection.NamedPipe = widget_conn
 			self.__serialized_widgets__: dict[int, Widgets.SerializedWidget] = {}
 
 		def __mainloop__(self, tick_rate: float, factor: float, rollover: int, before_draw: typing.Callable, after_draw: typing.Callable) -> None:
@@ -1525,10 +1548,10 @@ class WindowTerminal:
 
 			callables['after_draw'] = (module.__file__, module.__name__, after_draw.__name__)
 
-		conn: Connection.WinNamedPipe = Connection.WinNamedPipe()
-		widget_conn: Connection.WinNamedPipe = Connection.WinNamedPipe()
-		self.__conn__: Connection.WinNamedPipe = conn
-		self.__widget_pipe__: Connection.WinNamedPipe = widget_conn
+		conn: Connection.NamedPipe = Connection.NamedPipe()
+		widget_conn: Connection.NamedPipe = Connection.NamedPipe()
+		self.__conn__: Connection.NamedPipe = conn
+		self.__widget_pipe__: Connection.NamedPipe = widget_conn
 		self.__process__: subprocess.Popen = subprocess.Popen(f'"{sys.executable}" "{package.file("_subterm.py").filepath()}" "{base64.b64encode(pickle.dumps((os.getpid(), conn, widget_conn, tps, width, height, font, callables))).decode()}"', creationflags=subprocess.CREATE_NEW_CONSOLE, close_fds=False)
 		self.__psutil_process__: psutil.Process = psutil.Process(self.__process__.pid)
 		self.__enabled__: bool = False
@@ -1827,7 +1850,7 @@ class WindowTerminal:
 	def add_button(self, x: int, y: int, width: int, height: int, text: str, *, z_index: int = 0, justify: int = CENTER, word_wrap: int = WORDWRAP_NONE,
 				   border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 				   color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-				   callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Concurrent.ThreadedPromise:
+				   callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Concurrent.ThreadedPromise:
 		promise: Concurrent.ThreadedPromise = self.send('add_button()', x, y, width, height, text, z_index=z_index, justify=justify, word_wrap=word_wrap,
 												border=border, highlight_border=highlight_border, active_border=active_border,
 												color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
@@ -1839,7 +1862,7 @@ class WindowTerminal:
 	def add_toggle_button(self, x: int, y: int, width: int, height: int, text: str, *, z_index: int = 0, justify: int = CENTER, word_wrap: int = WORDWRAP_NONE,
 						  border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 						  color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-						  callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Concurrent.ThreadedPromise:
+						  callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Concurrent.ThreadedPromise:
 		promise: Concurrent.ThreadedPromise = self.send('add_toggle_button()', x, y, width, height, text, z_index=z_index, justify=justify, word_wrap=word_wrap,
 												border=border, highlight_border=highlight_border, active_border=active_border,
 												color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
@@ -1851,11 +1874,11 @@ class WindowTerminal:
 	def add_checkbox(self, x: int, y: int, *, z_index: int = 0, text: str = '', active_text: str = 'X',
 					 border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 					 color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-					 callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Concurrent.ThreadedPromise:
+					 callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_checked: typing.Optional[typing.Callable[[type[Widgets.Widget], bool], None]] = ...) -> Concurrent.ThreadedPromise:
 		promise: Concurrent.ThreadedPromise = self.send('add_checkbox()', x, y, z_index=z_index, text=text, active_text=active_text,
 													border=border, highlight_border=highlight_border, active_border=active_border,
 													color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
-													callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close)
+													callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close, on_checked=on_checked)
 		rp: Concurrent.ThreadedPromise = Concurrent.ThreadedPromise()
 		promise.then(lambda p: self.__bind_widget__(p, rp))
 		return rp
@@ -1863,17 +1886,17 @@ class WindowTerminal:
 	def add_inline_checkbox(self, x: int, y: int, *, z_index: int = 0, text: str = '', active_text: str = 'X',
 							border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 							color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-							callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Concurrent.ThreadedPromise:
+							callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_checked: typing.Optional[typing.Callable[[type[Widgets.Widget], bool], None]] = ...) -> Concurrent.ThreadedPromise:
 		promise: Concurrent.ThreadedPromise = self.send('add_inline_checkbox()', x, y, z_index=z_index, text=text, active_text=active_text,
 																border=border, highlight_border=highlight_border, active_border=active_border,
 																color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
-																callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close)
+																callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close, on_checked=on_checked)
 		rp: Concurrent.ThreadedPromise = Concurrent.ThreadedPromise()
 		promise.then(lambda p: self.__bind_widget__(p, rp))
 		return rp
 
 	def add_radial_spinner(self, x: int, y: int, *, z_index: int = 0, phases: typing.Iterable[str] = ('--', '\\', '|', '/'), bg_phase_colors: typing.Optional[Color_T] | typing.Iterable[typing.Optional[Color_T]] = ..., fg_phase_colors: typing.Optional[Color_T] | typing.Iterable[typing.Optional[Color_T]] = Color(0xFFFFFF),
-						   callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Concurrent.ThreadedPromise:
+						   callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Concurrent.ThreadedPromise:
 		promise: Concurrent.ThreadedPromise = self.send('add_radial_spinner()', x, y, z_index=z_index, phases=phases, bg_phase_colors=bg_phase_colors, fg_phase_colors=fg_phase_colors,
 															  callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close)
 		rp: Concurrent.ThreadedPromise = Concurrent.ThreadedPromise()
@@ -1883,7 +1906,7 @@ class WindowTerminal:
 	def add_horizontal_slider(self, x: int, y: int, width: int, height: int, *, z_index: int = 0, fill_char: str = '|', _max: float = 10, _min: float = 0, on_input: typing.Callable[[Widgets.HorizontalSlider], None] = ...,
 							  border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 							  color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-							  callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Concurrent.ThreadedPromise:
+							  callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Concurrent.ThreadedPromise:
 		promise: Concurrent.ThreadedPromise = self.send('add_horizontal_slider()', x, y, width, height, z_index=z_index, fill_char=fill_char, _max=_max, _min=_min, on_input=on_input,
 																	border=border, highlight_border=highlight_border, active_border=active_border,
 																	color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
@@ -1895,7 +1918,7 @@ class WindowTerminal:
 	def add_vertical_slider(self, x: int, y: int, width: int, height: int, *, z_index: int = 0, fill_char: str = '=', _max: float = 10, _min: float = 0, on_input: typing.Callable[[Widgets.VerticalSlider], None] = ...,
 							border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 							color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-							callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Concurrent.ThreadedPromise:
+							callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Concurrent.ThreadedPromise:
 		promise: Concurrent.ThreadedPromise = self.send('add_vertical_slider()', x, y, width, height, z_index=z_index, fill_char=fill_char, _max=_max, _min=_min, on_input=on_input,
 						 border=border, highlight_border=highlight_border, active_border=active_border,
 						 color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
@@ -1907,7 +1930,7 @@ class WindowTerminal:
 	def add_horizontal_progress_bar(self, x: int, y: int, width: int, height: int, *, z_index: int = 0, fill_char: str = '|', _max: float = 10, _min: float = 0,
 							border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 							color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-							callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Concurrent.ThreadedPromise:
+							callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Concurrent.ThreadedPromise:
 		promise: Concurrent.ThreadedPromise = self.send('add_horizontal_progress_bar()', x, y, width, height, z_index=z_index, fill_char=fill_char, _max=_max, _min=_min,
 																border=border, highlight_border=highlight_border, active_border=active_border,
 																color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
@@ -1919,7 +1942,7 @@ class WindowTerminal:
 	def add_vertical_progress_bar(self, x: int, y: int, width: int, height: int, *, z_index: int = 0, fill_char: str = '=', _max: float = 10, _min: float = 0,
 							border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 							color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-							callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Concurrent.ThreadedPromise:
+							callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Concurrent.ThreadedPromise:
 		promise: Concurrent.ThreadedPromise = self.send('add_vertical_progress_bar()', x, y, width, height, z_index=z_index, fill_char=fill_char, _max=_max, _min=_min,
 						 border=border, highlight_border=highlight_border, active_border=active_border,
 						 color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
@@ -1930,7 +1953,7 @@ class WindowTerminal:
 
 	def add_text(self, x: int, y: int, width: int, height: int, text: str, *, z_index: int = 0, justify: int = NORTH_WEST, word_wrap: int = WORDWRAP_NONE,
 				 color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-				 callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Concurrent.ThreadedPromise:
+				 callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Concurrent.ThreadedPromise:
 		promise: Concurrent.ThreadedPromise = self.send('add_text()', x, y, width, height, text, z_index=z_index, justify=justify, word_wrap=word_wrap,
 											color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
 											callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close)
@@ -1938,10 +1961,10 @@ class WindowTerminal:
 		promise.then(lambda p: self.__bind_widget__(p, rp))
 		return rp
 
-	def add_dropdown(self, x: int, y: int, width: int, height: int, choices: tuple[str | AnsiStr, ...], *, display_count: int | None = None, allow_scroll_rollover: bool = False, z_index: int = 0, justify: int = CENTER, word_wrap: int = WORDWRAP_WORD, on_select: typing.Optional[typing.Callable[[Widgets.WIDGET_T], bool | None]] = ...,
+	def add_dropdown(self, x: int, y: int, width: int, height: int, choices: tuple[str | AnsiStr, ...], *, display_count: int | None = None, allow_scroll_rollover: bool = False, z_index: int = 0, justify: int = CENTER, word_wrap: int = WORDWRAP_WORD, on_select: typing.Optional[typing.Callable[[type[Widgets.Widget]], bool | None]] = ...,
 				   border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 				   color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-				   callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Concurrent.ThreadedPromise:
+				   callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Concurrent.ThreadedPromise:
 		return self.send('add_dropdown()', x, y, width, height, choices, display_count=display_count, allow_scroll_rollover=allow_scroll_rollover, z_index=z_index, justify=justify, word_wrap=word_wrap, on_select=on_select,
 												border=border, highlight_border=highlight_border, active_border=active_border,
 												color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
@@ -1949,7 +1972,7 @@ class WindowTerminal:
 
 	def add_entry(self, x: int, y: int, width: int, height: int, *, z_index: int = 0, word_wrap: int = WORDWRAP_WORD, justify: int = NORTH_WEST, replace_chars: str = '', placeholder: typing.Optional[str | AnsiStr] = ..., cursor_blink_speed: int = 0, on_text: typing.Optional[typing.Callable[[Widgets.Entry, bool], bool | str | AnsiStr | None]] = ..., on_input: typing.Optional[typing.Callable[[Widgets.Entry, AnsiStr, int], bool | str | AnsiStr | None]] = ...,
 				  color_bg: typing.Optional[Color_T] = ..., color_fg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., highlight_color_fg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ..., active_color_fg: typing.Optional[Color_T] = ...,
-				  callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Concurrent.ThreadedPromise:
+				  callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Concurrent.ThreadedPromise:
 		promise: Concurrent.ThreadedPromise = self.send('add_entry()', x, y, width, height, z_index=z_index, word_wrap=word_wrap, justify=justify, replace_chars=replace_chars, placeholder=placeholder, cursor_blink_speed=cursor_blink_speed, on_text=on_text, on_input=on_input,
 											  color_bg=color_bg, color_fg=color_fg, highlight_color_bg=highlight_color_bg, highlight_color_fg=highlight_color_fg, active_color_bg=active_color_bg, active_color_fg=active_color_fg,
 											  callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close)
@@ -1960,7 +1983,7 @@ class WindowTerminal:
 	def add_image(self, x: int, y: int, width: int, height: int, image: str | AnsiStr | numpy.ndarray | PIL.Image.Image, *, z_index: int = 0, div: typing.Optional[int] = ..., use_subpad: bool = True,
 				   border: typing.Optional[BorderInfo] = ..., highlight_border: typing.Optional[BorderInfo] = ..., active_border: typing.Optional[BorderInfo] = ...,
 				   color_bg: typing.Optional[Color_T] = ..., highlight_color_bg: typing.Optional[Color_T] = ..., active_color_bg: typing.Optional[Color_T] = ...,
-				   callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Concurrent.ThreadedPromise:
+				   callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Concurrent.ThreadedPromise:
 		promise: Concurrent.ThreadedPromise = self.send('add_image()', x, y, width, height, image, z_index=z_index, div=div, use_subpad=use_subpad,
 												border=border, highlight_border=highlight_border, active_border=active_border,
 												color_bg=color_bg, highlight_color_bg=highlight_color_bg, active_color_bg=active_color_bg,
@@ -1972,7 +1995,7 @@ class WindowTerminal:
 
 	def add_sub_terminal(self, x: int, y: int, width: int, height: int, *, title: typing.Optional[str] = ..., z_index: int = 0, transparent: bool = False,
 						 border: BorderInfo = ..., highlight_border: BorderInfo = ..., active_border: BorderInfo = ...,
-						 callback: typing.Optional[typing.Callable[[Widgets.WIDGET_T, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., off_focus: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[Widgets.WIDGET_T, MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[Widgets.WIDGET_T, int], None]] = ..., on_close: typing.Optional[typing.Callable[[Widgets.WIDGET_T], None]] = ...) -> Concurrent.ThreadedPromise:
+						 callback: typing.Optional[typing.Callable[[type[Widgets.Widget], str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., off_focus: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[type[Widgets.Widget], MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[type[Widgets.Widget], int], None]] = ..., on_close: typing.Optional[typing.Callable[[type[Widgets.Widget]], None]] = ...) -> Concurrent.ThreadedPromise:
 		promise: Concurrent.ThreadedPromise = self.send('add_sub_terminal()', x, y, width, height, title, z_index=z_index, transparent=transparent,
 															border=border, highlight_border=highlight_border, active_border=active_border,
 															callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close)
@@ -1980,7 +2003,7 @@ class WindowTerminal:
 		promise.then(lambda p: self.__bind_widget__(p, rp))
 		return rp
 
-	def add_widget(self, cls: Widgets.WIDGET_T, *args, z_index: int = 0, **kwargs) -> Concurrent.ThreadedPromise:
+	def add_widget(self, cls: type[Widgets.Widget], *args, z_index: int = 0, **kwargs) -> Concurrent.ThreadedPromise:
 		return self.send('add_widget()', cls, *args, z_index=z_index, **kwargs)
 
 	### Properties

@@ -120,7 +120,9 @@ class __OverloadCaller:
 				raise TypeError(f'Non-standard type hint: \'{annotation}\' ({type(annotation)})')
 
 		def can_cast(_value: typing.Any, _type: type) -> bool:
-			if hasattr(_value, f'__cast_{_type.__name__}__') or isinstance(_value, _type) or _type.__init__ in type(self).__FunctionCallers:
+			if _type is inspect._empty or _type is typing.Any:
+				return True
+			elif hasattr(_value, f'__cast_{_type.__name__}__') or isinstance(_value, _type) or _type.__init__ in type(self).__FunctionCallers:
 				return True
 			elif hasattr(_type, '__iter__') and _type.__name__ in dir(__builtins__) and hasattr(_value, '__iter__'):
 				return True
@@ -132,7 +134,9 @@ class __OverloadCaller:
 				return False
 
 		def cast(_value: typing.Any, _type: type) -> typing.Any:
-			if hasattr(_value, f'__cast_{_type.__name__}__'):
+			if _type is inspect._empty or _type is typing.Any:
+				return _value
+			elif hasattr(_value, f'__cast_{_type.__name__}__'):
 				_result = getattr(_value, f'__cast_{_type.__name__}__')()
 
 				if not isinstance(_result, _type):
@@ -143,7 +147,7 @@ class __OverloadCaller:
 			try:
 				return _type(_value)
 			except (TypeError, ValueError, NotImplementedError):
-				return False
+				raise TypeError(f'Uncastable [{type(_value)} >> {_type}]') from None
 
 		assert len(self.__function_overloads) > 0 or self.__default is not None, 'No function to call'
 		strict_match: list[tuple[typing.Callable, inspect.Signature]] = []

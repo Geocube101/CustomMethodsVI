@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import collections.abc
 import math
+import numpy
+import os
+import random
 import typing
 import types
-import collections.abc
-import numpy
-import random
-import os
+
+import CustomMethodsVI.Math.Vector as Vector
+import CustomMethodsVI.Math.Based as Based
 
 from CustomMethodsVI.Decorators import Overload
 
@@ -15,9 +18,7 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 	@classmethod
 	def shaped(cls, array: typing.Iterable, dimension: int, *dimensions: int) -> Matrix:
 		def _validator() -> None:
-			i: int = 0
-
-			for i, x in enumerate(array):
+			for i, x in enumerate(array[:size]):
 				if isinstance(x, (float, int)):
 					instance.__array__[i] = float(x)
 				elif x is None or x is ...:
@@ -25,10 +26,8 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 				else:
 					raise TypeError(f'Unexpected matrix value \'{x}\' ({type(x)}), expected either a float, int, \'...\' or None')
 
-			if i + 1 < len(instance):
-				raise ValueError(f'Input array of size {i + 1} cannot be mapped to matrix of size {len(instance)}')
-
 		instance: Matrix = cls(dimension, *dimensions)
+		size: int = len(instance)
 		_validator()
 		return instance
 
@@ -118,7 +117,7 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 	def __len__(self) -> int:
 		return self.__size__
 
-	def __iter__(self) -> typing.Iterator:
+	def __iter__(self) -> typing.Iterator[float | None]:
 		index: int = 0
 		result: list = self.__array__
 		buffer: list = []
@@ -137,7 +136,7 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		return iter(result[0])
 
 	def __repr__(self) -> str:
-		return f'<Matrix {"x".join(str(x) for x in self.__dimensions__)} @ {hex(id(self))}>'
+		return f'<{type(self).__name__} {"x".join(str(x) for x in self.__dimensions__)} @ {hex(id(self))}>'
 
 	def __str__(self) -> str:
 		__list: list = list(self)
@@ -146,10 +145,10 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 	def __abs__(self) -> Matrix:
 		return type(self)(None if x is None else abs(x) for x in self.__array__)
 
-	def __round__(self, n: typing.Optional[int] = None) -> 'Matrix | int':
+	def __round__(self, n: typing.Optional[int] = None) -> Matrix | int:
 		return type(self)(None if x is None else round(x, n) for x in self.__array__)
 
-	def __getitem__(self, item: int | tuple | slice) -> 'float | None | Matrix | Math.Vector':
+	def __getitem__(self, item: int | tuple | slice) -> float | None | Matrix | Vector.Vector:
 		shaped: list = list(self)
 		cls: type = type(self)
 
@@ -162,24 +161,34 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return src
 
 		elif type(item) is slice:
+			length: int = self.__dimensions__[1] if self.__dimensions__[0] == 1 else self.__dimensions__[0]
 			start: int = 0 if item.start is None else int(item.start)
-			stop: int = self.__dimensions__[0] if item.stop is None else int(item.stop)
+			stop: int = length if item.stop is None else int(item.stop)
 			step: int = 1 if item.step is None else int(item.step)
 
-			start = self.__dimensions__[0] + start if start < 0 else start
-			stop = self.__dimensions__[0] + stop if stop < 0 else stop
+			start = length + start if start < 0 else start
+			stop = length + stop if stop < 0 else stop
 
-			__object: list = [list(self[i])[0] for i in range(start, stop, step)]
-			return cls(__object)
+			__object: list = []
+
+			for i in range(start, stop, step):
+				elem: float | Matrix = self[i]
+
+				if elem is None or elem is ... or isinstance(elem, (int, float)):
+					__object.append(elem)
+				else:
+					__object.append(list(elem)[0])
+
+			return Vector.Vector(__object) if self.__dimensions__[0] == 1 else cls(__object)
 
 		elif type(item) is int:
 			__object: list | int | None = shaped[0][item] if self.__dimensions__[0] == 1 else shaped[item]
-			return cls(__object) if type(__object) is list else __object
+			return Vector.Vector(__object) if self.__dimensions__[0] == 1 and isinstance(__object, list) else cls(__object) if isinstance(__object, list) else __object
 
-	def __add__(self, other: 'float | int | Matrix') -> Matrix:
+	def __add__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			return type(self).shaped((x + other for x in self.__array__), *self.__dimensions__)
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot add matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -187,10 +196,10 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __sub__(self, other: 'float | int | Matrix') -> Matrix:
+	def __sub__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			return type(self).shaped((x - other for x in self.__array__), *self.__dimensions__)
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot subtract matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -198,10 +207,10 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __mul__(self, other: 'float | int | Matrix') -> Matrix:
+	def __mul__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			return type(self).shaped((x * other for x in self.__array__), *self.__dimensions__)
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot multiply matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -209,47 +218,64 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __matmul__(self, other: Matrix) -> Matrix:
-		if type(other) is not type(self):
+	def __matmul__(self, other: Matrix | numpy.ndarray[typing.Any]) -> Matrix:
+		if not isinstance(other, (type(self), numpy.ndarray)):
 			return NotImplemented
-		elif self.__dimensions__[-1] != other.__dimensions__[0]:
+		elif isinstance(other, numpy.ndarray):
+			other = Matrix(other)
+
+		if self.dimension != other.dimension:
+			raise ValueError(f'Cannot matrix-multiply {len(other.__dimensions__)}-dimensional matrix with {len(self.__dimensions__)}-dimensional matrix')
+		elif (self.dimension == 2 and self.__dimensions__[-1] != other.__dimensions__[0]) or (self.dimension > 2 and self.__dimensions__[:-2] != other.__dimensions__[:-2]):
 			raise ValueError(f'Cannot matrix-multiply matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+		elif self.dimension == 2:
+			result_dimensions: tuple[int, ...] = (*self.__dimensions__[:-1], *other.__dimensions__[1:])
+			result: Matrix = Matrix(*result_dimensions)
+			common: int = self.__dimensions__[-1]
+			converter: Based.BaseN = Based.BaseN(common)
+			indices: list[tuple[int, ...]] = [converter.convert(x).of_size(2).digits() for x in range(len(self))]
 
-		self_position: list[int] = [0] * len(self.__dimensions__)
-		other_position: list[int] = [0] * len(self.__dimensions__)
-		result_dimensions: tuple[int, ...] = (*self.__dimensions__[:-1], *other.__dimensions__[1:])
-		result: list[float | None] = []
-		common_axis: int = self.__dimensions__[-1]
+			for indexer in indices:
+				index: int = sum(d * common ** (1 - p) for p, d in enumerate(indexer))
+				total: float | None = 0
 
-		while True:
-			cell_sum: float | None = 0
+				for k in range(common):
+					indexer_a: tuple[int, ...] = (*indexer[:-1], k)
+					indexer_b: tuple[int, ...] = (k, *indexer[1:])
+					element_a: float | None = self[indexer_a]
+					element_b: float | None = other[indexer_b]
 
-			for index in range(common_axis):
-				position[-1] = index
-				pos: tuple[int, ...] = tuple(position)
-				cell_a: float | None = self[pos]
-				cell_b: float | None = other[tuple(reversed(pos))]
-				cell_prod: float = None if cell_a is None or cell_b is None else cell_a * cell_b
-				cell_sum = None if cell_prod is None or cell_sum is None else cell_sum + cell_prod
-				# print(f'{pos}*{tuple(reversed(pos))}', end=' + ')
-				print(f'{cell_a}*{cell_b}', end=' + ')
+					if element_a is None or element_b is None:
+						total = None
+						break
 
-			print()
-			result.append(cell_sum)
+					total += element_a * element_b
 
-			for i in range(len(position) - 1, 0, -1):
-				if position[i] == result_dimensions[i]:
-					position[i] = 0
-					position[i - 1] += 1
+				result.__array__[index] = total
 
-		print(result)
-		return Matrix(*result_dimensions)
-		return Matrix.shaped(result, *result_dimensions)
+			return result
+		else:
+			inner: tuple[int, ...] = (self.__dimensions__[-2], other.__dimensions__[-1])
+			result_dimensions: tuple[int, ...] = (*self.__dimensions__[:-2], *inner)
+			result: Matrix = Matrix(*result_dimensions)
+			index: int = 0
 
-	def __truediv__(self, other: 'float | int | Matrix') -> Matrix:
+			for i in range(self.__dimensions__[0]):
+				a: Matrix = self[i]
+				b: Matrix = other[i]
+				c: Matrix = a @ b
+
+				for j, value in enumerate(c.__array__):
+					result.__array__[index + j] = value
+
+				index += len(c.__array__)
+
+			return result
+
+	def __truediv__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			return type(self).shaped((x / other for x in self.__array__), *self.__dimensions__)
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -257,10 +283,10 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __floordiv__(self, other: 'float | int | Matrix') -> Matrix:
+	def __floordiv__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			return type(self).shaped((x // other for x in self.__array__), *self.__dimensions__)
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -268,10 +294,10 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __mod__(self, other: 'float | int | Matrix') -> Matrix:
+	def __mod__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			return type(self).shaped((x % other for x in self.__array__), *self.__dimensions__)
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -279,13 +305,13 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __divmod__(self, other: 'float | int | Matrix') -> Matrix:
+	def __divmod__(self, other: float | int | Matrix) -> Matrix:
 		raise NotImplementedError('DIVMOD not implemented')
 
-	def __pow__(self, other: 'float | int | Matrix') -> Matrix:
+	def __pow__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			return type(self).shaped((x ** other for x in self.__array__), *self.__dimensions__)
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot exponentiate matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -293,10 +319,10 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __radd__(self, other: 'float | int | Matrix') -> Matrix:
+	def __radd__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			return type(self).shaped((other + x for x in self.__array__), *self.__dimensions__)
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot add matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -304,10 +330,10 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __rsub__(self, other: 'float | int | Matrix') -> Matrix:
+	def __rsub__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			return type(self).shaped((other - x for x in self.__array__), *self.__dimensions__)
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot subtract matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -315,10 +341,10 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __rmul__(self, other: 'float | int | Matrix') -> Matrix:
+	def __rmul__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			return type(self).shaped((other * x for x in self.__array__), *self.__dimensions__)
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot multiply matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -326,17 +352,64 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __rmatmul__(self, other: Matrix) -> Matrix:
-		if type(other) is not type(self):
+	def __rmatmul__(self, other: Matrix | numpy.ndarray[typing.Any]) -> Matrix:
+		if not isinstance(other, (type(self), numpy.ndarray)):
 			return NotImplemented
+		elif isinstance(other, numpy.ndarray):
+			other = Matrix(other)
 
+		if self.dimension != other.dimension:
+			raise ValueError(f'Cannot matrix-multiply {len(other.__dimensions__)}-dimensional matrix with {len(self.__dimensions__)}-dimensional matrix')
+		elif (self.dimension == 2 and self.__dimensions__[-1] != other.__dimensions__[0]) or (self.dimension > 2 and self.__dimensions__[:-2] != other.__dimensions__[:-2]):
+			raise ValueError(f'Cannot matrix-multiply matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+		elif self.dimension == 2:
+			result_dimensions: tuple[int, ...] = (*other.__dimensions__[:-1], *self.__dimensions__[1:])
+			result: Matrix = Matrix(*result_dimensions)
+			common: int = other.__dimensions__[-1]
+			converter: Based.BaseN = Based.BaseN(common)
+			indices: list[tuple[int, ...]] = [converter.convert(x).of_size(2).digits() for x in range(len(self))]
+
+			for indexer in indices:
+				index: int = sum(d * common ** (1 - p) for p, d in enumerate(indexer))
+				total: float | None = 0
+
+				for k in range(common):
+					indexer_a: tuple[int, ...] = (*indexer[:-1], k)
+					indexer_b: tuple[int, ...] = (k, *indexer[1:])
+					element_a: float | None = other[indexer_a]
+					element_b: float | None = self[indexer_b]
+
+					if element_a is None or element_b is None:
+						total = None
+						break
+
+					total += element_a * element_b
+
+				result.__array__[index] = total
+
+			return result
 		else:
-			raise NotImplementedError('Matrix multiplication not yet implemented')
+			inner: tuple[int, ...] = (other.__dimensions__[-2], self.__dimensions__[-1])
+			result_dimensions: tuple[int, ...] = (*other.__dimensions__[:-2], *inner)
+			result: Matrix = Matrix(*result_dimensions)
+			index: int = 0
 
-	def __rtruediv__(self, other: 'float | int | Matrix') -> Matrix:
+			for i in range(other.__dimensions__[0]):
+				a: Matrix = other[i]
+				b: Matrix = self[i]
+				c: Matrix = a @ b
+
+				for j, value in enumerate(c.__array__):
+					result.__array__[index + j] = value
+
+				index += len(c.__array__)
+
+			return result
+
+	def __rtruediv__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			return type(self).shaped((other / x for x in self.__array__), *self.__dimensions__)
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -344,10 +417,10 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __rfloordiv__(self, other: 'float | int | Matrix') -> Matrix:
+	def __rfloordiv__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			return type(self).shaped((other // x for x in self.__array__), *self.__dimensions__)
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -355,10 +428,10 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __rmod__(self, other: 'float | int | Matrix') -> Matrix:
+	def __rmod__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			return type(self).shaped((other % x for x in self.__array__), *self.__dimensions__)
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -366,13 +439,13 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __rdivmod__(self, other: 'float | int | Matrix') -> Matrix:
+	def __rdivmod__(self, other: float | int | Matrix) -> Matrix:
 		raise NotImplementedError('DIVMOD not implemented')
 
-	def __rpow__(self, other: 'float | int | Matrix') -> Matrix:
+	def __rpow__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			return type(self).shaped((other ** x for x in self.__array__), *self.__dimensions__)
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot exponentiate matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -380,12 +453,12 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __iadd__(self, other: 'float | int | Matrix') -> Matrix:
+	def __iadd__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			for i in range(self.__size__):
 				self.__array__[i] += other
 			return self
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot add matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -395,12 +468,12 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __isub__(self, other: 'float | int | Matrix') -> Matrix:
+	def __isub__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			for i in range(self.__size__):
 				self.__array__[i] -= other
 			return self
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot subtract matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -410,12 +483,12 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __imul__(self, other: 'float | int | Matrix') -> Matrix:
+	def __imul__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			for i in range(self.__size__):
 				self.__array__[i] *= other
 			return self
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot multiply matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -425,19 +498,72 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __imatmul__(self, other: Matrix) -> Matrix:
-		if type(other) is not type(self):
+	def __imatmul__(self, other: Matrix | numpy.ndarray[typing.Any]) -> Matrix:
+		if not isinstance(other, (type(self), numpy.ndarray)):
 			return NotImplemented
+		elif isinstance(other, numpy.ndarray):
+			other = Matrix(other)
 
+		if self.dimension != other.dimension:
+			raise ValueError(f'Cannot matrix-multiply {len(other.__dimensions__)}-dimensional matrix with {len(self.__dimensions__)}-dimensional matrix')
+		elif (self.dimension == 2 and self.__dimensions__[-1] != other.__dimensions__[0]) or (self.dimension > 2 and self.__dimensions__[:-2] != other.__dimensions__[:-2]):
+			raise ValueError(f'Cannot matrix-multiply matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+		elif self.dimension == 2:
+			result_dimensions: tuple[int, ...] = (*self.__dimensions__[:-1], *other.__dimensions__[1:])
+			result: Matrix = Matrix(*result_dimensions)
+			common: int = self.__dimensions__[-1]
+			converter: Based.BaseN = Based.BaseN(common)
+			indices: list[tuple[int, ...]] = [converter.convert(x).of_size(2).digits() for x in range(len(self))]
+
+			for indexer in indices:
+				index: int = sum(d * common ** (1 - p) for p, d in enumerate(indexer))
+				total: float | None = 0
+
+				for k in range(common):
+					indexer_a: tuple[int, ...] = (*indexer[:-1], k)
+					indexer_b: tuple[int, ...] = (k, *indexer[1:])
+					element_a: float | None = self[indexer_a]
+					element_b: float | None = other[indexer_b]
+
+					if element_a is None or element_b is None:
+						total = None
+						break
+
+					total += element_a * element_b
+
+				result.__array__[index] = total
+
+			self.__size__ = result.__size__
+			self.__dimensions__ = result.__dimensions__
+			self.__array__ = result.__array__
+			return self
 		else:
-			raise NotImplementedError('Matrix multiplication not yet implemented')
+			inner: tuple[int, ...] = (self.__dimensions__[-2], other.__dimensions__[-1])
+			result_dimensions: tuple[int, ...] = (*self.__dimensions__[:-2], *inner)
+			result: Matrix = Matrix(*result_dimensions)
+			index: int = 0
 
-	def __itruediv__(self, other: 'float | int | Matrix') -> Matrix:
+			for i in range(self.__dimensions__[0]):
+				a: Matrix = self[i]
+				b: Matrix = other[i]
+				c: Matrix = a @ b
+
+				for j, value in enumerate(c.__array__):
+					result.__array__[index + j] = value
+
+				index += len(c.__array__)
+
+			self.__size__ = result.__size__
+			self.__dimensions__ = result.__dimensions__
+			self.__array__ = result.__array__
+			return self
+
+	def __itruediv__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			for i in range(self.__size__):
 				self.__array__[i] /= other
 			return self
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -447,12 +573,12 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __ifloordiv__(self, other: 'float | int | Matrix') -> Matrix:
+	def __ifloordiv__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			for i in range(self.__size__):
 				self.__array__[i] //= other
 			return self
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -462,12 +588,12 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __imod__(self, other: 'float | int | Matrix') -> Matrix:
+	def __imod__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			for i in range(self.__size__):
 				self.__array__[i] %= other
 			return self
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -477,12 +603,12 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		else:
 			return NotImplemented
 
-	def __ipow__(self, other: 'float | int | Matrix') -> Matrix:
+	def __ipow__(self, other: float | int | Matrix) -> Matrix:
 		if isinstance(other, (float, int)):
 			for i in range(self.__size__):
 				self.__array__[i] **= other
 			return self
-		elif type(other) is type(self):
+		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot exponentiate matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
@@ -504,22 +630,52 @@ class Matrix(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 	def to_numpy(self) -> numpy.ndarray:
 		return numpy.array(list(self), dtype=float)
 
-	def transpose(self) -> Matrix:
-		return type(self).shaped(self.__array__, *reversed(self.__dimensions__))
+	def transposed(self) -> Matrix:
+		if len(self.__dimensions__) == 2:
+			y, x = self.__dimensions__
+			elements: tuple[float | None, ...] = self.flattened()
+			matrix: list[tuple[float | None, ...]] = []
+
+			for i in range(x):
+				sublist: tuple[float | None, ...] = tuple(elements[i + j * x] for j in range(0, y))
+				matrix.append(sublist)
+
+			return Matrix(matrix)
+		else:
+			result: list[float | None] = []
+
+			for i in range(self.__dimensions__[0] - 1, -1, -1):
+				result.extend(self[i].transposed().__array__)
+
+			return Matrix.shaped(result, *reversed(self.__dimensions__))
 
 	def copy(self) -> Matrix:
 		return type(self).shaped(self.__array__.copy(), *self.__dimensions__)
 
-	def transform_by(self, callback: typing.Callable) -> Matrix:
+	def transform_by(self, callback: typing.Callable[[float], float]) -> Matrix:
 		assert callable(callback), 'Callback is not callable'
 		return type(self).shaped((float(callback(x)) for x in self.__array__), *self.__dimensions__)
 
-	def filter_by(self, callback: typing.Callable) -> Matrix:
+	def filter_by(self, callback: typing.Callable[[float], bool]) -> Matrix:
 		assert callable(callback), 'Callback is not callable'
 		return type(self).shaped((x if bool(callback(x)) else None for x in self.__array__), *self.__dimensions__)
 
 	def row_echelon(self) -> Matrix:
 		pass
+
+	def submatrix(self, rows: int, columns: int, start_row: int = 0, start_column: int = 0):
+		"""
+		Gets a sub-matrix from this matrix
+		:param rows: (int) The number of rows to index
+		:param columns: (int) The number of columns to index
+		:param start_row: (int) The row to begin indexing
+		:param start_column: (int) The column to begin indexing
+		:return: (Matrix) The resulting sub-matrix
+		"""
+
+		rows: Matrix = self[start_row:start_row + rows]
+		submtx: list = [row[start_column:start_column + columns] for row in rows]
+		return Matrix(submtx)
 
 	@property
 	def dimensions(self) -> tuple[int, ...]:
