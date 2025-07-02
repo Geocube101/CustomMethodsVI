@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "CustomMethodsVI"
+version = "1.0.0"
+dependencies = [
+    "requests",
+    "curses; os_name != 'nt'",
+    "windows-curses; os_name == 'nt'",
+    "dill",
+    "flask",
+    "flask-socketio",
+    "gevent",
+    "gevent-websocket",
+    "keyboard",
+    "matplotlib",
+    "numpy",
+    "opencv-contrib-python",
+    "paramiko",
+    "Pillow",
+    "psutil",
+    "pyautogui",
+    "pycryptodome",
+    "pygame",
+    "pyserial",
+    "python-dateutil",
+    "python-socketio",
+    "scipy",
+    "screeninfo",
+    "typeguard"
+]
+requires-python = ">=3.12"
+authors = [
+  {name = "Sean B", email = "geocubegames@gmail.com"},
+]
+maintainers = [
+  {name = "Sean B", email = "geocubegames@gmail.com"},
+]
+description = "A collection of various python classes and logic"
+readme = "README.md"
+license = "MIT AND (Apache-2.0 OR BSD-2-Clause)"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13"
+]
+
+[project.urls]
+Homepage = "https://github.com/Geocube101/CustomMethodsVI/wiki"
+Documentation = "https://github.com/Geocube101/CustomMethodsVI/wiki"
+Repository = "https://github.com/Geocube101/CustomMethodsVI"
+"Bug Tracker" = "https://github.com/Geocube101/CustomMethodsVI/issues"
+Changelog = "https://github.com/Geocube101/CustomMethodsVI"
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "CustomMethodsVI"
+]

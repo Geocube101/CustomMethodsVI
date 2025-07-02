@@ -1,14 +1,7 @@
-from CustomMethodsVI.FileSystem import *
-from CustomMethodsVI.Grammar import Grammar
+from CustomMethodsVI.Stream import ByteStream
 
 if __name__ == '__main__':
 	# print(LoggingDirectory(r'C:\Users\geoga\AppData\Roaming\SpaceEngineers').logfiles())
-	g = Grammar({'S', 'X', 'Y', 'Z', 'M', 'N'}, {'a', 'b'}, 'S', {
-		'S': {('X', 'Y')},
-		'X': {'a'},
-		'Y': {'Z', 'b'},
-		'Z': {'M'},
-		'M': {'N'},
-		'N': {'a'}
-	})
-	print(('a', 'a', 'b') in g)
+	s = ByteStream()
+	s.write(b'\x00\x01')
+	print(s.read(2))
