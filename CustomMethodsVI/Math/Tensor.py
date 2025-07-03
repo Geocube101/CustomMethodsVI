@@ -12,7 +12,7 @@ from ..Math import Vector
 from ..Decorators import Overload
 
 
-class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], collections.abc.Hashable):
+class Tensor(typing.SupportsRound['Tensor'], typing.SupportsAbs['Tensor'], collections.abc.Hashable):
 	@classmethod
 	def shaped(cls, array: typing.Iterable, dimension: int, *dimensions: int) -> Tensor:
 		instance: Tensor = cls(dimension, *dimensions)
@@ -24,7 +24,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			elif x is None or x is ...:
 				instance.__array__[i] = None
 			else:
-				raise TypeError(f'Unexpected matrix value \'{x}\' ({type(x)}), expected either a float, int, \'...\' or None')
+				raise TypeError(f'Unexpected tensor value \'{x}\' ({type(x)}), expected either a float, int, \'...\' or None')
 
 		return instance
 
@@ -48,13 +48,23 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		return instance
 
 	@classmethod
+	def identity(cls, dimension: int, *dimensions: int) -> Tensor:
+		instance: Tensor = cls(dimension, *dimensions)
+
+		for i in range(len(instance)):
+			pos: tuple[int, ...] = instance.__index_to_position__(i)
+			instance.__array__[i] = 1 if all(x == pos[0] for x in pos) else 0
+
+		return instance
+
+	@classmethod
 	def full(cls, value: float | int | None | types.EllipsisType, dimension: int, *dimensions: int) -> Tensor:
 		if isinstance(value, (float, int)):
 			value = float(value)
 		elif value is None or value is ...:
 			value = None
 		else:
-			raise TypeError(f'Unexpected matrix value \'{value}\' ({type(value)}), expected either a float, int, \'...\' or None')
+			raise TypeError(f'Unexpected tensor value \'{value}\' ({type(value)}), expected either a float, int, \'...\' or None')
 
 		size: int = math.prod((dimension, *dimensions))
 		return cls.shaped([value] * size, dimension, *dimensions)
@@ -71,7 +81,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		self.__array__: list[float | None] = [None] * self.__size__
 
 	@Overload(strict=True)
-	def __init__(self, matrix: typing.Iterable):
+	def __init__(self, tensor: typing.Iterable):
 		def _flattener(__flattened: list[float | None], __index: int, __input: typing.Any, __dimensions: dict[int, int]) -> None:
 			if hasattr(__input, '__iter__') and not isinstance(__input, str):
 				__input: tuple = tuple(__input)
@@ -86,27 +96,27 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			elif __input is None or __input is ...:
 				__flattened.append(None)
 			else:
-				raise TypeError(f'Unexpected matrix value \'{__input}\' ({type(__input)}), expected either a float, int, \'...\' or None')
+				raise TypeError(f'Unexpected tensor value \'{__input}\' ({type(__input)}), expected either a float, int, \'...\' or None')
 
 		dimensions: dict[int, int] = {}
 		flattened: list[float | None] = []
-		_flattener(flattened, 0, matrix, dimensions)
+		_flattener(flattened, 0, tensor, dimensions)
 		dimensions: tuple[int, ...] = tuple(dimensions[x] for x in sorted(dimensions.keys()))
 		self.__size__: int = len(flattened)
 		self.__dimensions__: tuple[int, ...] = (1, *dimensions) if len(dimensions) < 2 else tuple(dimensions)
 		self.__array__: list[float | None] = flattened
 
 	@Overload(strict=True)
-	def __init__(self, matrix: Tensor):
-		self.__size__: int = int(matrix.__size__)
-		self.__dimensions__: tuple[int, ...] = tuple(matrix.__dimensions__)
-		self.__array__: list[float | None] = list(matrix.__array__.copy())
+	def __init__(self, tensor: Tensor):
+		self.__size__: int = int(tensor.__size__)
+		self.__dimensions__: tuple[int, ...] = tuple(tensor.__dimensions__)
+		self.__array__: list[float | None] = list(tensor.__array__.copy())
 
 	@Overload(strict=True)
-	def __init__(self, matrix: numpy.ndarray):
-		self.__size__: int = int(matrix.size)
-		self.__dimensions__: tuple[int, ...] = tuple(matrix.shape)
-		self.__array__: list[float | None] = list(matrix)
+	def __init__(self, tensor: numpy.ndarray):
+		self.__size__: int = int(tensor.size)
+		self.__dimensions__: tuple[int, ...] = tuple(tensor.shape)
+		self.__array__: list[float | None] = list(tensor)
 
 	def __index_to_position__(self, index: int) -> tuple[int, ...]:
 		position: list[int] = [index]
@@ -114,10 +124,20 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		for i in range(1, len(self.__dimensions__)):
 			d: int = position[-1] // self.__dimensions__[i]
 			m: int = position[-1] % self.__dimensions__[i]
-			position[-1] = d
-			position.append(m)
+			position[-1] = m
+			position.append(d)
 
 		return tuple(position)
+
+	def __position_to_index(self, position: tuple[int, ...]) -> int:
+		index: int = 0
+		dimension: int = 1
+
+		for i, pos in enumerate(position):
+			index += dimension * pos
+			dimension = self.__dimensions__[i]
+
+		return index
 
 	def __hash__(self) -> int:
 		return hash(tuple(self.__array__))
@@ -198,7 +218,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return type(self).shaped((x + other for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot add matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot add tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			return type(self).shaped((a + b for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
@@ -209,7 +229,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return type(self).shaped((x - other for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot subtract matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot subtract tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			return type(self).shaped((a - b for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
@@ -220,7 +240,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return type(self).shaped((x * other for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot multiply matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot multiply tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			return type(self).shaped((a * b for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
@@ -233,9 +253,9 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			other = Tensor(other)
 
 		if self.dimension != other.dimension:
-			raise ValueError(f'Cannot matrix-multiply {len(other.__dimensions__)}-dimensional matrix with {len(self.__dimensions__)}-dimensional matrix')
+			raise ValueError(f'Cannot tensor-multiply {len(other.__dimensions__)}-dimensional tensor with {len(self.__dimensions__)}-dimensional tensor')
 		elif (self.dimension == 2 and self.__dimensions__[-1] != other.__dimensions__[0]) or (self.dimension > 2 and self.__dimensions__[:-2] != other.__dimensions__[:-2]):
-			raise ValueError(f'Cannot matrix-multiply matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+			raise ValueError(f'Cannot tensor-multiply tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 		else:
 			tensor_a: numpy.ndarray[float | None] = self.to_numpy()
 			tensor_b: numpy.ndarray[float | None] = other.to_numpy()
@@ -246,9 +266,9 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return type(self).shaped((x / other for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot divide tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
-			return type(self).shaped((a / b for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
+			return type(self).shaped((float('inf') if b == 0 else a / b for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
 			return NotImplemented
 
@@ -257,7 +277,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return type(self).shaped((x // other for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot divide tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			return type(self).shaped((a // b for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
@@ -268,7 +288,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return type(self).shaped((x % other for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot divide tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			return type(self).shaped((a % b for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
@@ -282,7 +302,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return type(self).shaped((x ** other for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot exponentiate matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot exponentiate tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			return type(self).shaped((a ** b for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
@@ -293,7 +313,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return type(self).shaped((other + x for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot add matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot add tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			return type(self).shaped((b + a for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
@@ -304,7 +324,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return type(self).shaped((other - x for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot subtract matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot subtract tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			return type(self).shaped((b - a for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
@@ -315,7 +335,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return type(self).shaped((other * x for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot multiply matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot multiply tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			return type(self).shaped((b * a for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
@@ -328,9 +348,9 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			other = Tensor(other)
 
 		if self.dimension != other.dimension:
-			raise ValueError(f'Cannot matrix-multiply {len(other.__dimensions__)}-dimensional matrix with {len(self.__dimensions__)}-dimensional matrix')
+			raise ValueError(f'Cannot tensor-multiply {len(other.__dimensions__)}-dimensional tensor with {len(self.__dimensions__)}-dimensional tensor')
 		elif (self.dimension == 2 and self.__dimensions__[-1] != other.__dimensions__[0]) or (self.dimension > 2 and self.__dimensions__[:-2] != other.__dimensions__[:-2]):
-			raise ValueError(f'Cannot matrix-multiply matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+			raise ValueError(f'Cannot tensor-multiply tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 		else:
 			tensor_a: numpy.ndarray[float | None] = other.to_numpy()
 			tensor_b: numpy.ndarray[float | None] = self.to_numpy()
@@ -341,9 +361,9 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return type(self).shaped((other / x for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot divide tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
-			return type(self).shaped((b / a for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
+			return type(self).shaped((float('inf') if a == 0 else b / a for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
 			return NotImplemented
 
@@ -352,7 +372,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return type(self).shaped((other // x for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot divide tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			return type(self).shaped((b // a for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
@@ -363,7 +383,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return type(self).shaped((other % x for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot divide tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			return type(self).shaped((b % a for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
@@ -377,7 +397,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return type(self).shaped((other ** x for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot exponentiate matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot exponentiate tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			return type(self).shaped((b ** a for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
@@ -390,7 +410,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return self
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot add matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot add tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			for i in range(self.__size__):
 				self.__array__[i] += other.__array__[i]
@@ -405,7 +425,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return self
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot subtract matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot subtract tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			for i in range(self.__size__):
 				self.__array__[i] -= other.__array__[i]
@@ -420,7 +440,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return self
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot multiply matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot multiply tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			for i in range(self.__size__):
 				self.__array__[i] *= other.__array__[i]
@@ -435,9 +455,9 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			other = Tensor(other)
 
 		if self.dimension != other.dimension:
-			raise ValueError(f'Cannot matrix-multiply {len(other.__dimensions__)}-dimensional matrix with {len(self.__dimensions__)}-dimensional matrix')
+			raise ValueError(f'Cannot tensor-multiply {len(other.__dimensions__)}-dimensional tensor with {len(self.__dimensions__)}-dimensional tensor')
 		elif (self.dimension == 2 and self.__dimensions__[-1] != other.__dimensions__[0]) or (self.dimension > 2 and self.__dimensions__[:-2] != other.__dimensions__[:-2]):
-			raise ValueError(f'Cannot matrix-multiply matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+			raise ValueError(f'Cannot tensor-multiply tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 		else:
 			tensor_a: numpy.ndarray[float | None] = self.to_numpy()
 			tensor_b: numpy.ndarray[float | None] = other.to_numpy()
@@ -451,10 +471,11 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return self
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot divide tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			for i in range(self.__size__):
-				self.__array__[i] /= other.__array__[i]
+				result: float | None = float('inf') if other.__array__[i] == 0 else self.__array__[i] / other.__array__[i]
+				self.__array__[i] = result
 			return self
 		else:
 			return NotImplemented
@@ -466,7 +487,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return self
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot divide tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			for i in range(self.__size__):
 				self.__array__[i] //= other.__array__[i]
@@ -481,7 +502,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return self
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot divide matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot divide tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			for i in range(self.__size__):
 				self.__array__[i] %= other.__array__[i]
@@ -496,7 +517,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 			return self
 		elif isinstance(other, type(self)):
 			if self.__dimensions__ != other.__dimensions__:
-				raise ValueError(f'Cannot exponentiate matrix of dimension {"x".join(str(x) for x in other.__dimensions__)} to matrix of dimension {"x".join(str(x) for x in self.__dimensions__)}')
+				raise ValueError(f'Cannot exponentiate tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			for i in range(self.__size__):
 				self.__array__[i] **= other.__array__[i]
@@ -512,7 +533,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 
 	def is_square(self) -> bool:
 		"""
-		Checks if this matrix is square
+		Checks if this tensor is square
 		:return: (bool) True if all dimensions are equal
 		"""
 
@@ -531,7 +552,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 
 	def determinant(self) -> float | None:
 		"""
-		Calculates the determinate if this matrix is square
+		Calculates the determinate if this tensor is square
 		:return: (float | None) The determinate or None if any single value is None
 		"""
 
@@ -558,7 +579,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 
 	def flattened(self) -> tuple[float | None, ...]:
 		"""
-		Converts the matrix to a single dimensional list of values
+		Converts the tensor to a single dimensional list of values
 		:return: (tuple[float | None) The flattened array
 		"""
 
@@ -566,7 +587,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 
 	def to_numpy(self) -> numpy.ndarray[float | None]:
 		"""
-		Converts this matrix to a numpy array
+		Converts this tensor to a numpy array
 		:return: (numpy.array) The numpy array
 		"""
 
@@ -574,20 +595,20 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 
 	def transposed(self) -> Tensor:
 		"""
-		Transposes this matrix
-		:return: (Matrix) The transposed matrix
+		Transposes this tensor
+		:return: (Matrix) The transposed tensor
 		"""
 
 		if len(self.__dimensions__) == 2:
 			y, x = self.__dimensions__
 			elements: tuple[float | None, ...] = self.flattened()
-			matrix: list[tuple[float | None, ...]] = []
+			tensor: list[tuple[float | None, ...]] = []
 
 			for i in range(x):
 				sublist: tuple[float | None, ...] = tuple(elements[i + j * x] for j in range(0, y))
-				matrix.append(sublist)
+				tensor.append(sublist)
 
-			return Tensor(matrix)
+			return Tensor(tensor)
 		else:
 			result: list[float | None] = []
 
@@ -598,7 +619,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 
 	def copy(self) -> Tensor:
 		"""
-		Copies this matrix
+		Copies this tensor
 		:return: (Matrix) A copy
 		"""
 
@@ -606,9 +627,9 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 
 	def transform_by(self, callback: typing.Callable[[float | None], float | None]) -> Tensor:
 		"""
-		Applies a function to all values in this matrix
+		Applies a function to all values in this tensor
 		:param callback: ((float | None) -> float | None) The transformer callback
-		:return: (Matrix) The transformed matrix
+		:return: (Matrix) The transformed tensor
 		"""
 
 		assert callable(callback), 'Callback is not callable'
@@ -616,29 +637,32 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 
 	def filter_by(self, callback: typing.Callable[[float | None], bool]) -> Tensor:
 		"""
-		Applies a function to filter all values in this matrix
+		Applies a function to filter all values in this tensor
 		Any non-matching values are replaced with 'None'
 		:param callback: ((float | None) -> bool) The filterer callback
-		:return: (Matrix) The filtered matrix
+		:return: (Matrix) The filtered tensor
 		"""
 
 		assert callable(callback), 'Callback is not callable'
 		return type(self).shaped((x if bool(callback(x)) else None for x in self.__array__), *self.__dimensions__)
 
 	def row_echelon(self) -> Tensor:
-		pass
+		clone: Tensor = Tensor(self)
+
+		return clone
 
 	def reduced_row_echelon(self) -> Tensor:
-		pass
+		row: Tensor = self.row_echelon()
+		return row
 
-	def submatrix(self, rows: int, columns: int, start_row: int = 0, start_column: int = 0) -> Tensor:
+	def subtensor(self, rows: int, columns: int, start_row: int = 0, start_column: int = 0) -> Tensor:
 		"""
-		Gets a sub-matrix from this matrix
+		Gets a sub-tensor from this tensor
 		:param rows: (int) The number of rows to index
 		:param columns: (int) The number of columns to index
 		:param start_row: (int) The row to begin indexing
 		:param start_column: (int) The column to begin indexing
-		:return: (Matrix) The resulting sub-matrix
+		:return: (Matrix) The resulting sub-tensor
 		"""
 
 		rows: Tensor = self[start_row:start_row + rows]
@@ -650,12 +674,12 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 
 	def minor(self, *position) -> Tensor:
 		"""
-		Calculates the minor matrix of the given position
+		Calculates the minor tensor of the given position
 		:param position: (*int) The element indices
-		:return: (Matrix) The minor matrix
+		:return: (Matrix) The minor tensor
 		"""
 
-		assert len(position) == self.dimension, 'Number of specified dimensions does not match matrix dimension'
+		assert len(position) == self.dimension, 'Number of specified dimensions does not match tensor dimension'
 		minor: list[float | None] = []
 
 		for i, value in enumerate(self.__array__):
@@ -667,14 +691,39 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 		return Tensor.shaped(minor, *[x - 1 for x in self.__dimensions__])
 
 	def augmented(self, other: Tensor) -> Tensor:
-		assert self.__dimensions__[:-1] == other.__dimensions__[:-1], 'Mismatched dimensions'
-		dimensions: tuple[int, ...] = (*self.__dimensions__[:-1], self.__dimensions__[-1] + other.__dimensions__[-1])
-		return Tensor.shaped(self.__array__ + other.__array__, *dimensions)
+		assert len(self.__dimensions__) == len(other.__dimensions__) and self.__dimensions__[:-1] == other.__dimensions__[:-1], 'Mismatched dimensions'
+		result: Tensor = Tensor(*self.__dimensions__[:-1], self.__dimensions__[-1] + other.__dimensions__[-1])
+
+		for i in range(len(result)):
+			position: tuple[int, ...] = result.__index_to_position__(i)
+
+			if all(x < self.__dimensions__[i] for i, x in enumerate(position)):
+				result.__array__[i] = self.__array__[self.__position_to_index(position)]
+			else:
+				result.__array__[i] = other.__array__[self.__position_to_index(tuple(x % other.__dimensions__[i] for i, x in enumerate(position)))]
+
+		return result
+
+	def inverted(self) -> Tensor:
+		assert self.is_square(), 'Cannot invert a non-square tensor'
+		augmented: Tensor = self.augmented(Tensor.identity(*self.__dimensions__))
+		reduced: Tensor = augmented.reduced_row_echelon()
+		result: Tensor = Tensor.identity(*self.__dimensions__)
+		index: int = 0
+
+		for i in range(len(reduced)):
+			position: tuple[int, ...] = reduced.__index_to_position__(i)
+
+			if position[-1] > self.__dimensions__[-1]:
+				result.__array__[index] = reduced.__array__[i]
+				index += 1
+
+		return result
 
 	@property
 	def dimensions(self) -> tuple[int, ...]:
 		"""
-		:return: (tuple[int, ...]) The dimensions of this matrix
+		:return: (tuple[int, ...]) The dimensions of this tensor
 		"""
 
 		return self.__dimensions__
@@ -682,7 +731,7 @@ class Tensor(typing.SupportsRound['Matrix'], typing.SupportsAbs['Matrix'], colle
 	@property
 	def dimension(self) -> int:
 		"""
-		:return: (int) The number of dimensions this matrix has
+		:return: (int) The number of dimensions this tensor has
 		"""
 
 		return len(tuple(x for x in self.__dimensions__ if x))
