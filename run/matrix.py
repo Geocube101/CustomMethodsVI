@@ -1,8 +1,5 @@
-import CustomMethodsVI.Math.Matrix as Matrix
+from CustomMethodsVI.Math.Tensor import Tensor
 
 
 if __name__ == '__main__':
-	ma = Matrix.Matrix.shaped(range(0, 8), 2, 2, 2)
-	mb = Matrix.Matrix.shaped(range(8, 16), 2, 2, 2)
-	mc = ma @ mb
-	print(ma, mb, mc, mc.dimensions, mc.dimension, sep='\n')
+	print(Tensor.linear_regression((0, 0), (1, 1), (2, 2), (3, 3), (4, 4)))
