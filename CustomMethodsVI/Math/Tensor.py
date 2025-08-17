@@ -648,11 +648,12 @@ class Tensor(typing.SupportsRound['Tensor'], typing.SupportsAbs['Tensor'], colle
 
 	def row_echelon(self) -> Tensor:
 		clone: Tensor = Tensor(self)
-
+		raise NotImplementedError()
 		return clone
 
 	def reduced_row_echelon(self) -> Tensor:
 		row: Tensor = self.row_echelon()
+		raise NotImplementedError()
 		return row
 
 	def subtensor(self, rows: int, columns: int, start_row: int = 0, start_column: int = 0) -> Tensor:
@@ -670,7 +671,7 @@ class Tensor(typing.SupportsRound['Tensor'], typing.SupportsAbs['Tensor'], colle
 		return Tensor(submtx)
 
 	def adjugate(self) -> Tensor:
-		pass
+		raise NotImplementedError()
 
 	def minor(self, *position) -> Tensor:
 		"""

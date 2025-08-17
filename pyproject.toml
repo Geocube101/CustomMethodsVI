@@ -7,8 +7,8 @@ name = "CustomMethodsVI"
 version = "1.0.0"
 dependencies = [
     "requests",
-    "curses; os_name != 'nt'",
     "windows-curses; os_name == 'nt'",
+    "pywin32; os_name == 'nt'",
     "dill",
     "flask",
     "flask-socketio",

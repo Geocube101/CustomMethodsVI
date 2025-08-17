@@ -15,7 +15,7 @@ def linear_scatter():
 
 def polar_scatter():
 	def func(theta):
-		return math.sin(theta)
+		return math.tan(theta)
 
 	scatter = Plotter.PolarScatterPlot2D()
 	scatter.axes_info('x', 'y', minor_spacing=math.pi / 4, major_spacing=4)
@@ -70,7 +70,8 @@ def boxplot():
 	box[0].add_points(1, 1, 2, 2, 2, 3, 3, 3, 3, 5)
 	return box
 
-if __name__ == '__main__':
+
+def main():
 	display = Plotter.GridPlotDisplay()
 	display[0, 0] = linear_scatter()
 	display[0, 1] = polar_scatter()
@@ -82,3 +83,7 @@ if __name__ == '__main__':
 	display[2, 1] = stacked_dot()
 	display[2, 2] = boxplot()
 	display.show(square_size=384)
+
+
+if __name__ == '__main__':
+	main()

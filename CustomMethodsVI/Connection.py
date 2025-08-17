@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import signal
 import threading
 import time
 
@@ -37,7 +36,7 @@ class FlaskSocketioServer:
 		self.__host: str = ...
 		self.__port: int = ...
 
-	def __enter__(self, app: flask.Flask) -> 'FlaskSocketioServer':
+	def __enter__(self, app: flask.Flask) -> FlaskSocketioServer:
 		return FlaskSocketioServer(app)
 
 	def __exit__(self, e1, e2, e3, tb) -> None:
@@ -93,14 +92,14 @@ class FlaskSocketioServer:
 		:return: (None)
 		"""
 
+		if not self.__state:
+			return
+
 		self.__state = False
+		self.__socket.stop()
+		self.__async_listener = None
 
-		if self.__async_listener is None:
-			sys.exit(0)
-		else:
-			os.kill(os.getpid(), signal.SIGINT)
-
-	def on(self, eid: str, func: typing.Callable = None) -> 'None | typing.Callable':
+	def on(self, eid: str, func: typing.Callable = None) -> None | typing.Callable:
 		"""
 		Binds a callback to a socket event id
 		:param eid: (str) The event id to listen to
@@ -115,7 +114,7 @@ class FlaskSocketioServer:
 		else:
 			self.__spaces[0].on(eid, func)
 
-	def of(self, namespace: str) -> 'FlaskSocketioNamespace':
+	def of(self, namespace: str) -> FlaskSocketioNamespace:
 		"""
 		Creates a new namespace
 		:param namespace: (str) The namespace name
@@ -136,7 +135,7 @@ class FlaskSocketioServer:
 
 		self.__spaces[0].off(eid)
 
-	def emit(self, eid: str, *data, wl: 'tuple[str | FlaskSocketioSocket, ...]' = (), bl: 'tuple[str | FlaskSocketioSocket, ...]' = ()) -> None:
+	def emit(self, eid: str, *data, wl: tuple[str | FlaskSocketioSocket, ...] = (), bl: tuple[str | FlaskSocketioSocket, ...] = ()) -> None:
 		"""
 		Emits data across all namespaces
 		:param eid: The event id to emit on
@@ -160,6 +159,14 @@ class FlaskSocketioServer:
 	@property
 	def port(self) -> int | None:
 		return None if self.__port is None or self.__port is ... else int(self.__port)
+
+	@property
+	def socketio(self) -> flask_socketio.SocketIO:
+		return self.__socket
+
+	@property
+	def app(self) -> flask.Flask:
+		return self.__app
 
 
 class FlaskSocketioNamespace:
@@ -196,7 +203,7 @@ class FlaskSocketioNamespace:
 		if eid in self.__events__:
 			self.__events__[eid](*args, **kwargs)
 
-	def __prepare_socket__(self, flask_socket: 'flask_socketio.SocketIO'):
+	def __prepare_socket__(self, flask_socket: flask_socketio.SocketIO) -> None:
 		"""
 		INTERNAL METHOD; DO NOT USE
 		Prepares a flask socket for use
@@ -206,7 +213,7 @@ class FlaskSocketioNamespace:
 		@flask_socket.on('connect', namespace=self.__namespace__)
 		def on_connect(auth):
 			sid = flask.request.sid
-			socket = FlaskSocketioSocket(self.__server, self, sid, auth, flask.request.remote_addr)
+			socket = FlaskSocketioSocket(self.__server, self, sid, auth, flask.request)
 			self.__sockets__[sid] = socket
 			self.__exec__('connect', socket)
 
@@ -215,13 +222,13 @@ class FlaskSocketioNamespace:
 			sid = flask.request.sid
 			if sid in self.__sockets__:
 				self.__sockets__[sid].__exec__('disconnect', self.__sockets__[sid].__is_disconnector__)
-				self.__sockets__[sid].connected = False
+				self.__sockets__[sid].__connected__ = False
 				del self.__sockets__[sid]
 
 		self.__socket = flask_socket
 		self.__ready = True
 
-	def __bind_socket_event__(self, socket: 'FlaskSocketioSocket', eid: str) -> None:
+	def __bind_socket_event__(self, socket: FlaskSocketioSocket, eid: str) -> None:
 		"""
 		INTERNAL METHOD; DO NOT USE
 		Binds a socket internally to an event
@@ -241,7 +248,7 @@ class FlaskSocketioNamespace:
 				if sid in self.__socket_events__[eid]:
 					self.__socket_events__[eid][sid].__exec__(eid, *data)
 
-	def __unbind_socket_event__(self, socket: 'FlaskSocketioSocket', eid: str) -> None:
+	def __unbind_socket_event__(self, socket: FlaskSocketioSocket, eid: str) -> None:
 		"""
 		INTERNAL METHOD; DO NOT USE
 		Unbinds a socket internally to an event
@@ -256,7 +263,7 @@ class FlaskSocketioNamespace:
 			if len(self.__socket_events__[eid]) == 0:
 				del self.__socket_events__[eid]
 
-	def __emit_to_socket__(self, socket: 'FlaskSocketioSocket', eid: str, data: tuple = ()) -> None:
+	def __emit_to_socket__(self, socket: FlaskSocketioSocket, eid: str, data: tuple = ()) -> None:
 		"""
 		Emits data to a socket
 		:param socket: The socket to emit to
@@ -297,7 +304,7 @@ class FlaskSocketioNamespace:
 		if eid in self.__events__:
 			del self.__events__[eid]
 
-	def emit(self, eid: str, *data, wl: 'tuple[str | FlaskSocketioSocket, ...]' = (), bl: 'tuple[str | FlaskSocketioSocket, ...]' = ()) -> None:
+	def emit(self, eid: str, *data, wl: tuple[str | FlaskSocketioSocket, ...] = (), bl: tuple[str | FlaskSocketioSocket, ...] = ()) -> None:
 		"""
 		Emits data across all sockets in this namespace
 		If "wl" is not empty, all sockets in "wl" are considered
@@ -322,6 +329,15 @@ class FlaskSocketioNamespace:
 		for sid in sockets:
 			self.__socket.emit(eid, data, to=sid, namespace=self.__namespace__)
 
+	def get_socket(self, uid: str) -> FlaskSocketioSocket | None:
+		"""
+		Gets a socket by ID
+		:param uid: The socket ID
+		:return: The socket or None if not found
+		"""
+
+		return self.__sockets__[uid] if uid in self.__sockets__ else None
+
 	@property
 	def ready(self) -> bool:
 		"""
@@ -331,13 +347,22 @@ class FlaskSocketioNamespace:
 
 		return self.__ready
 
+	@property
+	def sockets(self) -> tuple[FlaskSocketioSocket, ...]:
+		"""
+		Gets all sockets connected to this namespace
+		:return: All connected sockets
+		"""
+
+		return tuple(self.__sockets__.values())
+
 
 class FlaskSocketioSocket:
 	"""
 	[FlaskSocketioSocket] - Flask socketio socket object
 	"""
 
-	def __init__(self, server: FlaskSocketioServer, namespace: FlaskSocketioNamespace, uid: str, auth, ip: str):
+	def __init__(self, server: FlaskSocketioServer, namespace: FlaskSocketioNamespace, uid: str, auth, request: flask.Request):
 		"""
 		[FlaskSocketioSocket] - Flask socketio socket object
 		- Constructor -
@@ -346,7 +371,7 @@ class FlaskSocketioSocket:
 		:param namespace: (FlaskSocketioNamespace) The socketio namespace
 		:param uid: (str) This socket's UID
 		:param auth: This socket's authentication info
-		:param ip: (str) This socket's IP address
+		:param request: (flask.Request) This socket's flask request
 		"""
 
 		self.__server: FlaskSocketioServer = server
@@ -354,9 +379,9 @@ class FlaskSocketioSocket:
 		self.__is_disconnector__: bool = False
 		self.__uid: str = uid
 		self.__events__: dict[str, typing.Callable] = {}
-		self.auth = auth
-		self.connected: bool = True
-		self.ip_address: str = str(ip)
+		self.__auth__ = auth
+		self.__connected__: bool = True
+		self.__request__: flask.Request = request
 		
 	def __exec__(self, eid: str, *args, **kwargs) -> None:
 		"""
@@ -387,7 +412,7 @@ class FlaskSocketioSocket:
 		else:
 			raise TypeError(f"Cannot bind non-callable object '{func}'")
 
-	def on(self, eid: str, func: typing.Callable = None) -> 'None | typing.Callable':
+	def on(self, eid: str, func: typing.Callable = None) -> None | typing.Callable:
 		"""
 		Binds a callback to a socket event id
 		:param eid: (str) The event id to listen to
@@ -432,8 +457,12 @@ class FlaskSocketioSocket:
 		"""
 
 		self.__is_disconnector__ = True
-		self.connected = False
+		self.__connected__ = False
 		flask_socketio.disconnect(self.__uid, self.__space.__namespace__)
+
+	@property
+	def connected(self) -> bool:
+		return self.__connected__
 
 	@property
 	def uid(self) -> str:
@@ -443,6 +472,18 @@ class FlaskSocketioSocket:
 		"""
 
 		return self.__uid
+
+	@property
+	def auth(self):
+		return self.__auth__
+
+	@property
+	def ip_address(self) -> str:
+		return self.__request__.remote_addr
+
+	@property
+	def request(self) -> flask.request:
+		return flask.request
 
 
 class SocketioClient:
@@ -464,7 +505,7 @@ class SocketioClient:
 		self.__events: dict[str, list[typing.Callable]] = {}
 		self.__soc: socketio.Client = socketio.Client()
 
-	def __enter__(self) -> 'SocketioClient':
+	def __enter__(self) -> SocketioClient:
 		return self
 
 	def __exit__(self, e1, e2, e3, tb) -> None:
@@ -510,7 +551,7 @@ class SocketioClient:
 				else:
 					callback(*args, **kwargs)
 
-	def on(self, eid: str, func: typing.Callable = None) -> 'None | typing.Callable':
+	def on(self, eid: str, func: typing.Callable = None) -> None | typing.Callable:
 		"""
 		Binds a callback to a socket event id
 		:param eid: (str) The event id to listen to
@@ -586,6 +627,15 @@ class SocketioClient:
 		self.__is_disconnector__ = False
 		self.__mainloop__()
 
+	def disconnect(self) -> None:
+		"""
+		Disconnects this socket from server
+		:return: (None)
+		"""
+
+		self.__is_disconnector__ = True
+		self.__soc.disconnect()
+
 	@property
 	def connected(self) -> bool:
 		"""
@@ -604,14 +654,9 @@ class SocketioClient:
 
 		return self.__space
 
-	def disconnect(self) -> None:
-		"""
-		Disconnects this socket from server
-		:return: (None)
-		"""
-
-		self.__is_disconnector__ = True
-		self.__soc.disconnect()
+	@property
+	def socket(self) -> socketio.Client:
+		return self.__soc
 
 
 if sys.platform == 'win32':
