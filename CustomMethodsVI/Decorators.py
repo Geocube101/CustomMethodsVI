@@ -1,32 +1,34 @@
 from __future__ import annotations
 
+import inspect
+import os
 import typing
 import types
 import typeguard
-import inspect
 
 from . import Exceptions
+from . import Misc
 from . import Stream
 
 
-class __OverloadCaller:
+class __OverloadCaller__:
 	"""
 	INTERNAL CLASS; DO NOT USE
-	[__OverloadCaller] - Class for handling function overloads and delegation
+	Class for handling function overloads and delegation
 	"""
 
-	__FunctionOverloads: dict[str, __OverloadCaller] = {}
-	__FunctionCallers: dict[typing.Callable, __OverloadCaller] = {}
+	__FunctionOverloads: dict[str, __OverloadCaller__] = {}
+	__FunctionCallers: dict[typing.Callable, __OverloadCaller__] = {}
 
 	@classmethod
-	def assoc(cls, lambda_: typing.Callable, caller: __OverloadCaller) -> None:
+	def assoc(cls, lambda_: typing.Callable, caller: __OverloadCaller__) -> None:
 		if callable(caller):
 			cls.__FunctionCallers[lambda_] = caller
 		elif lambda_ in cls.__FunctionCallers:
 			del cls.__FunctionCallers[lambda_]
 
 	@classmethod
-	def new(cls, function: typing.Callable | types.FunctionType | types.LambdaType | types.MethodType, strict_only: bool | None = False) -> __OverloadCaller:
+	def new(cls, function: typing.Callable | types.FunctionType | types.LambdaType | types.MethodType, strict_only: bool | None = False) -> __OverloadCaller__:
 		"""
 		Creates and stores a new function overload
 		:param function: (CALLABLE) The function to overload
@@ -51,7 +53,7 @@ class __OverloadCaller:
 
 			return caller
 		else:
-			new_caller: __OverloadCaller = super().__new__(cls)
+			new_caller: __OverloadCaller__ = super().__new__(cls)
 			cls.__init__(new_caller, function, strict_only)
 			cls.__FunctionOverloads[function.__qualname__] = new_caller
 			return new_caller
@@ -334,24 +336,28 @@ def Overload(*function: typing.Callable, strict: bool = False) -> typing.Callabl
 	Decorator for overloading functions
 	Function parameters must be type hinted (or typing.Any is assumed)
 	This decorator is not suitable for pickling
-	:param function: (CALLABLE) The function to decorate
-	:param strict: (bool) Whether to only allow exact types (defaults to False)
-	:return: (CALLABLE) Binder
+	:param function: The function to decorate
+	:param strict: Whether to only allow exact types (defaults to False)
+	:return: None or binder if used as a decorator
+	:raises InvalidArgumentException: If callback is not callable
 	"""
 
 	if len(function) == 0:
 		def binder(callback: typing.Callable):
-			caller: __OverloadCaller = __OverloadCaller.new(callback, strict)
+			Misc.raise_ifn(callable(callback), Exceptions.InvalidArgumentException(Overload, 'function', type(callback)))
+			caller: __OverloadCaller__ = __OverloadCaller__.new(callback, strict)
 			redirect: typing.Callable = lambda *args, __caller=caller, **kwargs: __caller(*args, **kwargs)
-			__OverloadCaller.assoc(redirect, caller)
+			__OverloadCaller__.assoc(redirect, caller)
 			return redirect
 
 		return binder
-	else:
-		caller: __OverloadCaller = __OverloadCaller.new(function[0], strict)
+	elif callable(function[0]):
+		caller: __OverloadCaller__ = __OverloadCaller__.new(function[0], strict)
 		redirect: typing.Callable = lambda *args, __caller=caller, **kwargs: __caller(*args, **kwargs)
-		__OverloadCaller.assoc(redirect, caller)
+		__OverloadCaller__.assoc(redirect, caller)
 		return redirect
+	else:
+		raise Exceptions.InvalidArgumentException(Overload, 'function', type(function[0]))
 
 
 def DefaultOverload(function: typing.Callable):
@@ -359,23 +365,337 @@ def DefaultOverload(function: typing.Callable):
 	Decorator for overloading functions
 	Marks this function as a default fallback
 	This decorator is not suitable for pickling
-	:return: (CALLABLE) Binder
+	:return: None or binder if used as a decorator
+	:raises InvalidArgumentException: If callback is not callable
 	"""
 
-	caller: __OverloadCaller = __OverloadCaller.new(function, None)
+	Misc.raise_ifn(callable(function), Exceptions.InvalidArgumentException(Overload, 'function', type(function)))
+	caller: __OverloadCaller__ = __OverloadCaller__.new(function, None)
 	redirect: typing.Callable = lambda *args, __caller=caller, **kwargs: __caller(*args, **kwargs)
-	__OverloadCaller.assoc(redirect, caller)
+	__OverloadCaller__.assoc(redirect, caller)
 	return redirect
 
 
-class AccessRestrictedClass(type):
-	pass
+class __AccessRestrictedClass__(type):
+	"""
+	INTERNAL CLASS; DO NOT USE
+	Class for handling classes with access restrictions
+	"""
+
+	__OWN_ATTRS = ('__delinstattribute__', '__setinstattribute__', '__getinstattribute__', '__name__', '__qualname__')
+
+	def __delattr__(self, name: str) -> None:
+		attribute: typing.Any = super().__getattribute__(name)
+
+		if name in __AccessRestrictedClass__.__OWN_ATTRS or not isinstance(attribute, __AccessRestrictedAttribute__):
+			super().__delattr__(name)
+		else:
+			stack: tuple[inspect.FrameInfo, ...] = Stream.LinqStream(inspect.stack()).skip(1).collect(tuple)
+
+			if attribute.check_access(self, None, stack):
+				attribute.__attribute__ = None
+				super().__delattr__(name)
+			else:
+				raise Exceptions.InaccessibleAttributeException(attribute.fail_message(self.__name__, name))
+
+	def __setattr__(self, name: str, value: typing.Any) -> None:
+		attribute: typing.Any = super().__getattribute__(name)
+
+		if name in __AccessRestrictedClass__.__OWN_ATTRS or not isinstance(attribute, __AccessRestrictedAttribute__):
+			super().__setattr__(name, value)
+		else:
+			stack: tuple[inspect.FrameInfo, ...] = Stream.LinqStream(inspect.stack()).skip(1).collect(tuple)
+
+			if attribute.check_access(self, None, stack):
+				attribute.__attribute__ = value
+			else:
+				raise Exceptions.InaccessibleAttributeException(attribute.fail_message(self.__name__, name))
+
+	def __getattribute__(self, name: str):
+		attribute: typing.Any = super().__getattribute__(name)
+
+		if name in __AccessRestrictedClass__.__OWN_ATTRS:
+			return super().__getattribute__(name)
+		elif isinstance(attribute, __AccessRestrictedAttribute__):
+			stack: tuple[inspect.FrameInfo, ...] = Stream.LinqStream(inspect.stack()).skip(1).collect(tuple)
+
+			if attribute.check_access(self, None, stack):
+				return attribute.__attribute__
+			else:
+				raise Exceptions.InaccessibleAttributeException(attribute.fail_message(self.__name__, name))
+
+		else:
+			return attribute
+
+	def __delinstattribute__[T](cls: type[T], instance: T, name: str) -> None:
+		attribute: typing.Any = super().__getattribute__(name)
+
+		if name in __AccessRestrictedClass__.__OWN_ATTRS or not isinstance(attribute, __AccessRestrictedAttribute__):
+			super().__delattr__(name)
+		else:
+			stack: tuple[inspect.FrameInfo, ...] = Stream.LinqStream(inspect.stack()).skip(2).collect(tuple)
+
+			if attribute.check_access(cls, instance, stack):
+				attribute.__attribute__ = None
+				super().__delattr__(name)
+			else:
+				raise Exceptions.InaccessibleAttributeException(attribute.fail_message(cls.__name__, name))
+
+	def __setinstattribute__[T](cls: type[T], instance: T, name: str, value: typing.Any) -> None:
+		attribute: typing.Any = super().__getattribute__(name)
+
+		if name in __AccessRestrictedClass__.__OWN_ATTRS or not isinstance(attribute, __AccessRestrictedAttribute__):
+			super().__setattr__(name, value)
+		else:
+			stack: tuple[inspect.FrameInfo, ...] = Stream.LinqStream(inspect.stack()).skip(2).collect(tuple)
+
+			if attribute.check_access(cls, instance, stack):
+				attribute.__attribute__ = value
+			else:
+				raise Exceptions.InaccessibleAttributeException(attribute.fail_message(cls.__name__, name))
+
+	def __getinstattribute__[T](cls: type[T], instance: T, name: str) -> typing.Any:
+		attribute: typing.Any = super().__getattribute__(name)
+
+		if name in __AccessRestrictedClass__.__OWN_ATTRS:
+			return super().__getattribute__(name)
+		elif isinstance(attribute, __AccessRestrictedAttribute__):
+			stack: tuple[inspect.FrameInfo, ...] = Stream.LinqStream(inspect.stack()).skip(2).collect(tuple)
+
+			if attribute.check_access(cls, instance, stack):
+				return types.MethodType(attribute.__attribute__, instance) if callable(attribute.__attribute__) else attribute.__attribute__
+			else:
+				raise Exceptions.InaccessibleAttributeException(attribute.fail_message(cls.__name__, name))
+
+		else:
+			return types.MethodType(attribute, instance) if callable(attribute) else attribute
 
 
-def ARC(class_def):
-	return AccessRestrictedClass()
+class __AccessRestrictedAttribute__[T]:
+	"""
+	INTERNAL CLASS; DO NOT USE
+	Attribute class for handling attributes with access restrictions
+	"""
+
+	def __init__(self, class_name: str, attribute: T):
+		"""
+		INTERNAL CLASS; DO NOT USE
+		Attribute class for handling attributes with access restrictions
+		:param class_name: The class name that owns this attribute
+		:param attribute: The attribute
+		:raises AssertionError: If 'class_name' is invalid
+		"""
+
+		assert isinstance(class_name, str) and len(class_name := str(class_name)) > 0, 'Invalid class name'
+		self.__class_name__: str = str(class_name)
+		self.__arc__: __AccessRestrictedClass__ = ...
+		self.__attribute__: T = attribute
+		self.__frame__: inspect.FrameInfo = Stream.LinqStream(inspect.stack()).skip_while(lambda frame: frame.frame.f_code.co_name != class_name).first_or_default(None)
+		assert self.__frame__ is not None, 'Failed to get frame'
+
+	def __repr__(self) -> str:
+		return f'<{self.access_qualifier} attribute \'{self.__class_name__}::{self.__attribute__.__name__}\' at {hex(id(self))}>'
+
+	def __str__(self):
+		return str(self.__attribute__)
+
+	def __call__(self, *args, **kwargs):
+		self.__attribute__(*args, **kwargs)
+
+	def check_access(self, arc: __AccessRestrictedClass__, instance: typing.Any, calling_stack: tuple[inspect.FrameInfo, ...]) -> bool:
+		"""
+		*ABSTRACT*
+		:param arc: The ARC
+		:param instance: The ARC instance
+		:param calling_stack: The calling frame stack
+		:return: Whether access should be granted
+		"""
+
+		return False
+
+	def fail_message(self, class_name: str, attribute_name: str) -> str:
+		"""
+		:param class_name: The containing class's name
+		:param attribute_name: The attribute name
+		:return: The message to display when access is rejected
+		"""
+
+		return f'Attribute \'{class_name}::{attribute_name}\' is {self.access_qualifier}'
+
+	@property
+	def arc(self) -> __AccessRestrictedClass__:
+		assert isinstance(self.__arc__, __AccessRestrictedClass__), 'ARC not set'
+		return self.__arc__
+
+	@property
+	def frame(self) -> inspect.FrameInfo:
+		"""
+		:return: The call frame this attribute was created in
+		"""
+
+		return self.__frame__
+
+	@property
+	def access_qualifier(self) -> str:
+		return 'locked'
 
 
-def Protected(sub_class, type_check: bool = False):
-	#print(variable_or_method)
-	pass
+class __PrivateAttribute__[T](__AccessRestrictedAttribute__[T]):
+	def check_access(self, arc: __AccessRestrictedClass__, instance: typing.Any, calling_stack: tuple[inspect.FrameInfo, ...]) -> bool:
+		for frame in calling_stack:
+			for variable in frame.frame.f_locals.values():
+				if type(variable) is self.arc:
+					return True
+
+		return False
+
+	@property
+	def access_qualifier(self) -> str:
+		return 'private'
+
+
+class __ProtectedAttribute__[T](__AccessRestrictedAttribute__[T]):
+	def check_access(self, arc: __AccessRestrictedClass__, instance: typing.Any, calling_stack: tuple[inspect.FrameInfo, ...]) -> bool:
+		for frame in calling_stack:
+			for variable in frame.frame.f_locals.values():
+				if isinstance(variable, self.arc):
+					return True
+
+		return False
+
+	@property
+	def access_qualifier(self) -> str:
+		return 'protected'
+
+
+class __FiledAttribute__[T](__AccessRestrictedAttribute__[T]):
+	def check_access(self, arc: __AccessRestrictedClass__, instance: typing.Any, calling_stack: tuple[inspect.FrameInfo, ...]) -> bool:
+		return os.path.abspath(self.frame.filename) == os.path.abspath(calling_stack[0].filename)
+
+	@property
+	def access_qualifier(self) -> str:
+		return 'filed'
+
+
+class __PackagedAttribute__[T](__AccessRestrictedAttribute__[T]):
+	def check_access(self, arc: __AccessRestrictedClass__, instance: typing.Any, calling_stack: tuple[inspect.FrameInfo, ...]) -> bool:
+		return os.path.dirname(os.path.abspath(self.frame.filename)) == os.path.dirname(os.path.dirname(calling_stack[0].filename))
+
+	@property
+	def access_qualifier(self) -> str:
+		return 'packaged'
+
+
+class __PublicAttribute__[T](__AccessRestrictedAttribute__[T]):
+	def check_access(self, arc: __AccessRestrictedClass__, instance: typing.Any, calling_stack: tuple[inspect.FrameInfo, ...]) -> bool:
+		return True
+
+	@property
+	def access_qualifier(self) -> str:
+		return 'public'
+
+
+def ARC(class_def: type | __AccessRestrictedClass__) -> __AccessRestrictedClass__:
+	"""
+	Decorator used to mark a class as supporting access restricted attributes
+	This will allow the use of the access decorators to control attribute access
+	:param class_def: The class to make access restricted
+	:return: The new ARC wrapper
+	:raises InvalidArgumentException: If 'class_def' is not a type
+	"""
+
+	Misc.raise_ifn(isinstance(class_def, type), Exceptions.InvalidArgumentException(ARC, 'class_def', type(class_def), (type,)))
+
+	if isinstance(type(class_def), __AccessRestrictedClass__):
+		return class_def
+
+	class MyARC(class_def, metaclass=__AccessRestrictedClass__):
+		def __delattr__(self, name: str) -> None:
+			type(self).__delinstattribute__(self, name)
+
+		def __setattr__(self, name: str, value: typing.Any) -> None:
+			type(self).__setinstattribute__(self, name, value)
+
+		def __getattribute__(self, name: str) -> typing.Any:
+			return type(self).__getinstattribute__(self, name)
+
+	MyARC.__name__ = class_def.__name__
+	MyARC.__qualname__ = class_def.__qualname__
+
+	for attribute in vars(class_def).values():
+		if isinstance(attribute, __AccessRestrictedAttribute__):
+			if attribute.__arc__ is ...:
+				attribute.__arc__ = MyARC
+
+	return MyARC
+
+
+def Private[T](attribute: T) -> __AccessRestrictedAttribute__[T]:
+	"""
+	Marks an attribute as 'private'
+	Private attributes may only be accessed within this class
+	:param attribute: The attribute to mark
+	:return: The access restricted attribute
+	"""
+
+	parts: list[str] = attribute.__qualname__.split('.')
+	Misc.raise_if(len(parts) < 2, ValueError('Supplied function is not bound to a class'))
+	class_name: str = parts[-2]
+	return __PrivateAttribute__(class_name, attribute)
+
+
+def Protected[T](attribute: T) -> __AccessRestrictedAttribute__[T]:
+	"""
+	Marks an attribute as 'protected'
+	Protected attributes may only be accessed within this class and child classes
+	:param attribute: The attribute to mark
+	:return: The access restricted attribute
+	"""
+
+	parts: list[str] = attribute.__qualname__.split('.')
+	Misc.raise_if(len(parts) < 2, ValueError('Supplied function is not bound to a class'))
+	class_name: str = parts[-2]
+	return __ProtectedAttribute__(class_name, attribute)
+
+
+def Filed[T](attribute: T) -> __AccessRestrictedAttribute__[T]:
+	"""
+	Marks an attribute as 'filed'
+	Files attributes may only be accessed within the same file
+	:param attribute: The attribute to mark
+	:return: The access restricted attribute
+	"""
+
+	parts: list[str] = attribute.__qualname__.split('.')
+	Misc.raise_if(len(parts) < 2, ValueError('Supplied function is not bound to a class'))
+	class_name: str = parts[-2]
+	return __FiledAttribute__(class_name, attribute)
+
+
+def Packaged[T](attribute: T) -> __AccessRestrictedAttribute__[T]:
+	"""
+	Marks an attribute as 'packaged'
+	Packaged attributes may only be accessed within the same package directory
+	:param attribute: The attribute to mark
+	:return: The access restricted attribute
+	"""
+
+	parts: list[str] = attribute.__qualname__.split('.')
+	Misc.raise_if(len(parts) < 2, ValueError('Supplied function is not bound to a class'))
+	class_name: str = parts[-2]
+	return __FiledAttribute__(class_name, attribute)
+
+
+def Public[T](attribute: T) -> __AccessRestrictedAttribute__[T]:
+	"""
+	Marks an attribute as 'public'
+	Public attributes may be accessed anywhere
+	*Containing class must also be marks as access restricted with the ARC decorator*
+	:param attribute: The attribute to mark
+	:return: The access restricted attribute
+	"""
+
+	parts: list[str] = attribute.__qualname__.split('.')
+	Misc.raise_if(len(parts) < 2, ValueError('Supplied function is not bound to a class'))
+	class_name: str = parts[-2]
+	return __PublicAttribute__(class_name, attribute)

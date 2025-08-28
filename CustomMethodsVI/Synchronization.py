@@ -3,15 +3,23 @@ from __future__ import annotations
 import multiprocessing
 import multiprocessing.synchronize
 import os
-import threading
 import struct
+import threading
 import time
 
 from . import Stream
 
 
 class ReaderWriterLock:
+	"""
+	Class representing a reader writer lock
+	"""
+
 	class __ThreadInfo__:
+		"""
+		INTERNAL CLASS
+		"""
+
 		def __init__(self, initial_thread: int, is_writer: bool):
 			self.__thread_queue__: list[int] = [initial_thread]
 			self.__is_writer__: bool = bool(is_writer)
@@ -27,6 +35,11 @@ class ReaderWriterLock:
 			return self.__is_writer__
 
 	def __init__(self):
+		"""
+		Class representing a reader writer lock
+		- Constructor -
+		"""
+
 		self.__queued_threads__: list[ReaderWriterLock.__ThreadInfo__] = []
 		self.__lock__: threading.RLock = threading.RLock()
 
@@ -39,6 +52,11 @@ class ReaderWriterLock:
 			raise IOError('Reader writer lock incomplete')
 
 	def acquire_reader(self) -> None:
+		"""
+		Acquires the reader lock
+		If no writer is in the queue, will return immediately
+		"""
+
 		thread_id: int = threading.current_thread().native_id
 		self.__lock__.acquire()
 		thread_info: ReaderWriterLock.__ThreadInfo__ = Stream.LinqStream(self.__queued_threads__).last_or_default()
@@ -71,6 +89,10 @@ class ReaderWriterLock:
 		self.__lock__.release()
 
 	def acquire_writer(self) -> None:
+		"""
+		Acquires the writer lock
+		If no reader or writer is in the queue, will return immediately
+		"""
 		thread_id: int = threading.current_thread().native_id
 		self.__lock__.acquire()
 		thread_info: ReaderWriterLock.__ThreadInfo__ = ReaderWriterLock.__ThreadInfo__(thread_id, True)
@@ -88,6 +110,10 @@ class ReaderWriterLock:
 		self.__lock__.release()
 
 	def release_reader(self) -> None:
+		"""
+		Releases the reader lock
+		"""
+
 		thread_id: int = threading.current_thread().native_id
 		self.__lock__.acquire()
 		thread_info: ReaderWriterLock.__ThreadInfo__ = Stream.LinqStream(self.__queued_threads__).first_or_default()
@@ -104,6 +130,10 @@ class ReaderWriterLock:
 		self.__lock__.release()
 
 	def release_writer(self) -> None:
+		"""
+		Releases the writer lock
+		"""
+
 		thread_id: int = threading.current_thread().native_id
 		self.__lock__.acquire()
 		thread_info: ReaderWriterLock.__ThreadInfo__ = Stream.LinqStream(self.__queued_threads__).first_or_default()
@@ -117,7 +147,16 @@ class ReaderWriterLock:
 
 
 class SpinLock:
+	"""
+	Class representing a spin lock
+	"""
+
 	def __init__(self):
+		"""
+		Class representing a spin lock
+		- Constructor -
+		"""
+
 		self.__source__ = multiprocessing.Value('Q')
 		self.__count__: int = 0
 
@@ -126,6 +165,11 @@ class SpinLock:
 			self.release()
 
 	def acquire(self) -> None:
+		"""
+		Acquires the lock
+		Blocks until lock is acquired
+		"""
+
 		lock_id: int = struct.unpack('=Q', struct.pack('=II', os.getpid(), threading.current_thread().native_id))[0]
 
 		while True:
@@ -136,6 +180,10 @@ class SpinLock:
 					return
 
 	def release(self) -> None:
+		"""
+		Releases the lock
+		"""
+
 		lock_id: int = struct.unpack('=Q', struct.pack('=II', os.getpid(), threading.current_thread().native_id))[0]
 
 		with self.__source__.get_lock():
@@ -149,6 +197,10 @@ class SpinLock:
 
 	@property
 	def acquired(self) -> bool:
+		"""
+		:return: Whether this thread has the lock
+		"""
+
 		lock_id: int = struct.unpack('=Q', struct.pack('=II', os.getpid(), threading.current_thread().native_id))[0]
 
 		with self.__source__.get_lock():

@@ -7,239 +7,518 @@ import sys
 import typing
 import types
 
+from .. import Iterable
+
 
 class MouseInfo:
+	"""
+	Class holding mouse info
+	"""
+
 	def __init__(self, __id: int, x: int, y: int, z: int, bstate: int):
+		"""
+		Class holding mouse info
+		- Constructor -
+		:param __id: The mouse device id
+		:param x: The mouse x-coordinate
+		:param y: The mouse y-coordinate
+		:param z: The mouse number
+		:param bstate: The button state
+		"""
+
 		self.__info__: tuple[int, int, int, int, int] = (__id, x, y, z, bstate)
 
-	def __iter__(self):
+	def __iter__(self) -> typing.Iterator[int]:
 		return iter(self.__info__)
 
 	@property
 	def alt_pressed(self) -> bool:
+		"""
+		:return: Whether 'alt' was pressed when this struct was generated
+		"""
+
 		return (self.__info__[4] & curses.BUTTON_ALT) != 0
 
 	@property
 	def shift_pressed(self) -> bool:
+		"""
+		:return: Whether 'shift' was pressed when this struct was generated
+		"""
+
 		return (self.__info__[4] & curses.BUTTON_SHIFT) != 0
 
 	@property
 	def crtl_pressed(self) -> bool:
+		"""
+		:return: Whether 'control' was pressed when this struct was generated
+		"""
+
 		return (self.__info__[4] & curses.BUTTON_CTRL) != 0
 
 	@property
 	def left_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse left-clicked
+		"""
+
 		return self.left_sngl_clicked or self.left_dbl_clicked or self.left_trpl_clicked
 
 	@property
 	def middle_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse middle-clicked
+		"""
+
 		return self.middle_sngl_clicked or self.middle_dbl_clicked or self.middle_trpl_clicked
 
 	@property
 	def right_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse right-clicked
+		"""
+
 		return self.right_sngl_clicked or self.right_dbl_clicked or self.right_trpl_clicked
 
 	@property
 	def scroll_up_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse scrolled up
+		"""
+
 		return self.scroll_up_sngl_clicked or self.scroll_up_dbl_clicked or self.scroll_up_trpl_clicked
 
 	@property
 	def scroll_down_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse scrolled down
+		"""
+
 		return self.scroll_down_sngl_clicked or self.scroll_down_dbl_clicked or self.scroll_down_trpl_clicked
 
 	@property
 	def left_sngl_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse left-clicked once
+		"""
+
 		return (self.__info__[4] & curses.BUTTON1_CLICKED) != 0
 
 	@property
 	def middle_sngl_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse middle-clicked once
+		"""
+
 		return (self.__info__[4] & curses.BUTTON2_CLICKED) != 0
 
 	@property
 	def right_sngl_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse right-clicked once
+		"""
+
 		return (self.__info__[4] & curses.BUTTON3_CLICKED) != 0
 
 	@property
 	def scroll_up_sngl_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse scrolled up once
+		"""
+
 		return (self.__info__[4] & curses.BUTTON4_CLICKED) != 0
 
 	@property
 	def scroll_down_sngl_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse scrolled down once
+		"""
+
 		return (self.__info__[4] & curses.BUTTON5_CLICKED) != 0
 
 	@property
 	def left_dbl_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse left-clicked twice
+		"""
+
 		return (self.__info__[4] & curses.BUTTON1_DOUBLE_CLICKED) != 0
 
 	@property
 	def middle_dbl_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse middle-clicked twice
+		"""
+
 		return (self.__info__[4] & curses.BUTTON2_DOUBLE_CLICKED) != 0
 
 	@property
 	def right_dbl_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse right-clicked twice
+		"""
+
 		return (self.__info__[4] & curses.BUTTON3_DOUBLE_CLICKED) != 0
 
 	@property
 	def scroll_up_dbl_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse scrolled up twice
+		"""
+
 		return (self.__info__[4] & curses.BUTTON4_DOUBLE_CLICKED) != 0
 
 	@property
 	def scroll_down_dbl_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse scrolled down twice
+		"""
+
 		return (self.__info__[4] & curses.BUTTON5_DOUBLE_CLICKED) != 0
 
 	@property
 	def left_trpl_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse left-clicked thrice
+		"""
+
 		return (self.__info__[4] & curses.BUTTON1_TRIPLE_CLICKED) != 0
 
 	@property
 	def middle_trpl_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse middle-clicked thrice
+		"""
+
 		return (self.__info__[4] & curses.BUTTON2_TRIPLE_CLICKED) != 0
 
 	@property
 	def right_trpl_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse right-clicked thrice
+		"""
+
 		return (self.__info__[4] & curses.BUTTON3_TRIPLE_CLICKED) != 0
 
 	@property
 	def scroll_up_trpl_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse scrolled up thrice
+		"""
+
 		return (self.__info__[4] & curses.BUTTON4_TRIPLE_CLICKED) != 0
 
 	@property
 	def scroll_down_trpl_clicked(self) -> bool:
+		"""
+		:return: Whether this mouse scrolled down thrice
+		"""
+
 		return (self.__info__[4] & curses.BUTTON5_TRIPLE_CLICKED) != 0
 
 	@property
 	def left_pressed(self) -> bool:
+		"""
+		:return: Whether this mouse's left button was pressed
+		"""
+
 		return (self.__info__[4] & curses.BUTTON1_PRESSED) != 0
 
 	@property
 	def middle_pressed(self) -> bool:
+		"""
+		:return: Whether this mouse's middle button was pressed
+		"""
+
 		return (self.__info__[4] & curses.BUTTON2_PRESSED) != 0
 
 	@property
 	def right_pressed(self) -> bool:
+		"""
+		:return: Whether this mouse's right button was pressed
+		"""
+
 		return (self.__info__[4] & curses.BUTTON3_PRESSED) != 0
 
 	@property
 	def scroll_up_pressed(self) -> bool:
+		"""
+		:return: Whether this mouse was scrolling up
+		"""
+
 		return (self.__info__[4] & curses.BUTTON4_PRESSED) != 0
 
 	@property
 	def scroll_down_pressed(self) -> bool:
+		"""
+		:return: Whether this mouse was scrolling down
+		"""
+
 		return (self.__info__[4] & curses.BUTTON5_PRESSED) != 0
 
 	@property
 	def left_released(self) -> bool:
+		"""
+		:return: Whether this mouse's left button was released
+		"""
+
 		return (self.__info__[4] & curses.BUTTON1_RELEASED) != 0
 
 	@property
 	def middle_released(self) -> bool:
+		"""
+		:return: Whether this mouse's middle button was released
+		"""
+
 		return (self.__info__[4] & curses.BUTTON2_RELEASED) != 0
 
 	@property
 	def right_released(self) -> bool:
+		"""
+		:return: Whether this mouse's right button was released
+		"""
+
 		return (self.__info__[4] & curses.BUTTON3_RELEASED) != 0
 
 	@property
 	def scroll_up_released(self) -> bool:
+		"""
+		:return: Whether this mouse stopped scrolling up
+		"""
+
 		return (self.__info__[4] & curses.BUTTON4_RELEASED) != 0
 
 	@property
 	def scroll_down_released(self) -> bool:
+		"""
+		:return: Whether this mouse stopped scrolling down
+		"""
+
 		return (self.__info__[4] & curses.BUTTON5_RELEASED) != 0
 
 	@property
 	def mouse_id(self) -> int:
+		"""
+		:return: The mouse ID
+		"""
+
 		return self.__info__[0]
 
 	@property
 	def bstate(self) -> int:
+		"""
+		:return: The button states
+		"""
+
 		return self.__info__[4]
 
 	@property
 	def pos_x(self) -> int:
+		"""
+		:return: The mouse x position
+		"""
+
 		return self.__info__[1]
 
 	@property
 	def pos_y(self) -> int:
+		"""
+		:return: The mouse y position
+		"""
+
 		return self.__info__[2]
 
 	@property
 	def pos_z(self) -> int:
+		"""
+		:return: The mouse index
+		"""
+
 		return self.__info__[3]
 
 	@property
 	def position(self) -> tuple[int, int, int]:
+		"""
+		:return: The mouse position
+		"""
+
 		return self.pos_x, self.pos_y, self.pos_z
 
 
 class BorderInfo:
+	"""
+	Class holding information on text borders
+	"""
+
 	@classmethod
 	def EmptyBorder(cls) -> BorderInfo:
+		"""
+		:return: An empty border
+		"""
+
 		return cls('', '', '', '', '', '', '', '')
 
 	def __init__(self, t: str = '─', r: str = '│', b: str = '─', l: str = '│', tr: str = '┐', br: str = '┘', bl: str = '└', tl: str = '┌'):
+		"""
+		Class holding information on text borders
+		- Constructor -
+		:param t: The character to use for the top side of the border
+		:param r: The character to use for the right side of the border
+		:param b: The character to use for the bottom side of the border
+		:param l: The character to use for the left side of the border
+		:param tr: The character to use for the top-right corner of the border
+		:param br: The character to use for the bottom-right corner of the border
+		:param bl: The character to use for the bottom-left corner of the border
+		:param tl: The character to use for the top-left corner of the border
+		:raises AssertionError: If any argument is not a string of length 1 or an empty string
+		"""
+
 		self.__border__: tuple[str, str, str, str, str, str, str, str] = (t, r, b, l, tr, br, bl, tl)
 		assert all(isinstance(x, str) and len(x) <= 1 for x in self.__border__), 'One or more border values are incorrect (not a string or len(x) > 1)'
 
 	@property
 	def top(self) -> str:
+		"""
+		:return: The character used for the top side of the border
+		"""
+
 		return self.__border__[0]
 
 	@property
 	def right(self) -> str:
+		"""
+		:return: The character used for the right side of the border
+		"""
+
 		return self.__border__[1]
 
 	@property
 	def bottom(self) -> str:
+		"""
+		:return: The character used for the bottom side of the border
+		"""
+
 		return self.__border__[2]
 
 	@property
 	def left(self) -> str:
+		"""
+		:return: The character used for the left side of the border
+		"""
+
 		return self.__border__[3]
 
 	@property
 	def top_right(self) -> str:
+		"""
+		:return: The character used for the top-right corner of the border
+		"""
+
 		return self.__border__[4]
 
 	@property
 	def bottom_right(self) -> str:
+		"""
+		:return: The character used for the bottom-right corner of the border
+		"""
+
 		return self.__border__[5]
 
 	@property
 	def bottom_left(self) -> str:
+		"""
+		:return: The character used for the bottom-left corner of the border
+		"""
+
 		return self.__border__[6]
 
 	@property
 	def top_left(self) -> str:
+		"""
+		:return: The character used for the top-left corner of the border
+		"""
+
 		return self.__border__[7]
 
 
 class Color:
+	"""
+	Class representing a single color
+	"""
+
 	@classmethod
 	def fromhex(cls, hexstring: str) -> Color:
-		return cls(int(hexstring.lstrip('#').rjust(6, '0'), 16))
+		"""
+		Creates a color from a hex-string
+		:param hexstring: The hex-string
+		:return: The Color instance
+		:raises AssertionError: If 'hexstring' is not a string
+		"""
+
+		assert isinstance(hexstring, str), 'Not a string'
+		return cls(int(str(hexstring).lstrip('#').rjust(6, '0'), 16))
 
 	@classmethod
 	def fromrgb(cls, r: int, g: int, b: int) -> Color:
-		assert 0 <= r < 256, 'Red out of range'
-		assert 0 <= g < 256, 'Green out of range'
-		assert 0 <= b < 256, 'Blue out of range'
+		"""
+		Creates a color from RGB
+		:param r: The red component
+		:param g: The green component
+		:param b: The blue component
+		:return: The Color instance
+		:raises AssertionError: If any component is not an integer in the range [0x00, 0xFF]
+		"""
+
+		assert isinstance(r, int) and 0 <= (r := int(r)) < 256, 'Red out of range'
+		assert isinstance(g, int) and 0 <= (r := int(g)) < 256, 'Green out of range'
+		assert isinstance(b, int) and 0 <= (r := int(b)) < 256, 'Blue out of range'
 		return cls((r << 16) | (g << 8) | b)
 
 	@classmethod
 	def fromcurses(cls, color: int) -> Color:
+		"""
+		Creates a color from a curses color code
+		:param color: The curses color code
+		:return: The Color instance
+		:raises AssertionError: If 'color' is not an integer >= 0
+		"""
+
+		assert isinstance(color, int) and (color := int(color)) > 0, 'Invalid curses color-code'
 		r, g, b = curses.color_content(color)
 		return cls.fromrgb(round(r / 1000 * 255), round(g / 1000 * 255), round(b / 1000 * 255))
 
 	@classmethod
 	def fromcursesrgb(cls, r: int, g: int, b: int) -> Color:
+		"""
+		Creates a color from curses RGB
+		:param r: The red component
+		:param g: The green component
+		:param b: The blue component
+		:return: The Color instance
+		:raises AssertionError: If any component is not an integer in the range [0, 1000]
+		"""
+
+		assert isinstance(r, int) and 0 <= (r := int(r)) <= 1000, 'Red out of range'
+		assert isinstance(g, int) and 0 <= (g := int(g)) <= 1000, 'Green out of range'
+		assert isinstance(b, int) and 0 <= (b := int(b)) <= 1000, 'Blue out of range'
 		return cls.fromrgb(round(r / 1000 * 255), round(g / 1000 * 255), round(b / 1000 * 255))
 
 	def __init__(self, color: int):
-		assert 0 <= color <= 0xFFFFFF, 'Invalid color'
+		"""
+		Class representing a single color
+		- Constructor -
+		:param color: The color integer
+		:raises AssertionError: If 'color' is not an integer in the range [0x000000, 0xFFFFFF]
+		"""
+
+		assert isinstance(color, int) and 0 <= (color := int(color)) <= 0xFFFFFF, 'Invalid color'
 		self.__color__: int = int(color)
 
 	def __eq__(self, other: Color) -> bool:
+		"""
+		:param other: The other color to compare
+		:return: Whether this color equals the other color
+		"""
+
 		return self.__color__ == other.__color__ if isinstance(other, type(self)) else NotImplemented
 
 	def __hash__(self) -> int:
@@ -256,26 +535,56 @@ class Color:
 
 	@property
 	def color(self) -> int:
+		"""
+		:return: The color integer of this color
+		"""
+
 		return self.__color__
 
 	@property
 	def rgb(self) -> tuple[int, int, int]:
+		"""
+		:return: The RGB components of this color
+		"""
+
 		return (self.__color__ >> 16) & 0xFF, (self.__color__ >> 8) & 0xFF, self.__color__ & 0xFF
 
 	@property
 	def curses_rgb(self) -> tuple[int, int, int]:
+		"""
+		:return: The curses RGB components of this color
+		"""
+
 		return round(((self.__color__ >> 16) & 0xFF) / 255 * 1000), round(((self.__color__ >> 8) & 0xFF) / 255 * 1000), round((self.__color__ & 0xFF) / 255 * 1000)
 
 	@property
 	def hex(self) -> str:
+		"""
+		:return: The hex-string for this color
+		"""
+
 		r, g, b = self.rgb
 		return f'#{r:02X}{g:02X}{b:02X}'
 
 
 class AnsiStr:
+	"""
+	Class representing an ANSI string capable of being interpreted by curses
+	"""
+
 	class AnsiFormat:
+		"""
+		Class holding ANSI formatting info
+		"""
+
 		@classmethod
 		def default(cls) -> AnsiStr.AnsiFormat:
+			"""
+			Generates the default ANSI format
+			Equivalent to '\033[0m' ANSI code
+			:return: The default ANSI format
+			"""
+
 			ansi: AnsiStr.AnsiFormat = AnsiStr.AnsiFormat()
 			ansi.reset = False
 			ansi.bold = False
@@ -289,6 +598,11 @@ class AnsiStr:
 			return ansi
 
 		def __init__(self):
+			"""
+			Class holding ANSI formatting info
+			- Constructor -
+			"""
+
 			self.reset: bool | None = None
 			self.bold: bool | None = None
 			self.dim: bool | None = None
@@ -308,6 +622,10 @@ class AnsiStr:
 			return self.reset == other.reset and self.bold == other.bold and self.dim == other.dim and self.italic == other.italic and self.underline == other.underline and self.blink == other.blink and self.reverse == other.reverse and self.invis == other.invis and self.protect == other.protect and self.foreground_color == other.foreground_color and self.background_color == other.background_color
 
 		def __str__(self) -> str:
+			"""
+			:return: This format as an ANSI encoding
+			"""
+
 			base: list[str] = ['\033[']
 
 			if self.reset:
@@ -347,6 +665,10 @@ class AnsiStr:
 			return repr(str(self))
 
 		def copy(self) -> AnsiStr.AnsiFormat:
+			"""
+			:return: A copy of this ANSI format
+			"""
+
 			copy: AnsiStr.AnsiFormat = AnsiStr.AnsiFormat()
 			copy.reset = False
 			copy.bol = self.bold
@@ -362,6 +684,13 @@ class AnsiStr:
 			return copy
 
 		def overlay(self, ansi: AnsiStr.AnsiFormat) -> AnsiStr.AnsiFormat:
+			"""
+			Overlays another ANSI format onto this one
+			Any unset value in this format is overwritten
+			:param ansi: The ANSI format to overlay
+			:return: The combined ANSI format
+			"""
+
 			defaults: AnsiStr.AnsiFormat = AnsiStr.AnsiFormat.default()
 			overlay: AnsiStr.AnsiFormat = AnsiStr.AnsiFormat()
 			overlay.reset = False
@@ -379,6 +708,12 @@ class AnsiStr:
 
 	@classmethod
 	def from_pairs(cls, pairs: typing.Iterable[tuple[str, AnsiStr.AnsiFormat]]) -> AnsiStr:
+		"""
+		Constructs an AnsiStr from a list of strings and their associated ANSI formats
+		:param pairs: The string format pairs
+		:return: The constructed ANSI string
+		"""
+
 		ansi_str: AnsiStr = cls('')
 		last_format: AnsiStr.AnsiFormat = AnsiStr.AnsiFormat()
 		raw_string: list[str] = []
@@ -393,7 +728,15 @@ class AnsiStr:
 		ansi_str.__raw_string__ = ''.join(raw_string)
 		return ansi_str
 
-	def __init__(self, string: str | AnsiStr):
+	def __init__(self, string: str | AnsiStr | Iterable.String):
+		"""
+		Class representing an ANSI string capable of being interpreted by curses
+		- Constructor -
+		:param string: The string or AnsiStr instance
+		:raises ValueError: If an ANSI escape sequence is invalid
+		:raises AssertionError: If 'string' is not a string, AnsiStr instance, or String instance
+		"""
+
 		if isinstance(string, AnsiStr):
 			self.__raw_string__ = string.__raw_string__
 			self.__ansi_format__ = {an: si.copy() for an, si in string.__ansi_format__.items()}
@@ -401,13 +744,14 @@ class AnsiStr:
 			self.__groups__: tuple[tuple[str, AnsiStr.AnsiFormat]] | None = string.__groups__
 			return
 
+		assert isinstance(string, (str, Iterable.String)), 'Not a string'
 		raw_string: list[str] = []
 		ansi_format: AnsiStr.AnsiFormat = AnsiStr.AnsiFormat.default()
 		ansi_attrs: dict[int, AnsiStr.AnsiFormat] = {}
 		skip: int = 0
 		true_index: int = 0
 
-		for i, char in enumerate(string):
+		for i, char in enumerate(str(string)):
 			if skip > 0:
 				skip -= 1
 				continue
@@ -501,7 +845,12 @@ class AnsiStr:
 		self.__groups__: tuple[tuple[str, AnsiStr.AnsiFormat]] | None = None
 
 	def __contains__(self, substr: str | AnsiStr) -> bool:
-		return (substr.__raw_string__ if isinstance(substr, type(self)) else substr) in self.__raw_string__
+		"""
+		:param substr: The substring to check
+		:return: Whether this string contains the specified substring
+		"""
+
+		return (substr.__raw_string__ if isinstance(substr, type(self)) else substr) in self.__raw_string__ if isinstance(substr, (str, AnsiStr)) else False
 
 	def __repr__(self) -> str:
 		return repr(str(self))
@@ -521,15 +870,26 @@ class AnsiStr:
 		return ''.join(output)
 
 	def __format__(self, format_spec: str) -> str:
+		assert isinstance(format_spec, str)
 		return f'{str(self):{format_spec}}'
 
 	def __iter__(self) -> typing.Iterator[str]:
 		return iter(self.__raw_string__)
 
 	def __len__(self) -> int:
+		"""
+		:return: The length of the string plus the number of format groups
+		"""
+
 		return max(len(self.__raw_string__), *tuple(x + 1 for x in self.__ansi_format__.keys())) if len(self.__ansi_format__) else len(self.__raw_string__)
 
 	def __getitem__(self, index: int | slice) -> AnsiStr:
+		"""
+		:param index: The index or indices to get
+		:return: A character or substring
+		:raises TypeError: If the indices are not integers
+		"""
+
 		copy: AnsiStr = AnsiStr('')
 		copy.__raw_string__ = self.__raw_string__[index]
 		indices: tuple[int] = (int(index),) if isinstance(index, int) else tuple(range(0 if index.start is None else int(index.start), len(self) if index.stop is None else int(index.stop), 1 if index.step is None else int(index.step))) if isinstance(index, slice) else None
@@ -550,27 +910,81 @@ class AnsiStr:
 		return copy
 
 	def __mul__(self, other: int) -> AnsiStr:
+		"""
+		Multiplies this string 'other' times
+		:param other: The amount of times to multiply by
+		:return: The multiplied string
+		"""
+
 		return AnsiStr(str(self) * int(other)) if isinstance(other, int) else NotImplemented
 
 	def __rmul__(self, other: int) -> AnsiStr:
+		"""
+		Multiplies this string 'other' times
+		:param other: The amount of times to multiply by
+		:return: The multiplied string
+		"""
+
 		return AnsiStr(str(self) * int(other)) if isinstance(other, int) else NotImplemented
 
 	def __add__(self, other: AnsiStr | str) -> AnsiStr:
+		"""
+		Concatenates this string with 'other'
+		:param other: The second string
+		:return: The concatenated string
+		"""
+
 		return AnsiStr(str(self) + str(other)) if isinstance(other, (str, AnsiStr)) else NotImplemented
 
 	def __radd__(self, other: AnsiStr | str) -> str:
+		"""
+		Concatenates this string to 'other'
+		:param other: The first string
+		:return: The concatenated string
+		"""
+
 		return str(self) + str(other) if isinstance(other, (str, AnsiStr)) else NotImplemented
 
 	def index(self, substr: str | AnsiStr, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
+		"""
+		Finds the index of the substring in this string
+		:param substr: The substring to scan for
+		:param start: The start index to begin scanning at
+		:param stop: The stop index to stop scanning at
+		:return: The index of the substring
+		:raises ValueError: If substring was not found
+		"""
+
 		return self.__raw_string__.index(substr.__raw_string__ if isinstance(substr, type(self)) else substr, start, stop)
 
 	def rindex(self, substr: str | AnsiStr, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
+		"""
+		Finds the index of the substring in this string
+		:param substr: The substring to scan for
+		:param start: The start index to begin scanning at
+		:param stop: The stop index to stop scanning at
+		:return: The index of the substring
+		:raises ValueError: If substring was not found
+		"""
+
 		return self.__raw_string__.rindex(substr.__raw_string__ if isinstance(substr, type(self)) else substr, start, stop)
 
 	def find(self, substr: str | AnsiStr, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
+		"""
+		Finds the index of the substring in this string
+		:param substr: The substring to scan for
+		:param start: The start index to begin scanning at
+		:param stop: The stop index to stop scanning at
+		:return: The index of the substring or -1 if not found
+		"""
+
 		return self.__raw_string__.find(substr.__raw_string__ if isinstance(substr, type(self)) else substr, start, stop)
 
 	def pairs(self) -> typing.Iterator[tuple[str, AnsiStr.AnsiFormat]]:
+		"""
+		:return: A tuple containing the single character and the ANSI format that character will use
+		"""
+
 		if self.__pairs__ is not None:
 			for ansi in self.__pairs__:
 				yield ansi
@@ -591,6 +1005,14 @@ class AnsiStr:
 		self.__pairs__ = tuple(pairs)
 
 	def format_groups(self, delimiter: str = '', keep_delimiter: bool = False) -> typing.Iterator[tuple[str, AnsiStr.AnsiFormat]]:
+		"""
+		Breaks the string into groups where each group uses the same ANSI formatting
+		Also splits the string around an optional delimiter
+		:param delimiter: The characters to split around
+		:param keep_delimiter: Whether to keep the delimiters in the final result
+		:return: The split/grouped string
+		"""
+
 		if self.__pairs__ is not None:
 			for ansi in self.__pairs__:
 				yield ansi
@@ -628,6 +1050,13 @@ class AnsiStr:
 			self.__groups__ = tuple(groups)
 
 	def split(self, separator: typing.Optional[str] = ..., max_split: int = -1) -> list[AnsiStr]:
+		"""
+		Splits this string about a delimiter
+		:param separator: The delimiter to split around
+		:param max_split: The maximum number of times to split or -1 for infinite
+		:return: The split string
+		"""
+
 		if max_split == 0:
 			return [AnsiStr(self)]
 
@@ -654,11 +1083,30 @@ class AnsiStr:
 
 	@property
 	def raw(self) -> str:
+		"""
+		:return: The raw string with ANSI encoding stripped
+		"""
+
 		return self.__raw_string__
 
 
 class Font:
+	"""
+	Class holding font information
+	"""
+
 	def __init__(self, font_name: str, font_size: tuple[int, int], font_weight: int):
+		"""
+		Class holding font information
+		- Constructor -
+		:param font_name: The font name
+		:param font_size: The font size
+		:param font_weight: The font weight
+		"""
+
+		assert isinstance(font_name, str), 'Not a string'
+		assert isinstance(font_size, tuple) and len(font_size := tuple(font_size)) == 2 and all(isinstance(x, int) for x in font_size), 'Invalid font size'
+		assert isinstance(font_weight, int) and (font_weight := int(font_weight)) > 0, 'Invalid font weight'
 		self.__font__: tuple[str, int, int, int] = (font_name, font_size[0], font_size[1], font_weight)
 
 	def __repr__(self) -> str:
@@ -670,39 +1118,78 @@ class Font:
 
 	@property
 	def fontname(self) -> str:
+		"""
+		:return: The font name
+		"""
+
 		return self.__font__[0]
 
 	@property
 	def fontsize(self) -> tuple[int, int]:
+		"""
+		:return: The font size
+		"""
+
 		return self.__font__[1], self.__font__[2]
 
 	@property
 	def fontweight(self) -> int:
+		"""
+		:return: The font weight
+		"""
+
 		return self.__font__[3]
 
 	@fontname.setter
 	def fontname(self, font_name: str) -> None:
+		"""
+		Sets the font name
+		:param font_name: The new font name
+		:raises AssertionError: If 'font_name' is not a string
+		"""
+
+		assert isinstance(font_name, str), 'Not a string'
 		_, b, c, d = self.__font__
 		self.__font__ = (str(font_name), b, c, d)
 
 	@fontsize.setter
 	def fontsize(self, font_size: tuple[int, int]) -> None:
+		"""
+		Sets the font size
+		:param font_size: The new font size (w, h)
+		:raises AssertionError: If 'font_size' is not a tuple with 2 integers
+		"""
+
+		assert isinstance(font_size, tuple) and len(font_size := tuple(font_size)) == 2 and all(isinstance(x, int) for x in font_size), 'Invalid font size'
 		a, _1, _2, d = self.__font__
 		self.__font__ = (a, int(font_size[0]), int(font_size[1]), d)
 
 	@fontweight.setter
 	def fontweight(self, font_weight: int) -> None:
+		"""
+		Sets the font name
+		:param font_weight: The new font weight
+		:raises AssertionError: If 'font_weight' is not a positive integer
+		"""
+
+		assert isinstance(font_weight, int) and (font_weight := int(font_weight)) > 0, 'Invalid font weight'
 		a, b, c, _ = self.__font__
 		self.__font__ = (a, b, c, int(font_weight))
 
 
-class WidgetStruct:
-	def __init__(self, widget: int):
-		self.__wid__: int = widget
-
-
 class SerializableCallable:
+	"""
+	Allows module-level callables to be serialized and sent
+	"""
+
 	def __init__(self, global_callable: typing.Callable):
+		"""
+		Allows module-level callables to be serialized and sent
+		- Constructor -
+		:param global_callable: The callable to serialize
+		:raises AssertionError: If not callable
+		"""
+
 		assert callable(global_callable)
 		module: types.ModuleType = sys.modules[global_callable.__module__]
 		self.__module_file__: str = module.__file__

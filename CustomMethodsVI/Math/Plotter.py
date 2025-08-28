@@ -9,7 +9,8 @@ import PIL.ImageTk
 import math
 import matplotlib.cm
 import numpy
-import numpy as np
+import numpy.exceptions
+import numpy.polynomial.polyutils
 import scipy
 import sys
 import typing
@@ -24,11 +25,27 @@ from .. import Misc
 
 class AxisPlot2D(object):
 	"""
-	[AxisPlot2D] - Base class representing plots with axes
+	Base class representing plots with axes
 	"""
 
 	class Axis:
+		"""
+		Class representing a single plot axis
+		"""
+
 		def __init__(self, name: str, center: tuple[float, float], angle: float, color: int, minor_spacing: float | None, major_spacing: int | None, tick_offset: int):
+			"""
+			Class representing a single plot axis
+			- Constructor -
+			:param name: The axis name
+			:param center: The axis plot-local position
+			:param angle: The axis angle in degrees
+			:param color: The axis hex encoded RGBA color
+			:param minor_spacing: The plot spacing between minor ticks or None to disable
+			:param major_spacing: The number of minor ticks between major ticks or None to disable
+			:param tick_offset: The amount of minor ticks to shift major ticks
+			"""
+
 			self.__axis_name__: str = str(name)
 			self.__position__: tuple[float, float] = (float(center[0]), float(center[1]))
 			self.__angle__: float = float(angle)
@@ -37,73 +54,162 @@ class AxisPlot2D(object):
 			self.__major_spacing__: int | None = None if major_spacing is None else int(major_spacing)
 			self.__tick_offset__: int = int(tick_offset)
 
-		def axis_info(self, *, color: int = ..., minor_spacing: float | None = ..., major_spacing: int | None = ..., tick_offset: int = ...) -> None:
+		def axis_info(self, *, center: tuple[float, float] = ..., angle: float = ..., color: int = ..., minor_spacing: float | None = ..., major_spacing: int | None = ..., tick_offset: int = ...) -> None:
+			"""
+			Modifies this axis's attributes
+			Any attribute left blank will not be updated
+			:param center: The new axis plot-local position
+			:param angle: The new axis angle in degrees
+			:param color: The new axis hex encoded RGBA color
+			:param minor_spacing: The new plot spacing between minor ticks or None to disable
+			:param major_spacing: The new number of minor ticks between major ticks or None to disable
+			:param tick_offset: The new amount of minor ticks to shift major ticks
+			"""
+
+			if center is not None and center is not ...:
+				assert hasattr(center, '__iter__') and len(center := tuple(center)) == 2 and all(isinstance(x, (float, int)) for x in center), 'Center must be an iterable with 2 numerical coordinates'
+
 			self.__color__ = self.__color__ if color is ... or color is None else (int(color) & 0xFFFFFFFF)
+			self.__angle__ = self.__angle__ if angle is ... or angle is None else float(angle) % 360
+			self.__position__ = self.__position__ if center is ... or center is None else center
 			self.__minor_spacing__: float | None = self.__minor_spacing__ if minor_spacing is ... else None if minor_spacing is None else float(minor_spacing)
 			self.__major_spacing__: int | None = self.__major_spacing__ if major_spacing is ... else None if major_spacing is None else int(major_spacing)
 			self.__tick_offset__: int = self.__tick_offset__ if tick_offset is ... or tick_offset is None else int(tick_offset)
 
 		@property
 		def name(self) -> str:
+			"""
+			:return: The name of this axis
+			"""
+
 			return self.__axis_name__
 
 		@property
 		def position(self) -> tuple[float, float]:
+			"""
+			:return: The plot-local position of this axis
+			"""
+
 			return self.__position__
+
+		@position.setter
+		def position(self, position: tuple[float, float]) -> None:
+			"""
+			The plot-local position of this axis
+			:param position: The new position
+			:raises ValueError: If the new position is not iterable, has a length other than 2, or contains non-numerical values
+			"""
+
+			Misc.raise_ifn(hasattr(position, '__iter__') and len(position := tuple(position)) == 2 and all(isinstance(x, (float, int)) for x in position), ValueError('Position must be an iterable with 2 numerical coordinates'))
+			self.__position__ = position
 
 		@property
 		def angle(self) -> float:
+			"""
+			:return: The axis angle in degrees
+			"""
+
 			return self.__angle__
+
+		@angle.setter
+		def angle(self, angle: float) -> None:
+			"""
+			The axis angle in degrees
+			:param angle: The new angle in degrees
+			"""
+
+			self.__angle__ = float(angle) % 360
 
 		@property
 		def color(self) -> int:
+			"""
+			:return: The hex encoded RGBA color
+			"""
+
 			return self.__color__
 
 		@color.setter
 		def color(self, color: int) -> None:
+			"""
+			The hex encoded RGBA color
+			:param color: The new axis color
+			"""
+
 			self.__color__ = int(color) & 0xFFFFFFFF
 
 		@property
 		def minor_spacing(self) -> float:
+			"""
+			:return: The number of graph units between minor ticks
+			"""
+
 			return self.__minor_spacing__
 
 		@minor_spacing.setter
 		def minor_spacing(self, spacing: float) -> None:
+			"""
+			The number of graph units between minor ticks
+			:param spacing: The new minor tick spacing
+			"""
+
 			self.__minor_spacing__ = abs(float(spacing))
 
 		@property
 		def major_spacing(self) -> int:
+			"""
+			:return: The number of minor ticks between major ticks
+			"""
 			return self.__major_spacing__
 
 		@major_spacing.setter
 		def major_spacing(self, spacing: int) -> None:
+			"""
+			The number of minor ticks between major ticks
+			:param spacing: The new major tick spacing
+			"""
+
 			self.__major_spacing__ = abs(int(spacing))
 
 		@property
 		def tick_offset(self) -> int:
+			"""
+			:return: The amount of minor ticks to shift major ticks
+			"""
+
 			return self.__tick_offset__
 
 		@tick_offset.setter
 		def tick_offset(self, offset: int) -> None:
+			"""
+			The amount of minor ticks to shift major ticks
+			:param offset: The new tick offset
+			"""
+
 			self.__tick_offset__ = abs(int(offset))
 
 	def __init__(self, plot: Plot2D | MultiPlot2D):
+		"""
+		Base class representing plots with axes
+		- Constructor -
+		:param plot: The plot requiring axes
+		"""
+
 		super(AxisPlot2D, self).__init__()
 		self.__source__: Plot2D | MultiPlot2D = plot
 		self.__axes__: dict[str, AxisPlot2D.Axis] = {}
 
-	def add_axis(self, name: str, center: tuple[float, float], angle: float = 0, color: int = 0xEEEEEEFF, minor_spacing: float = 1, major_spacing: int | None = None, tick_offset: int = 0) -> None:
+	def add_axis(self, name: str, center: tuple[float, float], angle: float = 0, color: int = 0xEEEEEEFF, minor_spacing: float = 1, major_spacing: int | None = None, tick_offset: int = 0) -> AxisPlot2D.Axis:
 		"""
 		Adds a new axis to the plot
 		Must be called within the plot's __init__
-		:param name: (str) The name of the axis
-		:param center: (tuple[float, float]) The graph space center of the axis
-		:param angle: (float) The angle of the axis
-		:param color: (int) The hex color of the axis
-		:param minor_spacing: (float) The spacing between minor ticks or None to disable
-		:param major_spacing: (int) The number of minor ticks between major ticks or None to disable
-		:param tick_offset: (int) The amount by which to offset axis ticks
-		:return:
+		:param name: The name of the axis
+		:param center: The graph space center of the axis
+		:param angle: The angle of the axis in degrees
+		:param color: The color of the axis in hex encoded RGBA
+		:param minor_spacing: The graph spacing between minor ticks or None to disable
+		:param major_spacing: The number of minor ticks between major ticks or None to disable
+		:param tick_offset: The amount by which to offset axis ticks
+		:return: The resulting axis
 		"""
 
 		assert any(call for call in inspect.stack() if call.function == '__init__' and any(isinstance(attr, AxisPlot2D) for attr in call.frame.f_locals.values())), 'Cannot add axis outside Plot2D initializer'
@@ -111,13 +217,17 @@ class AxisPlot2D(object):
 		if name in self.__axes__:
 			raise KeyError(f'Axis \'{name}\' already defined')
 
-		self.__axes__[name] = AxisPlot2D.Axis(name, center, angle, color, minor_spacing, major_spacing, tick_offset)
+		axis: AxisPlot2D.Axis = AxisPlot2D.Axis(name, center, angle, color, minor_spacing, major_spacing, tick_offset)
+		self.__axes__[name] = axis
+		return axis
 
-	def axes_info(self, *axes: str, color: int = ..., minor_spacing: float | None = ..., major_spacing: int | None = ..., tick_offset: int = ...) -> None:
+	def axes_info(self, *axes: str, center: tuple[float, float] = ..., angle: float = ..., color: int = ..., minor_spacing: float | None = ..., major_spacing: int | None = ..., tick_offset: int = ...) -> None:
 		"""
 		Modifies attributes of the specified axes
-		:param axes: (*str) The axes to modify
-		:param color: (int) The hex color of the axis
+		:param axes: The axes to modify
+		:param center: The new graph local center
+		:param angle: The new angle in degrees
+		:param color: The color of the axis in hex encoded RGBA
 		:param minor_spacing: (float) The spacing between minor ticks or None to disable
 		:param major_spacing: (int) The number of minor ticks between major ticks or None to disable
 		:param tick_offset: (int) The amount by which to offset axis ticks
@@ -131,13 +241,13 @@ class AxisPlot2D(object):
 			elif axis not in self.__axes__:
 				raise KeyError(f'Axis \'{axis}\' is not a part of this plot')
 
-			self.__axes__[axis].axis_info(color=color, minor_spacing=minor_spacing, major_spacing=major_spacing, tick_offset=tick_offset)
+			self.__axes__[axis].axis_info(center=center, angle=angle, color=color, minor_spacing=minor_spacing, major_spacing=major_spacing, tick_offset=tick_offset)
 
 	def get_axis(self, axis: str) -> AxisPlot2D.Axis:
 		"""
 		Gets an axis by name
-		:param axis: (str) The axis name to get
-		:return: (AxisPlot2D.Axis) The specified axis
+		:param axis: The axis name to get
+		:return: The specified axis
 		:raises KeyError: If the specified axis is not a part of this plot
 		"""
 
@@ -151,10 +261,10 @@ class AxisPlot2D(object):
 	def draw_linear_axis(self, image: PIL.Image.Image, size: int, axis: str) -> AxisPlot2D:
 		"""
 		Draws a linear axis
-		:param image: (PIL.Image.Image) The image to draw to
-		:param size: (int) The square size of the image
-		:param axis: (str) The axis name to draw
-		:return: (AxisPlot2D) This graph
+		:param image: The PIL image to draw to
+		:param size: The square size of the image
+		:param axis: The axis name to draw
+		:return: This graph
 		"""
 
 		if not isinstance(axis, str):
@@ -211,10 +321,10 @@ class AxisPlot2D(object):
 	def draw_radial_axis(self, image: PIL.Image.Image, size: int, axis: str) -> AxisPlot2D:
 		"""
 		Draws a radial axis
-		:param image: (PIL.Image.Image) The image to draw to
-		:param size: (int) The square size of the image
-		:param axis: (str) The axis name to draw
-		:return: (AxisPlot2D) This graph
+		:param image: The PIL image to draw to
+		:param size: The square size of the image
+		:param axis: The axis name to draw
+		:return: This graph
 		"""
 
 		if not isinstance(axis, str):
@@ -256,10 +366,15 @@ class AxisPlot2D(object):
 
 class Plottable(object):
 	"""
-	[Plottable] - Base class representing an imageable plot
+	Base class representing a plot that can be imaged
 	"""
 
 	def __init__(self):
+		"""
+		Base class representing a plot that can be imaged
+		- Constructor -
+		"""
+
 		super(Plottable, self).__init__()
 		self.__grid__: list[int] = [0, 0]
 		self.__alpha__: float = 1
@@ -270,17 +385,15 @@ class Plottable(object):
 		- ABSTRACT -
 		Overload this method to control plot drawing
 		This method draws the specified plot to the given image
-		:param image: (PIL.Image.Image) The image to draw to
-		:param size: (int) The square image size
-		:return: (None)
+		:param image: The PIL image to draw to
+		:param size: The square image size
 		"""
 		pass
 
 	def show(self, *, square_size: int = 1024) -> None:
 		"""
 		Shows this plot in a tkinter window
-		:param square_size: (int) The square image size to render as
-		:return: (None)
+		:param square_size: The square image size to render at
 		"""
 
 		square_size: int = int(square_size)
@@ -303,9 +416,8 @@ class Plottable(object):
 	def save(self, filename: str, *, square_size: int = 1024) -> None:
 		"""
 		Saves this plot as a rendered image
-		:param filename: (str) The filepath to save to
-		:param square_size: (int) The square image size to render as
-		:return: (None)
+		:param filename: The filepath to save to
+		:param square_size: The square image size to render at
 		"""
 
 		image: PIL.Image.Image = PIL.Image.fromarray(self.as_image(square_size=square_size))
@@ -313,10 +425,10 @@ class Plottable(object):
 
 	def plot_point_to_image_point(self, point: tuple[float, float] | Vector.Vector, size: int) -> tuple[int, int] | Vector.Vector:
 		"""
-		Converts a point from plot space into image space
-		:param point: (tuple[float, float] | Vector) The plot space point
-		:param size: (int) The square image size
-		:return: (tuple[int, int] | Vector) The image space point
+		Converts a point from plot-space into image-space
+		:param point: The plot-space point
+		:param size: The square image size
+		:return: The image-space point
 		"""
 
 		x, y = point
@@ -330,10 +442,10 @@ class Plottable(object):
 
 	def image_point_to_plot_point(self, point: tuple[int, int] | Vector.Vector, size: int) -> tuple[float, float]:
 		"""
-		Converts a point from image space into plot space
-		:param point: (tuple[int, int] | Vector) The plot space point
-		:param size: (int) The square image size
-		:return: (tuple[float, float] | Vector) The image space point
+		Converts a point from image-space into plot-space
+		:param point: The image-space point
+		:param size: The square image size
+		:return: The plot-space point
 		"""
 
 		x, y = point
@@ -348,8 +460,8 @@ class Plottable(object):
 	def as_image(self, *, square_size: int = 1024) -> numpy.ndarray[numpy.uint8]:
 		"""
 		Renders this plot as an image
-		:param square_size: (int) The square image size to render as
-		:return: (numpy.ndarray) The rendered RGBA image
+		:param square_size: The square image size to render as
+		:return: The rendered RGBA image
 		"""
 
 		square_size: int = int(square_size)
@@ -362,11 +474,11 @@ class Plottable(object):
 		Sets the boundaries of this plot
 		Data outside this bound will not be rendered
 		Any 'None' values are infinite
-		:param minx: (float | None) The minimum x bound
-		:param maxx: (float | None) The maximum x bound
-		:param miny: (float | None) The minimum y bound
-		:param maxy: (float | None) The maximum y bound
-		:return: (MultiPlot2D) This plot
+		:param minx: The minimum x bound
+		:param maxx: The maximum x bound
+		:param miny: The minimum y bound
+		:param maxy: The maximum y bound
+		:return: This plot
 		"""
 
 		inf: float = float('inf')
@@ -378,7 +490,7 @@ class Plottable(object):
 		"""
 		Gets the bounds of this plot
 		Any infinite boundaries are set to 10
-		:return: (tuple[float, float, float, float) (min_x, max_x, min_y, max_y)
+		:return: (min_x, max_x, min_y, max_y)
 		"""
 
 		minx, maxx, miny, maxy = (-10, 10, -10, 10) if self.__explicit_bounds__ is None else self.__explicit_bounds__
@@ -387,10 +499,15 @@ class Plottable(object):
 
 class Plot2D[PointType](Plottable):
 	"""
-	[Plot2D(Plottable)] - Base class representing a single 2D graph
+	Base class representing a single 2D graph
 	"""
 
 	def __init__(self):
+		"""
+		Base class representing a single 2D graph
+		- Constructor -
+		"""
+
 		super(Plot2D, self).__init__()
 		self.__points__: list[PointType] = []
 		self.__point_regular_shape__: int = 4
@@ -400,10 +517,11 @@ class Plot2D[PointType](Plottable):
 	def plot_info(self, *, regular_point_shape: typing.Optional[int] = ..., point_color: typing.Optional[str | int | tuple[int, int, int]] = ..., point_size: typing.Optional[int] = ...) -> Plot2D:
 		"""
 		Modifies information about this plot
-		:param regular_point_shape: (int) The number of sides for a regular polygon representing points on this graph
-		:param point_color: (int | str | tuple[int, int, int]) The colors used for points
-		:param point_size: (int) The size of points in pixels
-		:return: (Plot2D) This plot
+		:param regular_point_shape: The number of sides for a regular polygon representing points on this graph
+		:param point_color: The colors used for points
+		:param point_size: The size of points in pixels
+		:return: This plot
+		:raises ValueError: If the point color is invalid
 		"""
 
 		self.__point_regular_shape__ = self.__point_regular_shape__ if regular_point_shape is None or regular_point_shape is ... else int(regular_point_shape)
@@ -425,8 +543,8 @@ class Plot2D[PointType](Plottable):
 	def add_points(self, *points: PointType) -> Plot2D:
 		"""
 		Adds points to this plot
-		:param points: (*PointType) The points to add
-		:return: (Plot2D) This plot
+		:param points: The points to add
+		:return: This plot
 		"""
 
 		self.__points__.extend(points)
@@ -435,7 +553,7 @@ class Plot2D[PointType](Plottable):
 	def extents(self) -> tuple[float, float]:
 		"""
 		Gets the extends of this image calculated from bounds
-		:return: (tuple[float, float]) The x and y extends
+		:return: The x and y extends
 		"""
 
 		bounds: tuple[float, float, float, float] = self.bounds
@@ -449,7 +567,7 @@ class Plot2D[PointType](Plottable):
 		"""
 		Gets the bounds of this plot
 		Any infinite boundaries are set to 10
-		:return: (tuple[float, float, float, float) (min_x, max_x, min_y, max_y)
+		:return: (min_x, max_x, min_y, max_y)
 		"""
 
 		minx, maxx, miny, maxy = self.bounds
@@ -459,8 +577,7 @@ class Plot2D[PointType](Plottable):
 	@property
 	def points(self) -> tuple[PointType, ...]:
 		"""
-		Gets the points in this plot
-		:return: (set[tuple[float, float]]) All points stored in this plot
+		:return: All points stored in this plot
 		"""
 
 		return tuple(self.__points__)
@@ -468,8 +585,7 @@ class Plot2D[PointType](Plottable):
 	@property
 	def point_color(self) -> int:
 		"""
-		Gets the point color of this plot
-		:return: (int) The point color
+		:return: The point color of this plot
 		"""
 
 		return self.__point_color__
@@ -477,8 +593,7 @@ class Plot2D[PointType](Plottable):
 	@property
 	def point_color_rgba(self) -> tuple[int, int, int, int]:
 		"""
-		Gets the point color of this plot as RGBA
-		:return: (int) The point color
+		:return: The point color of this plot as RGBA
 		"""
 
 		return (self.__point_color__ >> 24) & 0xFF, (self.__point_color__ >> 16) & 0xFF, (self.__point_color__ >> 8) & 0xFF, self.__point_color__ & 0xFF
@@ -486,8 +601,7 @@ class Plot2D[PointType](Plottable):
 	@property
 	def regular_point_shape(self) -> int:
 		"""
-		Gets the number of sides used to represent a point on this plot
-		:return: (int) The regular polygon side count
+		:return: The number of sides used to represent a point on this plot
 		"""
 
 		return self.__point_regular_shape__
@@ -495,8 +609,7 @@ class Plot2D[PointType](Plottable):
 	@property
 	def point_size(self) -> int:
 		"""
-		Gets the size of points on this plot
-		:return: (int) Point size in pixels
+		:return: The size of points on this plot in pixels
 		"""
 
 		return self.__point_size__
@@ -505,7 +618,7 @@ class Plot2D[PointType](Plottable):
 	def bounds(self) -> tuple[float, float, float, float]:
 		"""
 		Gets the bounds of this plot
-		:return: (tuple[float, float, float, float) (min_x, max_x, min_y, max_y)
+		:return: (min_x, max_x, min_y, max_y)
 		"""
 
 		if self.__explicit_bounds__ is not None:
@@ -530,8 +643,7 @@ class Plot2D[PointType](Plottable):
 		Sets the boundaries of this plot
 		Data outside this bound will not be rendered
 		Any 'None' values are infinite
-		:param bounds: (tuple[float, float, float, float]) The (minx, maxx, miny, maxy) bounds
-		:return: (MultiPlot2D) This plot
+		:param bounds: The (minx, maxx, miny, maxy) bounds
 		"""
 
 		if bounds is None or bounds is ...:
@@ -543,10 +655,15 @@ class Plot2D[PointType](Plottable):
 
 class MultiPlot2D[PlotType: Plot2D](Plottable):
 	"""
-	[MultiPlot2D(Plottable)] - Base class representing multiple stacked 2D plots
+	Base class representing multiple stacked 2D plots
 	"""
 
 	def __init__(self):
+		"""
+		Base class representing multiple stacked 2D plots
+		- Constructor -
+		"""
+
 		super(MultiPlot2D, self).__init__()
 		self.__plots__: dict[str, PlotType] = {'': Plot2D()}
 		self.__plot_order__: list[str] = ['']
@@ -555,7 +672,7 @@ class MultiPlot2D[PlotType: Plot2D](Plottable):
 	def __getitem__(self, index: int | str) -> PlotType:
 		"""
 		Gets a plot by index or name
-		:param index: (int | str) The index or name of a plot
+		:param index: The index or name of a plot
 		:return: The specified plot
 		:raises IndexError: If the index is out of bounds
 		:raises KeyError: If the plot does not exist
@@ -573,9 +690,8 @@ class MultiPlot2D[PlotType: Plot2D](Plottable):
 		"""
 		Sets a plot by index or name
 		If by index, index must be in bounds
-		:param index: (int | str) The index or name of a plot
-		:param value: (Plot2D) The plot to set or add
-		:return: (None)
+		:param index: The index or name of a plot
+		:param value: The plot to set or add
 		:raises IndexError: If the index is out of bounds
 		"""
 
@@ -590,8 +706,7 @@ class MultiPlot2D[PlotType: Plot2D](Plottable):
 	def __delitem__(self, index: int | str) -> None:
 		"""
 		Removes a plot by index or name
-		:param index: (int | str) The index or name of a plot
-		:return: The specified plot
+		:param index: The index or name of a plot
 		:raises IndexError: If the index is out of bounds
 		:raises KeyError: If the plot does not exist
 		"""
@@ -605,15 +720,6 @@ class MultiPlot2D[PlotType: Plot2D](Plottable):
 		del self.__plots__[key]
 
 	def __draw__(self, image: PIL.Image.Image, size: int) -> None:
-		"""
-		- ABSTRACT -
-		Overload this method to control plot drawing
-		This method draws the all sub-plots to the given image
-		:param image: (PIL.Image.Image) The image to draw to
-		:param size: (int) The square image size
-		:return: (None)
-		"""
-
 		super().__draw__(image, size)
 		bounds: tuple[float, float, float, float] = tuple(bound * 1.25 for bound in self.bounds)
 
@@ -625,11 +731,10 @@ class MultiPlot2D[PlotType: Plot2D](Plottable):
 		- ABSTRACT -
 		Overload this method to control plot drawing
 		This method draws the specified sub-plot to the given image
-		:param image: (PIL.Image.Image) The image to draw to
-		:param size: (int) The square image size
-		:param sub_plot_name: (str) The name of the sub-plot to draw
-		:param bounds: (tuple[float, float, float, float]) The bounds of the entire stacked multi-plot
-		:return: (None)
+		:param image: The PIL image to draw to
+		:param size: The square image size
+		:param sub_plot_name: The name of the sub-plot to draw
+		:param bounds: The bounds of the entire stacked multi-plot
 		"""
 
 		self.__plots__[sub_plot_name].__draw__(image, size)
@@ -637,7 +742,7 @@ class MultiPlot2D[PlotType: Plot2D](Plottable):
 	def extents(self) -> tuple[float, float]:
 		"""
 		Gets the extends of this image calculated from bounds
-		:return: (tuple[float, float]) The x and y extends
+		:return: The x and y extends
 		"""
 
 		bounds: tuple[float, float, float, float] = self.bounds
@@ -651,7 +756,7 @@ class MultiPlot2D[PlotType: Plot2D](Plottable):
 		"""
 		Gets the bounds of this plot
 		Any infinite boundaries are set to 10
-		:return: (tuple[float, float, float, float) (min_x, max_x, min_y, max_y)
+		:return: (min_x, max_x, min_y, max_y)
 		"""
 
 		minx, maxx, miny, maxy = self.bounds
@@ -661,10 +766,10 @@ class MultiPlot2D[PlotType: Plot2D](Plottable):
 	def add_plot(self, plot_name: str, plot: PlotType, *, make_active: bool = True) -> PlotType:
 		"""
 		Adds a single plot to this multi-plot
-		:param plot_name: (str) The plot name to add as
-		:param plot: (Plot2D) The plot to add
-		:param make_active: (bool) Whether to set the newly added plot as active
-		:return: (Plot2D) The newly added plot
+		:param plot_name: The plot name to add as
+		:param plot: The plot to add
+		:param make_active: Whether to set the newly added plot as active
+		:return: The newly added plot
 		"""
 
 		if plot_name in self.__plots__:
@@ -682,7 +787,7 @@ class MultiPlot2D[PlotType: Plot2D](Plottable):
 		"""
 		Gets the bounds of this plot
 		If no bounds were set, returns the calculated bounds
-		:return: (tuple[float, float, float, float]) The (minx, maxx, miny, maxy) bounds
+		:return: The (minx, maxx, miny, maxy) bounds
 		"""
 
 		if self.__explicit_bounds__ is not None:
@@ -701,8 +806,7 @@ class MultiPlot2D[PlotType: Plot2D](Plottable):
 		Sets the boundaries of this plot
 		Data outside this bound will not be rendered
 		Any 'None' values are infinite
-		:param bounds: (tuple[float, float, float, float]) The (minx, maxx, miny, maxy) bounds
-		:return: (MultiPlot2D) This plot
+		:param bounds: The (minx, maxx, miny, maxy) bounds
 		"""
 
 		if bounds is None or bounds is ...:
@@ -714,11 +818,11 @@ class MultiPlot2D[PlotType: Plot2D](Plottable):
 
 class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]]):
 	"""
-	[CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D)] - Class representing a scatter plot in 2D cartesian space
+	Class representing a scatter plot in 2D cartesian space
 	 ... PointType = tuple[float, float]
 	"""
 
-	__POLY_FIT_METHODS: dict[str, typing.Callable] = {
+	POLY_FIT_METHODS: dict[str, typing.Callable] = {
 		'poly': numpy.polynomial.polynomial.polyfit,
 		'polynomial': numpy.polynomial.polynomial.polyfit,
 		'chebyshev': numpy.polynomial.chebyshev.chebfit,
@@ -729,6 +833,11 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 	}
 
 	def __init__(self):
+		"""
+		Class representing a scatter plot in 2D cartesian space
+		 ... PointType = tuple[float, float]
+		"""
+
 		super(CartesianScatterPlot2D, self).__init__(self)
 		self.__graph_functions__: dict[str, list[typing.Callable[[float], float]]] = {}
 		self.add_axis('x', (0, 0), 0, major_spacing=5)
@@ -774,9 +883,13 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 	def graph(self, function: typing.Callable[[float], float], *, plot_name: typing.Optional[str] = ...) -> CartesianScatterPlot2D:
 		"""
 		Graphs the specified function onto this plot
-		:param function: (CALLABLE(float) -> float) A function accepting a single float and returning a single float
-		:param plot_name: (str?) The plot name to graph to or the active plot if None
-		:return: (CartesianScatterPlot2D) This plot
+		This function is not called immediately, instead the function is queued and will be called on draw
+		:param function: A function accepting a single float and returning a single float
+		:param plot_name: The plot name to graph to or the active plot if None
+		:return: This plot
+		:raises TypeError: If plot name is not a string
+		:raises KeyError: If a plot with the specified name does not exist
+		:raises ValueError: If the specified function is not callable
 		"""
 
 		plot: str = self.__active_plot__ if plot_name is None or plot_name is ... else plot_name
@@ -799,12 +912,16 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 		"""
 		Graphs the specified function onto this plot
 		This runs the function immediately, storing the resulting points on this graph
-		:param function: (CALLABLE(float) -> float) A function accepting a single float and returning a single float
-		:param minx: (float) The minimum x value to graph or None to use calculated bounds
-		:param maxx: (float) The maximum x value to graph or None to use calculated bounds
-		:param step: (flaot) The step between x values
-		:param plot_name: (str?) The plot name to graph to or the active plot if None
-		:return: (CartesianScatterPlot2D) This plot
+		:param function: A function accepting a single float and returning a single float
+		:param minx: The minimum x value to graph or None to use calculated bounds
+		:param maxx: The maximum x value to graph or None to use calculated bounds
+		:param step: The step between x values
+		:param plot_name: The plot name to graph to or the active plot if None
+		:return: This plot
+		:raises TypeError: If plot name is not a string
+		:raises KeyError: If a plot with the specified name does not exist
+		:raises ValueError: If the specified function is not callable
+		:raises TypeError: If the function does not return a float or integer
 		"""
 
 		plot: str = self.__active_plot__ if plot_name is None or plot_name is ... else plot_name
@@ -826,17 +943,19 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 
 		while x <= maxx:
 			y: float = function(x)
-			assert isinstance(y, (float, int)), 'Returned value is not a float'
+			Misc.raise_ifn(isinstance(y, (float, int)), TypeError('Returned value is not a float'))
 			plot.add_points((x, y))
 			x += step
 
 		return self
 
-	def linear_regression(self, *, plot_name: typing.Optional[str] = ...) -> tuple[str | None, float | None, typing.Callable]:
+	def linear_regression(self, *, plot_name: typing.Optional[str] = ...) -> tuple[typing.Optional[str], typing.Optional[float], typing.Callable[[float], typing.Optional[float]]]:
 		"""
 		Calculates the best fit linear regression for the active plot's points
-		:param plot_name: (str?) The plot name to graph to or the active plot if None
-		:return: (tuple[str, float, CALLABLE]) Either a tuple of None if the graph is empty or a tuple -> (equation: str, r_squared: float, graph_function: CALLABLE)
+		:param plot_name: The plot name to graph to or the active plot if None
+		:return: Either a tuple of None if the graph is empty or a tuple containing the equation, r squared, and a callable representing the regression function
+		:raises KeyError: If a plot with the specified name does not exist
+		:raises ValueError: If the specified function is not callable
 		"""
 
 		plot: str = self.__active_plot__ if plot_name is None or plot_name is ... else plot_name
@@ -846,7 +965,7 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 		elif plot not in self.__plots__:
 			raise KeyError('A plot with this name does not exist')
 
-		points: set[tuple[float, float]] = self.__plots__[plot].points
+		points: set[tuple[float, float]] = set(self.__plots__[plot].points)
 
 		if len(points) == 0:
 			return None, None, lambda x: None
@@ -858,11 +977,13 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 		r2: float = 1 - sum((point[1] - (_a * point[0] + _b)) ** 2 for point in points) / sum((point[1] - _y) ** 2 for point in points)
 		return f'y={_a}x+{_b}; r²={r2}', r2, lambda x, m=_a, b=_b: m * x + b
 
-	def exponential_regression(self, *, plot_name: typing.Optional[str] = ...) -> tuple[str | None, float | None, typing.Callable]:
+	def exponential_regression(self, *, plot_name: typing.Optional[str] = ...) -> tuple[typing.Optional[str], typing.Optional[float], typing.Callable[[float], typing.Optional[float]]]:
 		"""
 		Calculates the best fit exponential regression for the active plot's points
-		:param plot_name: (str?) The plot name to graph to or the active plot if None
-		:return: (tuple[str, float, CALLABLE]) Either a tuple of None if the graph is empty or a tuple -> (equation: str, r_squared: float, graph_function: CALLABLE)
+		:param plot_name: The plot name to graph to or the active plot if None
+		:return: Either a tuple of None if the graph is empty or a tuple containing the equation, r squared, and a callable representing the regression function
+		:raises KeyError: If a plot with the specified name does not exist
+		:raises ValueError: If the specified function is not callable
 		"""
 
 		plot: str = self.__active_plot__ if plot_name is None or plot_name is ... else plot_name
@@ -884,21 +1005,23 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 		r2: float = 1 - sum((point[1] - (_a * point[0] + _b)) ** 2 for point in points) / sum(point[1] - _y for point in points)
 		return f'y=e^({_a}x+{_b}); r²={r2}', r2, lambda x: pow(math.e, _a * x + _b)
 
-	def polynomial_regression(self, degree: int = None, max_degree: int = None, fit_method='poly', *, plot_name: typing.Optional[str] = ...):
+	def polynomial_regression(self, degree: int = None, max_degree: int = None, fit_method='poly', *, plot_name: typing.Optional[str] = ...) -> tuple[typing.Optional[str], typing.Optional[float], typing.Callable[[float], typing.Optional[float]]]:
 		"""
 		Calculates the best fit polynomial regression for the active plot's points
 		Calculates an equation of degree 'degree' if 'max_degree' is None otherwise returns the best fit from equations between 'degree' and 'max_degree'
-		:param degree: (int) The degree (or minimum degree if 'max_degree' is not None) to test
-		:param max_degree: (int) The maximum degree to test
-		:param fit_method: (str) The method used to fit the data, one of the values returned from 'ScatterPlot2D::polyfits'
-		:param plot_name: (str?) The plot name to graph to or the active plot if None
-		:return: (tuple[str, float, CALLABLE]) Either a tuple of None if the graph is empty or a tuple -> (equation: str, r_squared: float, graph_function: CALLABLE)
-		:raises AssertionError: If any arguments' type or value are incorrect, 'fit_method' is invalid, 'max_degree' is less than 'degree'
+		:param degree: The degree (or minimum degree if 'max_degree' is not None) to test
+		:param max_degree: The maximum degree to test
+		:param fit_method: The method used to fit the data, one of the values returned from 'CartesianScatterPlot2D::POLY_FIT_METHODS'
+		:param plot_name: The plot name to graph to or the active plot if None
+		:return: Either a tuple of None if the graph is empty or a tuple containing the equation, r squared, and a callable representing the regression function
+		:raises KeyError: If a plot with the specified name does not exist
+		:raises ValueError: If the specified function is not callable
+		:raises AssertionError: If any argument is invalid
 		"""
 
-		assert degree is None or type(degree) is int and degree > 0, f'{type(self).__name__}::polynomial_regression - \'degree\' must be an int greater than 0'
-		assert max_degree is None or type(max_degree) is int and max_degree > 0, f'{type(self).__name__}::polynomial_regression - \'max_degree\' must be an int greater than 0'
-		assert fit_method is None or fit_method.lower() in CartesianScatterPlot2D.__POLY_FIT_METHODS, f'{type(self).__name__}::polynomial_regression - \'fit_method\' must be one of {tuple(CartesianScatterPlot2D.__POLY_FIT_METHODS.keys())}'
+		assert degree is None or isinstance(degree, int) and (degree := int(degree)) > 0, 'Degree must be an int greater than 0'
+		assert max_degree is None or type(max_degree) is int and max_degree > 0, 'Max Degree must be an int greater than 0'
+		assert fit_method is None or fit_method.lower() in CartesianScatterPlot2D.POLY_FIT_METHODS, f'Fit method must be one of {tuple(CartesianScatterPlot2D.POLY_FIT_METHODS.keys())}'
 
 		plot: str = self.__active_plot__ if plot_name is None or plot_name is ... else plot_name
 
@@ -910,11 +1033,11 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 		stop_at_rank: bool = degree is None and max_degree is None
 		max_degree = max_degree if max_degree is not None else 32 if degree is None else degree
 		degree = 1 if degree is None else degree - 1
-		points: set[tuple[float, float]] = self.__plots__[plot].points
+		points: set[tuple[float, float]] = set(self.__plots__[plot].points)
 		factors: tuple[float, ...] = ()
 		r2: float = 0
 		degree_error: int = 0
-		fit_methods: tuple[str, ...] = tuple(CartesianScatterPlot2D.__POLY_FIT_METHODS.keys()) if fit_method is None else (fit_method,)
+		fit_methods: tuple[str, ...] = tuple(CartesianScatterPlot2D.POLY_FIT_METHODS.keys()) if fit_method is None else (fit_method,)
 
 		if len(points) == 0:
 			return None, None, lambda x_: None
@@ -928,23 +1051,23 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 
 				if degree_error == 0:
 					with warnings.catch_warnings():
-						warnings.simplefilter('error', numpy.polynomial.polyutils.RankWarning)
+						warnings.simplefilter('error', numpy.exceptions.RankWarning)
 
 						try:
-							factors_local = tuple(CartesianScatterPlot2D.__POLY_FIT_METHODS[fit.lower()](x, y, n + 1))
-						except numpy.polynomial.polyutils.RankWarning:
+							factors_local = tuple(CartesianScatterPlot2D.POLY_FIT_METHODS[fit.lower()](x, y, n + 1))
+						except numpy.exceptions.RankWarning:
 							if stop_at_rank:
 								break
 							else:
 								with warnings.catch_warnings():
-									warnings.simplefilter('ignore', numpy.polynomial.polyutils.RankWarning)
-									factors_local = tuple(CartesianScatterPlot2D.__POLY_FIT_METHODS[fit.lower()](x, y, n + 1))
+									warnings.simplefilter('ignore', numpy.exceptions.RankWarning)
+									factors_local = tuple(CartesianScatterPlot2D.POLY_FIT_METHODS[fit.lower()](x, y, n + 1))
 
 								degree_error = n + 1
 				else:
 					with warnings.catch_warnings():
-						warnings.simplefilter('ignore', numpy.polynomial.polyutils.RankWarning)
-						factors_local = tuple(CartesianScatterPlot2D.__POLY_FIT_METHODS[fit.lower()](x, y, n + 1))
+						warnings.simplefilter('ignore', numpy.exceptions.RankWarning)
+						factors_local = tuple(CartesianScatterPlot2D.POLY_FIT_METHODS[fit.lower()](x, y, n + 1))
 
 				_y: float = sum(point[1] for point in points) / len(points)
 				r2_local: float = 1 - sum((point[1] - sum((m * point[0] ** (len(factors_local) - b - 1)) for b, m in enumerate(factors_local))) ** 2 for point in points) / sum((point[1] - _y) ** 2 for point in points)
@@ -960,10 +1083,12 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 		equation: str = ''.join(f'{"+" if m >= 0 and b > 0 else ""}{m}x^{(len(factors) - b - 1)}' for b, m in enumerate(factors))
 		return (f'y={equation}; r²={r2}', r2, lambda x_, f=factors: sum(m * x_ ** (len(f) - b - 1) for b, m in enumerate(f))) if len(factors) > 0 else (None, None, lambda x_: None)
 
-	def sinusoidal_regression(self, *, plot_name: typing.Optional[str] = ...) -> tuple[str | None, float | None, typing.Callable]:
+	def sinusoidal_regression(self, *, plot_name: typing.Optional[str] = ...) -> tuple[typing.Optional[str], typing.Optional[float], typing.Callable[[float], typing.Optional[float]]]:
 		"""
 		Calculates the best fit sinusoidal regression for the active plot's points
-		:return: (tuple[str, float, CALLABLE]) Either a tuple of None if the graph is empty or a tuple -> (equation: str, r_squared: float, graph_function: CALLABLE)
+		:return: Either a tuple of None if the graph is empty or a tuple containing the equation, r squared, and a callable representing the regression function
+		:raises KeyError: If a plot with the specified name does not exist
+		:raises ValueError: If the specified function is not callable
 		"""
 
 		plot: str = self.__active_plot__ if plot_name is None or plot_name is ... else plot_name
@@ -973,7 +1098,7 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 		elif plot not in self.__plots__:
 			raise KeyError('A plot with this name does not exist')
 
-		points: set[tuple[float, float]] = self.__plots__[plot].points
+		points: set[tuple[float, float]] = set(self.__plots__[plot].points)
 
 		if len(points) == 0:
 			return None, None, lambda x: None
@@ -999,11 +1124,17 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 
 class PolarScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]]):
 	"""
-	[PolarScatterPlot2D(AxisPlot2D, MultiPlot2D)] - Class representing a scatter plot in 2D polar space
+	Class representing a scatter plot in 2D polar space
 	 ... PointType = tuple[float, float]
 	"""
 
 	def __init__(self):
+		"""
+		Class representing a scatter plot in 2D polar space
+	 	... PointType = tuple[float, float]
+	 	- Constructor -
+		"""
+
 		super(PolarScatterPlot2D, self).__init__(self)
 		self.__graph_functions__: dict[str, list[tuple[typing.Callable[[float], float], float]]] = {}
 		self.add_axis('x', (0, 0), 0, major_spacing=5)
@@ -1057,10 +1188,13 @@ class PolarScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]]):
 	def graph(self, function: typing.Callable[[float], float], *, angle: float = 360, plot_name: typing.Optional[str] = ...) -> PolarScatterPlot2D:
 		"""
 		Graphs the specified function onto this plot
-		:param function: (CALLABLE(float) -> float) A function accepting a single float and returning a single float
-		:param angle: (float) The maximum angle (in degrees) to graph to
-		:param plot_name: (str?) The plot name to graph to or the active plot if None
-		:return: (PolarScatterPlot2D) This plot
+		This function is not called immediately, instead the function is queued and will be called on draw
+		:param function: A function accepting a single float and returning a single float
+		:param plot_name: The plot name to graph to or the active plot if None
+		:return: This plot
+		:raises TypeError: If plot name is not a string
+		:raises KeyError: If a plot with the specified name does not exist
+		:raises ValueError: If the specified function is not callable
 		"""
 
 		plot: str = self.__active_plot__ if plot_name is None or plot_name is ... else plot_name
@@ -1083,12 +1217,16 @@ class PolarScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]]):
 		"""
 		Graphs the specified function onto this plot
 		This runs the function immediately, storing the resulting points on this graph
-		:param function: (CALLABLE(float) -> float) A function accepting a single float and returning a single float
-		:param minx: (float) The minimum x value to graph or None to use calculated bounds
-		:param maxx: (float) The maximum x value to graph or None to use calculated bounds
-		:param step: (flaot) The step between x values
-		:param plot_name: (str?) The plot name to graph to or the active plot if None
-		:return: (PolarScatterPlot2D) This plot
+		:param function: A function accepting a single float and returning a single float
+		:param minx: The minimum x value to graph or None to use calculated bounds
+		:param maxx: The maximum x value to graph or None to use calculated bounds
+		:param step: The step between x values
+		:param plot_name: The plot name to graph to or the active plot if None
+		:return: This plot
+		:raises TypeError: If plot name is not a string
+		:raises KeyError: If a plot with the specified name does not exist
+		:raises ValueError: If the specified function is not callable
+		:raises TypeError: If the function does not return a float or integer
 		"""
 
 		plot: str = self.__active_plot__ if plot_name is None or plot_name is ... else plot_name
@@ -1110,7 +1248,7 @@ class PolarScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]]):
 
 		while x <= maxx:
 			y: float = function(x)
-			assert isinstance(y, (float, int)), 'Returned value is not a float'
+			Misc.raise_ifn(isinstance(y, (float, int)), ValueError('Returned value is not a float'))
 			plot.add_points((x, y))
 			x += step
 
@@ -1118,7 +1256,7 @@ class PolarScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]]):
 
 class PiePlot2D(Plot2D[tuple[str, float]]):
 	"""
-	[PiePlot2D(Plot2D)] - Class representing a 2D pie plot
+	Class representing a 2D pie plot
 	 ... PointType = tuple[str, float]
 	"""
 
@@ -1148,11 +1286,17 @@ class PiePlot2D(Plot2D[tuple[str, float]]):
 
 class BarPlot2D(AxisPlot2D, Plot2D[tuple[str, float]]):
 	"""
-	[BarPlot2D(Plot2D)] - Class representing a 2D bar plot
+	Class representing a 2D bar plot
 	 ... PointType = tuple[str, float]
 	"""
 
 	def __init__(self):
+		"""
+		Class representing a 2D bar plot
+	 	... PointType = tuple[str, float]
+	 	- Constructor -
+		"""
+
 		super().__init__(self)
 		self.add_axis('x', (0, 0), 0, major_spacing=0, minor_spacing=1, tick_offset=1)
 		self.add_axis('y', (0, 0), 90, major_spacing=0, minor_spacing=1, tick_offset=0)
@@ -1186,11 +1330,16 @@ class BarPlot2D(AxisPlot2D, Plot2D[tuple[str, float]]):
 
 class HistogramPlot2D(AxisPlot2D, Plot2D[tuple[float, float]]):
 	"""
-	[HistogramPlot2D(Plot2D)] - Class representing a 2D histogram plot
+	Class representing a 2D histogram plot
 	 ... PointType = tuple[float, float]
 	"""
 
 	def __init__(self):
+		"""
+		Class representing a 2D histogram plot
+		 ... PointType = tuple[float, float]
+		"""
+
 		super().__init__(self)
 		self.add_axis('x', (0, 0), 0, major_spacing=0, minor_spacing=1, tick_offset=1)
 		self.add_axis('y', (0, 0), 90, major_spacing=0, minor_spacing=1, tick_offset=0)
@@ -1222,11 +1371,16 @@ class HistogramPlot2D(AxisPlot2D, Plot2D[tuple[float, float]]):
 
 class DensityPlot2D(AxisPlot2D, MultiPlot2D[HistogramPlot2D]):
 	"""
-	[DensityPlot2D(Plot2D)] - Class representing a 2D density plot
+	Class representing a 2D density plot
 	 ... PointType = tuple[float, float]
 	"""
 
 	def __init__(self):
+		"""
+		Class representing a 2D density plot
+	 	... PointType = tuple[float, float]
+		"""
+
 		super().__init__(self)
 		self.add_axis('x', (0, 0), 0, major_spacing=0, minor_spacing=1, tick_offset=1)
 		self.add_axis('y', (0, 0), 90, major_spacing=0, minor_spacing=1, tick_offset=0)
@@ -1263,11 +1417,16 @@ class DensityPlot2D(AxisPlot2D, MultiPlot2D[HistogramPlot2D]):
 
 class DotPlot2D(AxisPlot2D, MultiPlot2D[BarPlot2D]):
 	"""
-	[DotPlot2D(Plot2D)] - Class representing a 2D dot plot
+	Class representing a 2D dot plot
 	 ... PointType = tuple[str, float]
 	"""
 
 	def __init__(self):
+		"""
+		Class representing a 2D dot plot
+		 ... PointType = tuple[str, float]
+		"""
+
 		super().__init__(self)
 		self.add_axis('x', (0, 0), 0, major_spacing=0, minor_spacing=1, tick_offset=1)
 		self.add_axis('y', (0, 0), 90, major_spacing=0, minor_spacing=1, tick_offset=0)
@@ -1304,11 +1463,16 @@ class DotPlot2D(AxisPlot2D, MultiPlot2D[BarPlot2D]):
 
 class StackedDotPlot2D(AxisPlot2D, Plot2D[tuple[str, int]]):
 	"""
-	[StackedDotPlot2D(Plot2D)] - Class representing a 2D stacked dot plot
+	Class representing a 2D stacked dot plot
 	 ... PointType = tuple[str, int]
 	"""
 
 	def __init__(self):
+		"""
+		Class representing a 2D stacked dot plot
+		 ... PointType = tuple[str, int]
+		"""
+
 		super().__init__(self)
 		self.add_axis('x', (0, 0), 0, major_spacing=0, minor_spacing=1, tick_offset=1)
 		self.add_axis('y', (0, 0), 90, major_spacing=0, minor_spacing=1, tick_offset=0)
@@ -1336,11 +1500,16 @@ class StackedDotPlot2D(AxisPlot2D, Plot2D[tuple[str, int]]):
 
 class BoxPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[float]]):
 	"""
-	[BoxPlot2D(Plot2D)] - Class representing a 2D box plot
+	Class representing a 2D box plot
 	 ... PointType = float
 	"""
 
 	def __init__(self):
+		"""
+		Class representing a 2D box plot
+		 ... PointType = float
+		"""
+
 		super().__init__(self)
 		self.add_axis('x', (0, 0), 0, major_spacing=0, minor_spacing=1, tick_offset=1)
 		self.add_axis('y', (0, 0), 90, major_spacing=0, minor_spacing=1, tick_offset=0)
@@ -1388,21 +1557,61 @@ class Plot3D[PointType](Plottable):
 		pass
 
 class GridPlotDisplay:
+	"""
+	Grid-style display for showing multiple plots at once
+	"""
+
 	def __init__(self):
+		"""
+		Grid-style display for showing multiple plots at once
+		- Constructor -
+		"""
+
 		self.__grid__: dict[tuple[int, int], Plottable] = {}
 
-	def __setitem__(self, key: tuple[int, int], value: Plottable) -> None:
-		assert isinstance(key, (tuple, list)) and len(key) == 2, 'Invalid 2D coordinate'
-		assert isinstance(value, Plottable), 'Not a plottable plot'
-		row: int = int(key[0])
-		col: int = int(key[1])
-		self.__grid__[(row, col)] = value
+	def __setitem__(self, coordinate: tuple[int, int], plot: Plottable) -> None:
+		"""
+		Adds a plot to this display at the specified grid coordinates
+		:param coordinate: The grid coordinates starting at 0
+		:param plot: The plot to display at these coordinates
+		:raises AssertionError: If the coordinate is not an iterable containing exactly 2 integers >= 0
+		:raises AssertionError: If the plot is not an instance of 'Plottable'
+		"""
+
+		assert hasattr(coordinate, '__iter__') and len(coordinate := tuple(coordinate)) == 2 and all(isinstance(x, int) and int(x) > 0 for x in coordinate), 'Coordinate must be an iterable containing exactly 2 integers >= 0'
+		assert isinstance(plot, Plottable), 'Not a plottable plot'
+		row: int = int(coordinate[0])
+		col: int = int(coordinate[1])
+		self.__grid__[(row, col)] = plot
+
+	def __delitem__(self, coordinate: tuple[int, int]) -> None:
+		"""
+		Removes a plot at the specified grid coordinates from this display
+		:param coordinate: The grid coordinates starting at 0
+		:raises AssertionError: If the coordinate is not an iterable containing exactly 2 integers >= 0
+		"""
+
+		assert hasattr(coordinate, '__iter__') and len(coordinate := tuple(coordinate)) == 2 and all(isinstance(x, int) and int(x) > 0 for x in coordinate), 'Coordinate must be an iterable containing exactly 2 integers >= 0'
+		row: int = int(coordinate[0])
+		col: int = int(coordinate[1])
+		del self.__grid__[(row, col)]
+
+	def __getitem__(self, coordinate: tuple[int, int]) -> Plottable:
+		"""
+		Gets a plot at the specified grid coordinates from this display
+		:param coordinate: The grid coordinates starting at 0
+		:raises AssertionError: If the coordinate is not an iterable containing exactly 2 integers >= 0
+		"""
+
+		assert hasattr(coordinate, '__iter__') and len(coordinate := tuple(coordinate)) == 2 and all(isinstance(x, int) and int(x) > 0 for x in coordinate), 'Coordinate must be an iterable containing exactly 2 integers >= 0'
+		row: int = int(coordinate[0])
+		col: int = int(coordinate[1])
+		return self.__grid__[(row, col)]
 
 	def show(self, *, square_size: int = 1024) -> None:
 		"""
 		Shows this plot in a tkinter window
-		:param square_size: (int) The square image size to render each plot as
-		:return: (None)
+		:param square_size: The square image size to render each plot as
 		"""
 
 		root: tkinter.Tk = tkinter.Tk()
@@ -1425,9 +1634,8 @@ class GridPlotDisplay:
 	def save(self, filename: str, *, square_size: int = 1024) -> None:
 		"""
 		Saves this plot as a rendered image
-		:param filename: (str) The filepath to save to
-		:param square_size: (int) The square image size to render each plot as
-		:return: (None)
+		:param filename: The filepath to save to
+		:param square_size: The square image size to render each plot as
 		"""
 
 		image: PIL.Image.Image = PIL.Image.fromarray(self.as_image(square_size=square_size))
@@ -1436,10 +1644,10 @@ class GridPlotDisplay:
 	def as_image(self, *, square_size: int = 1024, padding: int = 32, border_width: int = 2) -> numpy.ndarray[numpy.uint8]:
 		"""
 		Renders this plot display as an image
-		:param square_size: (int) The square image size to render each plot as
-		:param padding: (int) The padding (in pixels) between images
-		:param border_width: (int) The width (in pixels) of the border between images
-		:return: (numpy.ndarray) The rendered RGBA image
+		:param square_size: The square image size to render each plot as
+		:param padding: The padding (in pixels) between images
+		:param border_width: The width (in pixels) of the border between images
+		:return: The rendered RGBA image
 		"""
 
 		border_width: int = int(border_width)
@@ -1453,7 +1661,7 @@ class GridPlotDisplay:
 		border: PIL.Image.Image = PIL.Image.new('RGBA', (square_size + border_width * 2, square_size + border_width * 2), '#eeeeee')
 
 		for coord, plot in self.__grid__.items():
-			result: numpy.ndarray[np.uint8] = plot.as_image(square_size=square_size)
+			result: numpy.ndarray[numpy.uint8] = plot.as_image(square_size=square_size)
 			pilmage: PIL.Image.Image = PIL.Image.fromarray(result)
 			y: int = coord[0] * (square_size + padding) + (padding >> 1)
 			x: int = coord[1] * (square_size + padding) + (padding >> 1)

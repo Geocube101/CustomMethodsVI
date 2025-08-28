@@ -5,24 +5,28 @@ import shutil
 import datetime
 import typing
 
+from . import Exceptions
+from . import Misc
 from . import Stream
 
 
 class File:
 	"""
-	[File] - Represents a single file-like object
+	Represents a single file-like object
 	"""
 
-	def __init__(self, path: str):
+	def __init__(self, path: str | File):
 		"""
-		[File] - Represents a single file-like object
+		Represents a single file-like object
 		- Constructor -
-		:param path: (str) The path of the file
+		:param path: The path of the file
 		:raises IsADirectoryError: If the file at the specified path is a directory
+		:raises InvalidArgumentException: If 'path' is not a string or File instance
 		"""
 
-		self.__fpath__ = str(path)
-		self.__streams__ = []  # type: list[Stream.FileStream]
+		Misc.raise_ifn(isinstance(path, (str, File)), Exceptions.InvalidArgumentException(File.__init__, 'path', type(path), (str, File)))
+		self.__fpath__: str = path.__fpath__ if isinstance(path, File) else str(path)
+		self.__streams__: list[Stream.FileStream] = []
 
 		if os.path.isdir(self.__fpath__):
 			raise IsADirectoryError(f'The object at "{self.__fpath__}" is a directory')
@@ -53,24 +57,44 @@ class File:
 	def rename(self, new_name: str) -> None:
 		"""
 		Renames this file to a new name
-		:param new_name: (str) The new name; should not include slashes
-		:return: (None)
+		:param new_name: The new name; should not include slashes
+		:raises InvalidArgumentException: If 'path' is not a string
 		"""
 
-		os.rename(self.__fpath__, self.parentdir().file(new_name).__fpath__)
+		Misc.raise_ifn(isinstance(new_name, str), Exceptions.InvalidArgumentException(File.rename, 'new_name', type(new_name), (str,)))
+		os.rename(self.__fpath__, self.parent.file(new_name).__fpath__)
 
-	def single_write(self, data: str | bytes, encoding: str = 'utf-8') -> None:
+	def single_write(self, data: str | bytes | bytearray, encoding: str = 'utf-8') -> None:
+		"""
+		Opens the file, writes data, and closes the file
+		For multiple write operations, use 'File.open'
+		:param data: The data to write to file
+		:param encoding: The encoding to use for non-binary data
+		:raises InvalidArgumentException: If 'data' is not a string, bytes object, or bytearray
+		"""
+
+		Misc.raise_ifn(isinstance(data, (str, bytes, bytearray)), Exceptions.InvalidArgumentException(File.single_write, 'data', type(data), (str, bytes, bytearray)))
+
 		with self.open('wb' if isinstance(data, (bytes, bytearray)) else 'w', encoding) as f:
 			f.write(data)
 
-	def single_append(self, data: str | bytes, encoding: str = 'utf-8') -> None:
+	def single_append(self, data: str | bytes | bytearray, encoding: str = 'utf-8') -> None:
+		"""
+		Opens the file, writes data, and closes the file
+		For multiple write operations, use 'File.open'
+		:param data: The data to write to file
+		:param encoding: The encoding to use for non-binary data
+		:raises InvalidArgumentException: If 'data' is not a string, bytes object, or bytearray
+		"""
+
+		Misc.raise_ifn(isinstance(data, (str, bytes, bytearray)), Exceptions.InvalidArgumentException(File.single_write, 'data', type(data), (str, bytes, bytearray)))
+
 		with self.open('ab' if isinstance(data, (bytes, bytearray)) else 'a', encoding) as f:
 			f.write(data)
 
 	def exists(self) -> bool:
 		"""
-		Existedness
-		:return: (bool) Whether this file exists in path
+		:return: Whether this file exists
 		"""
 
 		return os.path.isfile(self.__fpath__)
@@ -80,7 +104,7 @@ class File:
 		Opens this file in the specified mode
 		:param mode: The mode to open this file as
 		:param encoding: If non-binary, the text encoding
-		:return: (FileStream) A new filestream
+		:return: A new filestream
 		"""
 
 		fstream = Stream.FileStream(self.__fpath__, mode, encoding)
@@ -90,7 +114,7 @@ class File:
 	def delete(self) -> bool:
 		"""
 		Deletes this file from disk
-		:return: (bool) Whether the file existed before deletion
+		:return: Whether the file existed before deletion
 		"""
 
 		if os.path.isfile(self.__fpath__):
@@ -104,21 +128,10 @@ class File:
 		else:
 			return False
 
-	def statsize(self) -> int:
-		"""
-		Gets the size of this file in bytes using os.stat
-		:return: (int) The file size or -1 if non-existent
-		"""
-
-		if self.exists():
-			return os.stat(self.__fpath__).st_size
-		else:
-			return -1
-
 	def create(self) -> bool:
 		"""
 		Creates the file at path
-		:return: (bool) True if file did not exist otherwise False
+		:return: True if file did not exist otherwise False
 		"""
 
 		if os.path.isfile(self.__fpath__):
@@ -127,108 +140,149 @@ class File:
 			open(self.__fpath__, 'x').close()
 			return True
 
+	def single_read(self, as_bytes: bool = False, encoding: str = 'utf-8') -> str | bytes:
+		"""
+		Opens the file, reads data, and closes the file
+		For multiple read operations, use 'File.open'
+		:param as_bytes: Whether to read binary or text data
+		:param encoding: The encoding to use for non-binary data
+		"""
+
+		with self.open('rb' if as_bytes else 'r', encoding) as f:
+			return f.read()
+
+	@property
+	def statsize(self) -> int:
+		"""
+		Gets the size of this file in bytes using 'os.stat'
+		:return: The file size or -1 if non-existent
+		"""
+
+		if self.exists():
+			return os.stat(self.__fpath__).st_size
+		else:
+			return -1
+
+	@property
 	def filepath(self) -> str:
 		"""
-		Filepathness
-		:return: (str) Returns the filepath
+		:return: The filepath
 		"""
 
 		return self.__fpath__
 
+	@property
 	def filename(self) -> str:
 		"""
-		Filenameness
-		:return: (str) Returns the filename without extension
+		:return: The filename without extension
 		"""
 
 		return os.path.basename(self.__fpath__).split('.')[0]
 
+	@property
 	def extension(self) -> str:
 		"""
-		Extensionness
-		:return: (str) Returns the last extension
+		:return: The last extension
 		"""
 
 		return os.path.basename(self.__fpath__).split('.')[-1]
 
+	@property
 	def full_extension(self) -> str:
 		"""
-		Extensionness
-		:return: (str) Returns the full extension (same as File.extension if only one extension present)
+		:return: The full extension (same as 'File.extension' if only one extension present)
 		"""
 
 		return os.path.basename(self.__fpath__).split('.', 1)[-1]
 
+	@property
 	def extensions(self) -> tuple[str, ...]:
 		"""
-		Extensionsness
-		:return: (tuple[str, ...]) Returns all extensions as a tuple
+		:return: All extensions as a tuple
 		"""
 
 		return tuple(os.path.basename(self.__fpath__).split('.')[1:])
 
+	@property
 	def basename(self) -> str:
 		"""
-		Basenameness
-		:return: (str) Returns the filepath base name
+		:return: The filename with extension
 		"""
 
 		return os.path.basename(self.__fpath__)
 
-	def single_read(self, as_bytes: bool = False, encoding: str = 'utf-8') -> str | bytes:
-		with self.open('rb' if as_bytes else 'r', encoding) as f:
-			return f.read()
-
-	def parentdir(self) -> Directory:
+	@property
+	def parent(self) -> Directory:
 		"""
-		Returns the containing directory
-		:return: (Directory) Parent directory
+		:return: This file's parent directory
 		"""
 
 		return Directory(os.path.dirname(self.__fpath__))
 
+	@property
 	def times(self) -> tuple[datetime.datetime, datetime.datetime, datetime.datetime]:
 		"""
-		Returns the stat times of the file
-		:return: (tuple[datetime.datetime]) Access Time, Modified Time, Created Time
+		:return: A tuple of stat times (Access Time, Modified Time, Created Time)
 		"""
 
 		return (datetime.datetime.fromtimestamp(os.path.getatime(self.__fpath__), datetime.timezone.utc),
 			datetime.datetime.fromtimestamp(os.path.getmtime(self.__fpath__), datetime.timezone.utc),
 			datetime.datetime.fromtimestamp(os.path.getctime(self.__fpath__), datetime.timezone.utc))
 
-	def time_accessed(self, atime: datetime.datetime | int | float = None) -> datetime.datetime | None:
+	@property
+	def time_accessed(self) -> typing.Optional[datetime.datetime]:
 		"""
-		Sets the 'accessed' time of the file or if no value supplied, gets the 'accessed' time
-		:param atime: (datetime.datetime or int or float) The new 'accessed' time
-		:return: (datetime.datetime or None) The 'accessed' time if 'atime' is None else None
+		:return: The last time this file was accessed if it exists or None
 		"""
 
-		if atime is None:
-			return datetime.datetime.fromtimestamp(os.path.getatime(self.__fpath__))
-		else:
-			atime = atime.timestamp() if type(atime) is datetime.datetime else atime
-			mtime = self.time_modified().timestamp()
+		return datetime.datetime.fromtimestamp(os.path.getatime(self.__fpath__)) if self.exists() else None
+
+	@time_accessed.setter
+	def time_accessed(self, new_time: datetime.datetime | int | float) -> None:
+		"""
+		Sets the 'accessed' time of the file
+		:param new_time: The new 'accessed' time
+		:raises FileNotFoundError: If the file does not exist
+		:raises InvalidArgumentException: If 'new_time' is not a datetime, integer, or float
+		"""
+
+		if self.exists():
+			Misc.raise_ifn(isinstance(new_time, (datetime.datetime, int, float)), Exceptions.InvalidArgumentException(File.time_accessed.setter, 'new_time', type(new_time), (datetime.datetime, int, float)))
+			atime = new_time.timestamp() if isinstance(new_time, datetime.datetime) else float(new_time)
+			mtime = self.time_modified.timestamp()
 			os.utime(self.__fpath__, (atime, mtime))
-
-	def time_modified(self, mtime: datetime.datetime | int | float = None) -> datetime.datetime | None:
-		"""
-		Sets the 'modified' time of the file or if no value supplied, gets the 'modified' time
-		:param mtime: (datetime.datetime or int or float) The new 'modified' time
-		:return: (datetime.datetime or None) The 'modified' time if 'mtime' is None else None
-		"""
-
-		if mtime is None:
-			return datetime.datetime.fromtimestamp(os.path.getmtime(self.__fpath__))
 		else:
-			atime = self.time_modified().timestamp()
-			mtime = mtime.timestamp() if type(mtime) is datetime.datetime else mtime
-			os.utime(self.__fpath__, (atime, mtime))
+			raise FileNotFoundError('The specified file does not exist')
 
+	@property
+	def time_modified(self) -> typing.Optional[datetime.datetime]:
+		"""
+		:return: The last time this file was modified if it exists or None
+		"""
+
+		return datetime.datetime.fromtimestamp(os.path.getmtime(self.__fpath__)) if self.exists() else None
+
+	@time_modified.setter
+	def time_modified(self, new_time: typing.Optional[datetime.datetime | int | float] = None) -> None:
+		"""
+		Sets the 'accessed' time of the file
+		:param new_time: The new 'accessed' time
+		:raises FileNotFoundError: If the file does not exist
+		:raises InvalidArgumentException: If 'new_time' is not a datetime, integer, or float
+		"""
+
+		if self.exists():
+			Misc.raise_ifn(isinstance(new_time, (datetime.datetime, int, float)), Exceptions.InvalidArgumentException(File.time_modified.setter, 'new_time', type(new_time), (datetime.datetime, int, float)))
+			atime = self.time_accessed.timestamp()
+			mtime = new_time.timestamp() if isinstance(new_time, datetime.datetime) else float(new_time)
+			os.utime(self.__fpath__, (atime, mtime))
+		else:
+			raise FileNotFoundError('The specified file does not exist')
+
+	@property
 	def time_created(self) -> datetime.datetime:
 		"""
-		Gets the 'created' time of the file
-		:return: (datetime.datetime) The 'created' time
+		:return: The time this file was created if it exists or None
 		"""
 
 		return datetime.datetime.fromtimestamp(os.path.getctime(self.__fpath__))
@@ -236,18 +290,20 @@ class File:
 
 class Directory:
 	"""
-	[Directory] - Represents a single directory
+	Represents a single directory
 	"""
 
 	def __init__(self, path: str | Directory):
 		"""
-		[Directory] - Represents a single directory
+		Represents a single directory
 		- Constructor -
 		:param path: (str | Directory) The path of the file or another directory object
 		:raises OSError: If the file at the specified path is a file
+		:raises InvalidArgumentException: If 'path' is not a string or Directory instace
 		"""
 
-		self.__dpath__ = path.__dpath__ if isinstance(path, type(self)) else str(path).replace('\\', '/').rstrip('/') + '/'
+		Misc.raise_ifn(isinstance(path, (str, Directory)), Exceptions.InvalidArgumentException(Directory.__init__, 'path', type(path), (str, Directory)))
+		self.__dpath__: str = path.__dpath__ if isinstance(path, Directory) else str(path).rstrip(os.sep) + os.sep
 
 		if os.path.isfile(self.__dpath__):
 			raise OSError(f'The object at "{self.__dpath__}" is a file')
@@ -271,78 +327,46 @@ class Directory:
 
 	def rename(self, new_name: str) -> None:
 		"""
-		Renames this directory to a new name
-		:param new_name: (str) The new name; should not include slashes
-		:return: (None)
+		Renames this file to a new name
+		:param new_name: The new name; should not include slashes
+		:raises InvalidArgumentException: If 'path' is not a string
 		"""
 
+		Misc.raise_ifn(isinstance(new_name, str), Exceptions.InvalidArgumentException(Directory.rename, 'new_name', type(new_name), (str,)))
 		os.rename(self.__dpath__, self.up().directory(new_name).__dpath__)
 
-	def copyto(self, dst: str | Directory) -> None:
+	def copy_to(self, dst: str | Directory) -> None:
 		"""
 		Copies this directory to the specified directory
-		:param dst: (str | Directory) The directory or path to copy to
-		:return: (None)
+		:param dst: The directory or path to copy to
+		:raises InvalidArgumentException: If 'path' is not a string or Directory
 		"""
 
+		Misc.raise_ifn(isinstance(dst, (str, Directory)), Exceptions.InvalidArgumentException(Directory.copy_to, 'dst', type(dst), (str, Directory)))
 		dpath: str = dst.__dpath__ if isinstance(dst, Directory) else str(dst)
 		shutil.copytree(self.__dpath__, dpath)
-
-	def contents(self) -> dict[str, tuple[File | Directory, ...]]:
-		"""
-		Recursively gets directory contents as a dict
-		:return: (dict[str, tuple[File or Directory, ...]]) A dictionary with two keys: 'files' and 'dirs'
-		"""
-
-		try:
-			data = next(os.walk(self.__dpath__, True))
-			return {'files': tuple(File(data[0] + x) for x in data[2]), 'dirs': tuple(Directory(data[0] + x) for x in data[1])}
-		except StopIteration:
-			return {}
-
-	def files(self) -> tuple[File, ...]:
-		"""
-		:return: (tuple[File, ...]) All sub-files of this directory
-		"""
-
-		try:
-			data = next(os.walk(self.__dpath__, True))
-			return tuple(File(data[0] + x) for x in data[2])
-		except StopIteration:
-			return tuple()
-
-	def dirs(self) -> tuple[Directory, ...]:
-		"""
-		:return: (tuple[Directory, ...]) All sub-directories of this directory
-		"""
-
-		try:
-			data = next(os.walk(self.__dpath__, True))
-			return tuple(Directory(data[0] + x) for x in data[1])
-		except StopIteration:
-			return tuple()
 
 	def cd(self, rel_path: str) -> Directory:
 		"""
 		Changes the directory
 		:param rel_path: The relative path
-		:return: (Directory) The new directory
+		:return: The new directory
+		:raises InvalidArgumentException: If 'rel_path' is not a string
 		"""
 
-		return Directory(self.__dpath__ + rel_path.replace('\\', '/').lstrip('/'))
+		Misc.raise_ifn(isinstance(rel_path, str), Exceptions.InvalidArgumentException(Directory.cd, 'rel_path', type(rel_path), (str,)))
+		return Directory(self.__dpath__ + rel_path.replace('\\', os.sep).replace('/', os.sep).lstrip(os.sep))
 
 	def up(self) -> Directory:
 		"""
-		Gets the parent directory
-		:return: (Directory) The parent
+		:return: This directory's parent
 		"""
 
-		return Directory(self.__dpath__.rsplit('/', 2)[0])
+		return Directory(self.__dpath__.rsplit(os.sep, 2)[0])
 
 	def exists(self) -> bool:
 		"""
-		Existedness
-		:return: (bool) If the object at path is a directory
+		:return: If this directory exists
 		"""
 
 		return os.path.isdir(self.__dpath__)
@@ -350,7 +374,7 @@ class Directory:
 	def create(self) -> bool:
 		"""
 		Creates this directory and all parents
-		:return: (bool) If this directory did not already exist
+		:return: If this directory did not already exist
 		"""
 
 		if not self.exists():
@@ -362,8 +386,8 @@ class Directory:
 	def createdir(self, subdir: str) -> Directory:
 		"""
 		Creates a new subdirectory
-		:param subdir: (str) The relative path
-		:return: (Directory) The new directory
+		:param subdir: The relative path
+		:return: The new directory
 		"""
 
 		subdir = self.cd(subdir)
@@ -373,7 +397,7 @@ class Directory:
 	def delete(self) -> bool:
 		"""
 		Deletes this directory and all contents
-		:return: (bool) Whether this directory existed
+		:return: Whether this directory existed
 		"""
 
 		if os.path.isdir(self.__dpath__):
@@ -382,23 +406,25 @@ class Directory:
 		else:
 			return False
 
-	def deletedir(self, subdir: str) -> bool:
+	def delete_dir(self, subdir: str) -> bool:
 		"""
-		Deletes the specified sub-directory and all its contents
+		Deletes the specified subdirectory and all its contents
 		Same as Directory.cd(subdir).delete()
-		:param subdir: (str) The sub-directory to delete
-		:return: (bool) Whether the subdirectory existed
+		:param subdir: The subdirectory to delete
+		:return: Whether the subdirectory existed
 		"""
 
 		return self.cd(subdir).delete()
 
-	def delfile(self, path: str) -> bool:
+	def delete_file(self, path: str) -> bool:
 		"""
 		Deletes the specified internal file
-		:param path: (str) The relative path
-		:return: (bool) Whether the file existed
+		:param path: The relative path
+		:return: Whether the file existed
+		:raises InvalidArgumentException: If 'path' is not a string
 		"""
 
+		Misc.raise_ifn(isinstance(path, str), Exceptions.InvalidArgumentException(Directory.delete_file, 'path', type(path), (str,)))
 		fpath = self.__dpath__ + path.replace('\\', '/').lstrip('/')
 
 		if os.path.isfile(fpath):
@@ -411,93 +437,91 @@ class Directory:
 		"""
 		Returns a new 'File' pointing to the specified relative path
 		The file may not exist and no new file is created
-		:param path: (str) The relative path
-		:return: (File) A new File object
+		:param path: The relative path
+		:return: A new File object
+		:raises InvalidArgumentException: If 'path' is not a string
 		"""
 
-		return File(self.__dpath__ + path.replace('\\', '/').lstrip('/'))
+		Misc.raise_ifn(isinstance(path, str), Exceptions.InvalidArgumentException(Directory.file, 'path', type(path), (str,)))
+		return File(self.__dpath__ + path.replace('\\', os.sep).replace('/', os.sep).lstrip(os.sep))
 
 	def directory(self, path: str) -> Directory:
 		"""
 		Returns a new 'Directory' pointing to the specified relative path
 		The directory may not exist and no new directory is created
-		:param path: (str) The relative path
-		:return: (Directory) A new Directory object
+		:param path: The relative path
+		:return: A new Directory object
+		:raises InvalidArgumentException: If 'path' is not a string
 		"""
 
-		return Directory(self.__dpath__ + path.replace('\\', '/').lstrip('/'))
+		Misc.raise_ifn(isinstance(path, str), Exceptions.InvalidArgumentException(Directory.directory, 'path', type(path), (str,)))
+		return Directory(self.__dpath__ + path.replace('\\', os.sep).replace('/', os.sep).lstrip(os.sep))
 
+	@property
 	def dirpath(self) -> str:
 		"""
-		Pathness
-		:return: (str) The internal path
+		:return: The internal path
 		"""
 
 		return self.__dpath__
 
+	@property
 	def abspath(self) -> str:
 		"""
-		Pathness
-		:return: (str) The internal path as an absolute path
+		:return: The internal path as an absolute path
 		"""
 
 		return os.path.abspath(self.__dpath__)
 
+	@property
 	def realpath(self) -> str:
 		"""
-		Pathness
-		:return: (str) The internal path as a real path
+		:return: The internal path as a real path
 		"""
 
 		return os.path.realpath(self.__dpath__)
 
+	@property
 	def dirname(self) -> str:
 		"""
-		Nameness
-		:return: (str) The name of this directory
+		:return: The name of this directory
 		"""
 
-		return self.__dpath__.split('/')[-2]
+		return self.__dpath__.split(os.sep)[-2]
 
-
-class LoggingDirectory(Directory):
-	"""
-	[LoggingDirectory(Directory)] - Represents a directory for log files
-	"""
-
-	def file(self, path: str) -> LogFile:
+	@property
+	def contents(self) -> dict[str, tuple[File | Directory, ...]]:
 		"""
-		Returns a new 'LogFile' pointing to the specified relative path
-		The file may not exist and no new file is created
-		:param path: (str) The relative path
-		:return: (File) A new File object
-		"""
-
-		return LogFile(self.__dpath__ + path.replace('\\', '/').lstrip('/'))
-
-	def new_log(self, timestamp: typing.Optional[datetime.datetime] = ..., time_format: str = '%Y-%m-%d_%H-%M-%S-%f') -> LogFile:
-		timestamp: datetime.datetime = datetime.datetime.now() if timestamp is None or timestamp is ... else timestamp
-		assert isinstance(timestamp, datetime.datetime)
-		return self.file(f'{timestamp.strftime(time_format)}.log')
-
-	def logfiles(self) -> tuple[LogFile, ...]:
-		"""
-		:return: (tuple[LogFile, ...]) All sub-files of this directory
+		Recursively gets directory contents as a dict
+		:return: A dictionary with two keys: 'files' and 'dirs'
 		"""
 
 		try:
-			data: tuple[str, list[str], list[str]] = next(os.walk(self.__dpath__, True))
-			return tuple(LogFile(data[0] + x) for x in data[2] if x[x.rindex('.') + 1:] == 'log')
+			data = next(os.walk(self.__dpath__, True))
+			return {'files': tuple(File(data[0] + x) for x in data[2]), 'dirs': tuple(Directory(data[0] + x) for x in data[1])}
+		except StopIteration:
+			return {}
+
+	@property
+	def files(self) -> tuple[File, ...]:
+		"""
+		:return: All sub-files of this directory
+		"""
+
+		try:
+			data = next(os.walk(self.__dpath__, True))
+			return tuple(File(data[0] + x) for x in data[2])
 		except StopIteration:
 			return tuple()
 
+	@property
+	def dirs(self) -> tuple[Directory, ...]:
+		"""
+		:return: All subdirectories of this directory
+		"""
 
-class LogFile(File):
-	"""
-	[LogFile(File)] - Represents a single log file object
-	"""
-
-	def open(self, mode='r', encoding: str = 'utf-8', header_format: str = '') -> Stream.LogFileStream:
-		fstream = Stream.LogFileStream(self.__fpath__, mode, encoding, header_format)
-		self.__streams__.append(fstream)
-		return fstream
+		try:
+			data = next(os.walk(self.__dpath__, True))
+			return tuple(Directory(data[0] + x) for x in data[1])
+		except StopIteration:
+			return tuple()

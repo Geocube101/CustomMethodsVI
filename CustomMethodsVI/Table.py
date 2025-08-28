@@ -1,12 +1,25 @@
 from __future__ import annotations
 
-import typing
 import collections
+import typing
+
+from . import Exceptions
+from . import Misc
 
 
 class Table2D(typing.Sized):
+	"""
+	Class representing a 2D table of any size
+	"""
+
 	@staticmethod
 	def __column_index_to_flat_index__(col: str) -> int:
+		"""
+		INTERNAL METHOD
+		:param col:
+		:return:
+		"""
+
 		col = str(col).upper()
 		values: tuple[str, ...] = tuple('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
 		index = 0
@@ -20,12 +33,25 @@ class Table2D(typing.Sized):
 		return index
 
 	@classmethod
-	def shaped(cls, iterable: typing.Iterable, shape: tuple[int, int]) -> Table2D:
-		w, h = shape
+	def shaped(cls, iterable: typing.Iterable[typing.Any], shape: tuple[int, int]) -> Table2D:
+		"""
+		Creates a shaped table
+		:param iterable: The iterable used to populate this table
+		:param shape: The table's dimensions (h, w)
+		:return: The new table
+		:raise InvalidArgumentException: If 'iterable' is not iterable
+		:raise InvalidArgumentException: If 'shape' is not a tuple of integers
+		:raise ValueError: If 'shape' is not length 2
+		"""
+
+		Misc.raise_ifn(hasattr(iterable, '__iter__'), Exceptions.InvalidArgumentException(Table2D.shaped, 'iterable', type(iterable)))
+		Misc.raise_ifn(isinstance(shape, tuple) and all(isinstance(x, int) for x in shape), Exceptions.InvalidArgumentException(Table2D.shaped, 'shape', type(shape)))
+		Misc.raise_ifn(len(shape := tuple(shape)) == 2, ValueError('Shape must be a tuple of exactly 2 integers'))
+		h, w = shape
 		size: int = w * h
 		flattened: list = list(iterable)
 		flattened.extend(None for _ in range(len(flattened), size))
-		nested: list[list] = []
+		nested: list[list[typing.Any]] = []
 
 		for y in range(h):
 			nested.append([flattened[i + (w * y)] for i in range(w)])
@@ -35,14 +61,51 @@ class Table2D(typing.Sized):
 		return instance
 
 	@classmethod
-	def fromarray(cls, nested: typing.Iterable) -> Table2D:
-		pass
+	def fromarray(cls, iterable: typing.Iterable[typing.Iterable[typing.Any]]) -> Table2D:
+		"""
+		Creates a table from a nested iterable
+		:param iterable: The 2D nested iterable
+		:return: The new table
+		:raise InvalidArgumentException: If 'iterable' is not iterable
+		"""
+
+		Misc.raise_ifn(hasattr(iterable, '__iter__'), Exceptions.InvalidArgumentException(Table2D.fromarray, 'iterable', type(iterable)))
+		max_columns: int = 0
+		max_rows: int = 0
+		nested: list[list[typing.Any]] = []
+		iterable: tuple[tuple[typing.Any, ...], ...] = tuple(tuple(row) for row in iterable)
+
+		for col in iterable:
+			max_columns = max(max_columns, len(col))
+			max_rows += 1
+
+		for col in iterable:
+			column: list = list(col)
+			column.extend(None for x in range(max_columns - len(column)))
+			nested.append(column)
+
+		instance = cls()
+		instance.__cells__ = nested
+		return instance
 
 	def __init__(self):
+		"""
+		Class representing a 2D table of any size
+		- Constructor -
+		"""
+
 		self.__cells__: list[list[typing.Any]] = []
 		self.__allowed_types__: list[type] = []
 
 	def __setitem__(self, key: tuple[int, int | str] | slice, value) -> None:
+		"""
+		Sets a single cell value or a range of value
+		:param key: The key to get
+		:param value: The value to set
+		:raises TypeError: If 'key' is invalid
+		:raises AssertionError: If 'key' is a tuple with a length other than 2
+		"""
+
 		w, h = self.dimensions()
 
 		if len(self.__allowed_types__) and value is not None and value is not ... and not isinstance(value, tuple(self.__allowed_types__)):
@@ -100,9 +163,21 @@ class Table2D(typing.Sized):
 			raise TypeError(f'Table2D index must be a tuple[slice | int, slice | int | str], int, or slice; got \'{type(key)}\'')
 
 	def __len__(self) -> int:
+		"""
+		:return: The number of cells in this table
+		"""
+
 		return len(self.__cells__[0]) * len(self.__cells__)
 
 	def __getitem__(self, key: int | slice | tuple[int | slice, int | slice | str]) -> typing.Any | Table2D:
+		"""
+		Gets a single cell value or a sub-table
+		:param key: The key
+		:return: A single cell value if 'key' is a tuple otherwise a sub-table if 'key' is a slice
+		:raises TypeError: If 'key' is invalid
+		:raises AssertionError: If 'key' is a tuple with a length other than 2
+		"""
+
 		w, h = self.dimensions()
 
 		if isinstance(key, tuple):
@@ -203,21 +278,43 @@ class Table2D(typing.Sized):
 		w, h = self.dimensions()
 		return f'<Table2D[{w}x{h}] object @ {hex(id(self))}>'
 
-	def add_rows(self, n: int, fill_value: typing.Any = None) -> None:
+	def add_rows(self, n: int, fill_value: typing.Any = None) -> Table2D:
+		"""
+		Adds 'n' rows to the table
+		:param n: The number of rows to add
+		:param fill_value: The initial value to fill each cell with
+		:return: This instance
+		"""
+
 		if len(self.__allowed_types__) and not isinstance(fill_value, tuple(self.__allowed_types__)):
 			raise TypeError(f'The specified fill value is not an allowed type.\nExpected one of: ({", ".join(str(t) for t in self.__allowed_types__)})')
 
 		w, _ = self.dimensions()
 		self.__cells__.extend([fill_value for j in range(w)] for i in range(n))
+		return self
 
-	def add_columns(self, n: int, fill_value: typing.Any = None) -> None:
+	def add_columns(self, n: int, fill_value: typing.Any = None) -> Table2D:
+		"""
+		Adds 'n' columns to the table
+		:param n: The number of columns to add
+		:param fill_value: The initial value to fill each cell with
+		:return: This instance
+		"""
+
 		if len(self.__allowed_types__) and not isinstance(fill_value, tuple(self.__allowed_types__)):
 			raise TypeError(f'The specified fill value is not an allowed type.\nExpected one of: ({", ".join(str(t) for t in self.__allowed_types__)})')
 
 		for row in self.__cells__:
 			row.extend(fill_value for _ in range(n))
 
+		return self
+
 	def truncate(self) -> None:
+		"""
+		Truncates this table in place
+		All trailing empty columns and rows are removed
+		"""
+
 		index: int = len(self.__cells__) - 1
 
 		while index >= 0 and all(cell is None or cell is ... for cell in self.__cells__[index]):
@@ -227,12 +324,19 @@ class Table2D(typing.Sized):
 		if index < 0:
 			return
 
-		index: int = max(row.index(None) if None in row else row.index(...) if ... in row else -1 for row in self.__cells__)
+		index: int = max(row.index(None) if None in row else row.index(...) if ... in row else len(row) for row in self.__cells__)
 
 		for row in self.__cells__:
 			del row[index:]
 
-	def dimensions(self, width: typing.Optional[int] = ..., height: typing.Optional[int] = ...) -> None | tuple[int, int]:
+	def dimensions(self, width: typing.Optional[int] = ..., height: typing.Optional[int] = ...) -> typing.Optional[tuple[int, int]]:
+		"""
+		Gets or sets the dimensions of this table
+		:param width: The new width
+		:param height: The new height
+		:return: The current dimensions if with and height are not supplied, otherwise None
+		"""
+
 		if (width is ... or width is None) and (height is ... or height is None):
 			h: int = len(self.__cells__)
 			return 0 if h == 0 else len(self.__cells__[0]), h
@@ -252,6 +356,11 @@ class Table2D(typing.Sized):
 					del col[:width]
 
 	def get_column(self, index_or_letter: str | int) -> tuple[typing.Any, ...]:
+		"""
+		:param index_or_letter: The column index or letter
+		:return: The contents of the specified column
+		"""
+
 		width: int = self.dimensions()[0]
 		index: int
 
@@ -269,6 +378,11 @@ class Table2D(typing.Sized):
 		return tuple(row[index] for row in self.__cells__)
 
 	def get_row(self, index: int) -> tuple[typing.Any, ...]:
+		"""
+		:param index: The row index
+		:return: The contents of the specified row
+		"""
+
 		if not isinstance(index, int):
 			raise TypeError('Specified index or letter is invalid')
 		elif (index := int(index)) >= self.dimensions()[1]:
@@ -277,21 +391,47 @@ class Table2D(typing.Sized):
 		return tuple(self.__cells__[index])
 
 	def copy(self) -> Table2D:
+		"""
+		:return: A copy of this table
+		"""
+
 		instance = Table2D()
 		instance.__cells__ = [[cell for cell in row] for row in self.__cells__]
 		return instance
 
 	def truncated(self) -> Table2D:
+		"""
+		Truncates this table
+		All trailing empty columns and rows are removed
+		:return: The truncated table
+		"""
+
 		clone: Table2D = self.copy()
 		clone.truncate()
 		return clone
 
-	def allow_types(self, type_: type | None, *types) -> Table2D:
+	def allow_types(self, type_: typing.Optional[type], *types: type, replace: bool = True) -> Table2D:
+		"""
+		Sets or clears what types are allowed in this table
+		:param type_: If None, clears the whitelist, otherwise adds this type
+		:param types: The remaining types to add to the whitelist
+		:param replace: Whether to replace or extend the whitelist
+		:return: This instance
+		:raises ValueError: If multiple types are supplied and the initial type is None
+		:raises TypeError: If any type is not a type
+		"""
+
 		if type_ is None and len(types):
 			raise ValueError('Types specified whilst clearing allowed types')
 		elif type_ is None:
 			self.__allowed_types__.clear()
 		else:
-			self.__allowed_types__.extend((type_, *types))
+			whitelist: tuple[type, ...] = (type_, *types)
+			Misc.raise_ifn(all(isinstance(t, type) for t in whitelist), TypeError('One or more whitelist types is not a type'))
+
+			if replace:
+				self.__allowed_types__.clear()
+
+			self.__allowed_types__.extend(whitelist)
 
 		return self

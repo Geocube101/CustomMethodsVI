@@ -1,10 +1,17 @@
 import math
 import struct
 
-from .Math import Tensor
+from . import Exceptions
 from . import Decorators
+from . import Misc
+from .Exceptions import InvalidArgumentException
+from .Math import Tensor
 
 class TensorEncryption:
+	"""
+	Class using N-rank tensors to encrypt data
+	"""
+
 	__OPERATION_TRANSPOSE: int = 0
 	__OPERATION_ADD: int = 1
 	__OPERATION_SUB: int = 2
@@ -17,12 +24,28 @@ class TensorEncryption:
 
 	@Decorators.Overload
 	def __init__(self, tensor: Tensor.Tensor):
-		assert isinstance(tensor, Tensor.Tensor), 'Supplied value is not a tensor'
+		"""
+		Class using N-rank tensors to encrypt data
+		- Constructor -
+		:param tensor: The tensor to encrypt with
+		:raises InvalidArgumentException: If 'tensor' is not a Tensor instance
+		"""
+
+		Misc.raise_ifn(isinstance(tensor, Tensor.Tensor), Exceptions.InvalidArgumentException(TensorEncryption.__init__, 'tensor', type(tensor), (Tensor.Tensor,)))
 		self.__tensor__: Tensor.Tensor = tensor
 		self.__operations__: Tensor.Tensor = tensor % TensorEncryption.__HIGHEST_OPERATION
 		self.__extra_data__: Tensor.Tensor = tensor // TensorEncryption.__HIGHEST_OPERATION * TensorEncryption.__HIGHEST_OPERATION
 
 	def encrypt(self, data: bytes | bytearray) -> bytes:
+		"""
+		Encrypts binary data
+		:param data: The data to encrypt
+		:return: The encrypted binary data
+		:raises InvalidArgumentException: If 'data' is not a bytes object or bytearray
+		:raises ValueError: If the supplied tensor cannot be used to encrypt the specified data
+		"""
+
+		Misc.raise_ifn(isinstance(data, (bytes, bytearray)), InvalidArgumentException(TensorEncryption.encrypt, 'data', type(data), (bytes, bytearray)))
 		padding: int = len(self.__operations__) - len(data)
 		operand: tuple[int, ...] = (*data, *[0 for _ in range(max(0, padding))])
 
@@ -57,6 +80,14 @@ class TensorEncryption:
 		return padding.to_bytes(8, 'little') + b''.join(struct.pack('<d', x) for x in matrix.flattened())
 
 	def decrypt(self, data: bytes | bytearray) -> bytes:
+		"""
+		Decrypts binary data
+		:param data: The data to decrypt
+		:return: The decrypted binary data
+		:raises InvalidArgumentException: If 'data' is not a bytes object or bytearray
+		"""
+
+		Misc.raise_ifn(isinstance(data, (bytes, bytearray)), InvalidArgumentException(TensorEncryption.encrypt, 'data', type(data), (bytes, bytearray)))
 		data: bytes = bytes(data)
 		padding = int.from_bytes(data[:8], 'little')
 		operations: Tensor.Tensor = self.__operations__

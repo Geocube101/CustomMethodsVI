@@ -1,3 +1,4 @@
+import atexit
 import pickle
 import psutil
 import sys
@@ -11,8 +12,7 @@ import os
 import curses
 
 from .. import Connection
-from ..Terminal import Terminal
-from ..Terminal import Struct
+from .. import Terminal
 
 
 if __name__ == '__main__':
@@ -25,7 +25,7 @@ if __name__ == '__main__':
 		tps: int
 		width: int
 		height: int
-		font: Struct.Font
+		font: Terminal.Struct.Font
 		callables: dict[str, tuple[str, str, str]]
 		parent_pid, conn, widget_conn, tps, width, height, font, callables = tuple(pickle.loads(base64.b64decode(sys.argv[1].encode())))
 		conn.write(b'\x00')
@@ -60,7 +60,7 @@ if __name__ == '__main__':
 		if temp_module in sys.modules:
 			del sys.modules[temp_module]
 
-		terminal: Terminal.WindowTerminal.SubprocessTerminal = Terminal.WindowTerminal.SubprocessTerminal(conn, widget_conn, width, height, font)
+		terminal: Terminal.Terminal.WindowTerminal.SubprocessTerminal = Terminal.Terminal.WindowTerminal.SubprocessTerminal(conn, widget_conn, width, height, font)
 
 		def on_exit(*_) -> None:
 			global res

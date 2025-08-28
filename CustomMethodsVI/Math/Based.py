@@ -2,18 +2,20 @@ from __future__ import annotations
 
 import typing
 
+from .. import Exceptions
+from .. import Misc
 from ..Decorators import Overload
 
 
 class BaseNumber:
 	"""
-	[BaseNumber] - Represents a number converted to base-N
+	Represents a number converted to base-N
 	"""
 
 	@Overload(strict=True)
 	def __init__(self, base: int, digits: typing.Iterable[int]):
 		"""
-		[BaseNumber] - Represents a number converted to base-N
+		Represents a number converted to base-N
 		- Constructor -
 		SHOULD NOT BE CALLED DIRECTLY; USE 'BaseN.convert'
 		:param base: (int) The base of the number
@@ -27,24 +29,16 @@ class BaseNumber:
 	def to_base(self, base: int) -> BaseNumber:
 		"""
 		Converts this number through base 10 to another base
-		:param (int) base:
-		:return: (BaseNumber) Converted number
+		:param base: The new base to convert to (should be an integer greater than 1)
+		:return: This number converted to the specified base
 		"""
 
 		return BaseNumber(self.__base__, self.__digits__) if base == self.__base__ else BaseN(base).convert(int(self))
 
-	def digits(self) -> tuple[int, ...]:
-		"""
-		Returns the digits (arranged most significant first) that make up this number
-		:return: (tuple[int]) The digits in big-endian
-		"""
-
-		return self.__digits__
-
 	def precision(self) -> int:
 		"""
-		Returns the precision of a BaseNumber
-		:return: (int) The digit precision
+		Calculates how many digits are needed to represent this number
+		:return: The precision of this BaseNumber
 		"""
 
 		first: int = 0
@@ -64,33 +58,47 @@ class BaseNumber:
 
 		return last - first
 
-	def half_compliment(self, size: typing.Optional[int] = ...) -> BaseNumber:
+	def half_complement(self, size: typing.Optional[int] = ...) -> BaseNumber:
 		"""
-		Returns the half compliment of this number
-		:param size:
-		:return:
+		Calculates the half complement of this number
+		:param size: The minimum size to pad the result number to
+		:return: The half complement of this number
+		:raises ValueError: If the size is not an integer >= 1
 		"""
 
-		deltas: list[int, ...] = [(self.__base__ - digit - 1) % self.__base__ for digit in self.__digits__]
+		deltas: list[int] = [(self.__base__ - digit - 1) % self.__base__ for digit in self.__digits__]
 
-		while len(deltas) < size:
-			deltas.insert(0, self.__base__ - 1)
+		if size is not None and size is not ...:
+			Misc.raise_ifn(isinstance(size, int) and (size := int(size)) > 0, ValueError('Size must be an integer >= 1'))
 
-		while len(deltas) > size and deltas[0] == 0:
-			deltas.pop(0)
+			while len(deltas) < size:
+				deltas.insert(0, self.__base__ - 1)
+
+			while len(deltas) > size and deltas[0] == 0:
+				deltas.pop(0)
 
 		return BaseNumber(self.__base__, deltas)
 
-	def full_compliment(self, size: typing.Optional[int] = ...) -> BaseNumber:
-		return self.half_compliment(size) + 1
+	def full_complement(self, size: typing.Optional[int] = ...) -> BaseNumber:
+		"""
+		Calculates the full complement of this number
+		Equal to the half complement plus 1
+		:param size: The minimum size to pad the result number to
+		:return: The full complement of this number
+		:raises ValueError: If the size is not an integer >= 1
+		"""
+
+		return self.half_complement(size) + 1
 
 	def of_size(self, size: int) -> BaseNumber:
 		"""
-		Returns the current number either truncated or extended to the specified number of digits
-		:param size: (int) The specified number of digits
-		:return: (BaseNumber) The new number
+		Truncates or extends this number to the specified number of digits
+		:param size: The specified number of digits
+		:return: The new number
+		:raises ValueError: If the size is not an integer >= 0
 		"""
 
+		Misc.raise_ifn(isinstance(size, int) and (size := int(size)) >= 0, ValueError('Size must be an integer >= 0'))
 		digits: tuple[int, ...] = (*([0] * size), *self.__digits__)
 		return BaseNumber(self.__base__, digits[-size:])
 
@@ -135,31 +143,40 @@ class BaseNumber:
 		return BaseNumber(self.__base__, tuple(digits))
 
 	@property
-	def digitlength(self) -> int:
+	def digits(self) -> tuple[int, ...]:
 		"""
-		:return: (int) The number of digits to represent this number
+		:return: The digits (arranged most significant first) that make up this number
+		"""
+
+		return self.__digits__
+
+	@property
+	def digit_length(self) -> int:
+		"""
+		:return: The number of digits to represent this number
 		"""
 		return len(self.__digits__)
 
 	@property
 	def base(self) -> int:
 		"""
-		:return: (int) The base of this number
+		:return: The base of this number
 		"""
 		return self.__base__
 
 
 class BaseN:
 	"""
-	[BaseN] - Class for converting a base 10 number into another base
+	Class for converting a base 10 number into another base
 	"""
 
 	@Overload
 	def __init__(self, base: int):
 		"""
-		[BaseN] - Class for converting a base 10 number into another base
+		Class for converting a base 10 number into another base
 		- Constructor -
-		:param base: (int) The base to convert to
+		:param base: The base to convert to
+		:raises AssertionError: If the base is less than 2
 		"""
 
 		assert base >= 2, f'Minimum base is 2, got {base}'
@@ -169,19 +186,20 @@ class BaseN:
 		return str(self)
 
 	def __str__(self):
-		return f"Base<{self.__base__}> Converter"
+		return f'Base<{self.__base__}> Converter'
 
 	#@Overload
 	def convert(self, x: int | BaseNumber) -> BaseNumber:
 		"""
 		Converts the given number to this base
-		:param x: (int or BaseNumber) The number to convert
-		:return: (BaseNumber) The converted number
+		:param x: The number to convert
+		:return: The converted number
+		:raises InvalidArgumentException: If 'x' is not an integer or BaseNumber
 		"""
 
-		if type(x) is BaseNumber:
+		if isinstance(x, BaseNumber):
 			return x.to_base(self.__base__)
-		elif type(x) is int:
+		elif isinstance(x, int):
 			negative: int = -1 if x < 0 else 1
 
 			if x == 0:
@@ -197,8 +215,12 @@ class BaseN:
 			digits[-1] *= negative
 			return BaseNumber(self.__base__, tuple(reversed(digits)))
 		else:
-			raise TypeError(f"Expected type 'int' or type 'BaseNumber', got '{type(x).__name__}'")
+			raise Exceptions.InvalidArgumentException(self.convert, 'x', type(x), (int, BaseNumber))
 
 	@property
 	def base(self) -> int:
+		"""
+		:return: The current base of this number converter
+		"""
+
 		return self.__base__

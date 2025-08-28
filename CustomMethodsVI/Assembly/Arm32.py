@@ -1,13 +1,14 @@
+import collections
 import typing
 
-from collections import OrderedDict
-
-from ..Math.Based import BaseN, BaseNumber
+from .. import Exceptions
+from ..Math import Based
+from .. import Misc
 
 
 class Assembler:
 	"""
-	[Assembler] - Class for encoding and decoding assembly from Arm32 instruction set
+	Class for encoding and decoding assembly from Arm32 instruction set
 	"""
 
 	__DATA_PROCESSING__: tuple[str, ...] = (
@@ -70,8 +71,10 @@ class Assembler:
 	def encode(assembly: typing.Iterable[str]) -> tuple[int, ...]:
 		"""
 		Encodes a set of assembly instructions to machine code
-		:param assembly: (Iterable[str]) An iterable of assembly code lines to encode
-		:return: (tuple[int]) The encoded 32-bit machine instructions
+		:param assembly: An iterable of assembly code lines to encode
+		:return: The encoded 32-bit machine instructions
+		:raises InvalidArgumentException: If 'assembly' is not iterable
+		:raises TypeError: If any value in 'assembly' is not a string
 		"""
 
 		def parse_value(val: str) -> int:
@@ -99,11 +102,13 @@ class Assembler:
 
 			return int(val[1:]) if val.startswith('R') else int(val)
 
+		Misc.raise_ifn(hasattr(assembly, '__iter__'), Exceptions.InvalidArgumentException(Assembler.encode, 'assembly', type(assembly)))
 		output: list[int] = []
 		labels: dict[str, int] = {}
 		index: int = 0
 		commands: tuple[str, ...] = (*Assembler.__DATA_PROCESSING__, *Assembler.__MEMORY__, *Assembler.__BRANCH__)
-		assembly: list[str, ...] = list(assembly)
+		assembly: list[str] = list(assembly)
+		Misc.raise_if(any(not isinstance(x, str) for x in assembly), TypeError('One or more assembly instructions is not a string'))
 
 		for i, line in enumerate(assembly):
 			if len(line.strip()) == 0:
@@ -173,7 +178,7 @@ class Assembler:
 
 				if len(args) == 1 and args[0].startswith('#'):
 					value: int = parse_value(args[0])
-					basen: BaseNumber = BaseN(2).convert(value)
+					basen: Based.BaseNumber = Based.BaseN(2).convert(value)
 					assert basen.precision() <= 8, 'Immediate operand is not 8-bit precision'
 					binary: str = str(basen).rjust(8, '0')
 					is_immediate = True
@@ -217,7 +222,7 @@ class Assembler:
 					is_immediate = rn.startswith('#')
 
 					if not is_immediate:
-						basen: BaseNumber = BaseN(2).convert(Rn)
+						basen: Based.BaseNumber = Based.BaseN(2).convert(Rn)
 						assert basen.precision() <= 8, 'Immediate operand is not 8-bit precision'
 						binary: str = str(basen).rjust(8, '0')
 						is_immediate = True
@@ -365,15 +370,19 @@ class Assembler:
 	def decode(assembly: typing.Iterable[int]) -> tuple[str, ...]:
 		"""
 		Decodes a set of assembly instructions from machine code
-		:param assembly: (tuple[int]) An iterable of 32-bit machine code values to decode
-		:return: (Iterable[str]) The decoded assembly instructions
+		:param assembly: An iterable of 32-bit machine code values to decode
+		:return: The decoded assembly instructions
+		:raises InvalidArgumentException: If 'assembly' is not iterable
+		:raises TypeError: If any value in 'assembly' is not an integer
 		"""
 
+		Misc.raise_ifn(hasattr(assembly, '__iter__'), Exceptions.InvalidArgumentException(Assembler.encode, 'assembly', type(assembly)))
 		decoded: list[str] = []
 		labels: dict[int, str] = {}
 		label_counter: int = 0
 
 		for i, instr in enumerate(assembly):
+			Misc.raise_ifn(isinstance(instr, int), TypeError('One or more machine code instructions is not an integer'))
 			instruction: list[str] = []
 			cond: int = instr >> 28 & 0xF
 			op: int = instr >> 26 & 0b11
@@ -497,17 +506,19 @@ class Assembler:
 		return tuple(decoded)
 
 	@staticmethod
-	def breakdown(instruction: int) -> OrderedDict[str, int]:
+	def breakdown(instruction: int) -> collections.OrderedDict[str, tuple[int, int]]:
 		"""
 		Creates a breakdown of the single 32-bit Arm32 instruction
 		The resulting ordered dictionary contains a mapping of tuples
 		Each tuple contains a str (the column name) and the field size in bits
 		If the size is negative, the number should be represented as a negative number
-		:param instruction: (int) The 32-bit Arm32 instruction
-		:return: (OrderedDict[str, int]) The breakdown
+		:param instruction: The 32-bit Arm32 instruction
+		:return: An OrderedDict of the field name and a tuple containing the field size (in bits) and the field value
+		:raises TypeError: If 'instruction' is not an integer
 		"""
 
-		breakdown: OrderedDict[str, tuple[int, int]] = OrderedDict()
+		Misc.raise_ifn(isinstance(instruction, int), TypeError('Machine code instruction is not an integer'))
+		breakdown: collections.OrderedDict[str, tuple[int, int]] = collections.OrderedDict()
 		instruction = instruction & 0xFFFFFFFF
 		cond: int = instruction >> 28 & 0xF
 		op: int = instruction >> 26 & 0b11
@@ -608,12 +619,12 @@ class Assembler:
 	def print_breakdown(instruction: int) -> None:
 		"""
 		Prints a breakdown of the single 32-bit Arm32 instruction
-		:param instruction: (int) The 32-bit Arm32 instruction
-		:return: (None)
+		:param instruction: The 32-bit Arm32 instruction
+		:raises TypeError: If 'instruction' is not an integer
 		"""
 
 		msg: str = f'"{instruction}"\n\n'
-		breakdown: OrderedDict[str, int] = Assembler.breakdown(instruction)
+		breakdown: collections.OrderedDict[str, tuple[int, int]] = Assembler.breakdown(instruction)
 		lines: list[str] = [' FORMAT │ ', '────────┼─', '    BIN │ ', '    OCT │ ', '    DEC │ ', '    HEX │ ']
 
 		for i, (field, (size, value)) in enumerate(breakdown.items()):

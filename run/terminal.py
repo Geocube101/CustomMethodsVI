@@ -26,6 +26,7 @@ def mainloop(term: Terminal.Terminal) -> int:
 	elif c == curses.KEY_F10:
 		curses.ungetch(curses.KEY_RESIZE)
 
+	term.cursor(*term.to_fixed(0, 10))
 	#term.end(5)
 
 
@@ -33,9 +34,17 @@ if __name__ == '__main__':
 	term = Terminal.Terminal()
 	w, h = term.size()
 	term.scroll_speed(10)
+	term.cursor_flash(0)
+	term.cursor_visibility(2)
 	term.font(Struct.Font('Courier New', (4, 8), 400))
 
-	#img: Widgets.Image = term.add_image(10, 5, 100, 50, r"C:\Users\geoga\Pictures\nuclear.png" if os.name == 'nt' else '/mnt/c/Users/geoga/Pictures/nuclear.png')
+	#img: Widgets.Image = term.add_image(10, 5, 100, 50, r"C:\Users\geoga\Pictures\portals2.0.png" if os.name == 'nt' else '/mnt/c/Users/geoga/Pictures/portals2.0png')
+	term.add_horizontal_slider(10, 5, 100, 3, fill_char='#')
 	term.update_type(Enums.WINUPDATE_MOUSEIN)
 
-	sys.exit(term.mainloop(100, after_draw=mainloop))
+	remote = term.add_window(60, 512, 256)
+	remote.add_button(5, 5, 10, 4, 'Press Me').then(lambda p: print(p.response().parent.wait()))
+
+	res: int = term.mainloop(100, after_draw=mainloop)
+	input('...')
+	sys.exit(res)

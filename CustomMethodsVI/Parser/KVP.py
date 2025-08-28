@@ -7,7 +7,7 @@ import typeguard
 
 class KVP:
 	"""
-	[KVP] - Class providing parsing capabilities for the custom KeyValuePair (KVP) data storage format
+	Class providing parsing capabilities for the custom KeyValuePair (KVP) data storage format
 	"""
 
 	class __FormatMarker__:
@@ -52,15 +52,37 @@ class KVP:
 			return str([x.value for x in self.__reference__])
 
 		def append(self, value: bool | int | float | str | bytes | None) -> None:
-			self.__reference__.append(KVP.__mark_formatter__(value))
+			"""
+			Appends a value to the end of this list
+			:param value: The value to add
+			:raises ValueError: If the value is not a boolean, integer, float, string, bytes, or None
+			"""
+
+			if value is None or isinstance(value, (bool, int, float, str, bytes)):
+				self.__reference__.append(KVP.__mark_formatter__(value))
+			else:
+				raise ValueError(f'Expected either an int, float, str, or None; got \'{type(value)}\'')
 
 		def clear(self) -> None:
+			"""
+			Clears this list
+			"""
+
 			self.__reference__.clear()
 
 		def copy(self) -> list[bool | int | float | str | bytes | None]:
+			"""
+			:return: A copy of this list
+			"""
+
 			return [x.value for x in self.__reference__]
 
 		def count(self, item: bool | int | float | str | bytes | None) -> int:
+			"""
+			:param item: The item to count
+			:return: The number of occurrences of 'item' in this list
+			"""
+
 			count: int = 0
 
 			for x in self.__reference__:
@@ -69,6 +91,11 @@ class KVP:
 			return count
 
 		def extend(self, iterable: typing.Iterable[bool | int | float | str | bytes | None]) -> None:
+			"""
+			Adds an iterable to the end of this list
+			:param iterable: The iterable to add
+			"""
+
 			for item in iterable:
 				if item is None or isinstance(item, (int, float, str)):
 					self.__reference__.append(KVP.__mark_formatter__(item))
@@ -76,6 +103,11 @@ class KVP:
 					raise ValueError(f'Expected either an int, float, str, or None; got \'{type(item)}\'')
 
 		def index(self, item: bool | int | float | str | bytes | None) -> int:
+			"""
+			:param item: The item to look for
+			:return: The item's index in this list or -1 if not found
+			"""
+
 			for i, x in enumerate(self.__reference__):
 				if x.value == item:
 					return i
@@ -83,15 +115,34 @@ class KVP:
 			return -1
 
 		def insert(self, index: int, item: bool | int | float | str | bytes | None) -> None:
-			if item is None or isinstance(item, (int, float, str)):
+			"""
+			Inserts a value at the specified index
+			:param index: The index to insert at
+			:param item: The value
+			:raises ValueError: If the value is not a boolean, integer, float, string, bytes, or None
+			"""
+
+			if item is None or isinstance(item, (bool, int, float, str, bytes)):
 				self.__reference__.insert(index, KVP.__mark_formatter__(item))
 			else:
 				raise ValueError(f'Expected either an int, float, str, or None; got \'{type(item)}\'')
 
 		def pop(self, index: int = -1) -> bool | int | float | str | bytes | None:
+			"""
+			Pops and returns an item from the specified index
+			:param index: The index to pop
+			:return: The popped item
+			"""
+
 			return self.__reference__.pop(index).value
 
 		def remove(self, item: bool | int | float | str | bytes | None) -> None:
+			"""
+			Removes an item from this list
+			:param item: The item to remove
+			:raises ValueError: If the item is not in this list
+			"""
+
 			for i, x in enumerate(self.__reference__):
 				if x.value == item:
 					self.__reference__.pop(i)
@@ -100,25 +151,35 @@ class KVP:
 			raise ValueError('list.remove(x): x not in list')
 
 		def reverse(self) -> None:
+			"""
+			Reverses this list in-place
+			"""
+
 			self.__reference__.reverse()
 
 		def sort(self, *, key: typing.Optional[typing.Callable[[bool | int | float | str | bytes | None], typing.Any]] = None, reverse: bool = False) -> None:
+			"""
+			Sorts this list in-place
+			:param key: The key to sort by
+			:param reverse: Whether to reverse the sort order
+			"""
+
 			def sorter(wrapper: KVP.__FormatMarker__) -> typing.Any:
 				if key is not None and key is not ...:
 					return key(wrapper.value)
 				else:
 					return wrapper.value
 
-			self.__reference__.sort(key=sorter, reverse=True)
+			self.__reference__.sort(key=sorter, reverse=reverse)
 
 	@classmethod
 	def decode(cls, data: str, root_name: str = None) -> KVP:
 		"""
 		Parses a string into a KVP object
-		:param data: (str) The data to parse
-		:param root_name: (str) The name of the root object
-		:return: (KVP) A new KVP object
-		:raises KVPDecodeError: If an error occured during decode
+		:param data: The data to parse
+		:param root_name: The name of the root object
+		:return: A new KVP object
+		:raises KVPDecodeError: If an error occurred during decode
 		"""
 
 		def _decode_value(line_number: int, line: str, value: str) -> KVP.__FormatMarker__:
@@ -299,9 +360,8 @@ class KVP:
 	def __is_iterable(x) -> bool:
 		"""
 		INTERNAL METHOD; DO NOT USE
-		Checks if an object is iterable
-		:param x: (ANY) The object
-		:return: (bool) Iterableness
+		:param x: The object
+		:return: Whether an object is iterable
 		"""
 
 		try:
@@ -315,8 +375,8 @@ class KVP:
 		"""
 		INTERNAL METHOD; DO NOT USE
 		Appends the format specifier to a value for storage in a KVP object
-		:param val: (int or float or str or None) The value to mark
-		:return: (---) The marked value
+		:param val: (The value to mark
+		:return: The marked value
 		"""
 
 		if isinstance(val, bool):
@@ -336,11 +396,11 @@ class KVP:
 
 	def __init__(self, namespace_name: str | None, data: dict[str, list[int | float | str | bytes | None] | list[KVP.__FormatMarker__] | KVP | dict]):
 		"""
-		[KVP] - Class providing parsing capabilities for the custom KeyValuePair (KVP) data storage format
+		Class providing parsing capabilities for the custom KeyValuePair (KVP) data storage format
 		- Constructor -
 		SHOULD NOT BE CALLED DIRECTLY; USE 'KVP::decode'
-		:param namespace_name: (str) The root name
-		:param data: (dict) The data to store
+		:param namespace_name: The root name
+		:param data: The data to store
 		:raises AssertionError: If the data is of an invalid type
 		:raises TypeError: If the data is of an invalid type
 		"""
@@ -404,17 +464,44 @@ class KVP:
 		return _format(self)
 
 	def __contains__(self, item: str) -> bool:
+		"""
+		:param item: The mapping key
+		:return: Whether the specified key exists
+		"""
+
 		return item in self.__mapping__
 
 	def __getitem__(self, item: str) -> KVP.__ListWrapper__[bool | int | float | str | bytes | None] | KVP:
+		"""
+		Gets the specified mapping value
+		:param item: The mapping key
+		:return: The associated map value
+		:raises AssertionError: If the key is not a string
+		"""
+
 		assert isinstance(item, str), f'KVP key must be \'str\', got \'{type(item)}\''
 		value = self.__mapping__[item]
 		return KVP.__ListWrapper__(value) if isinstance(value, list) else value
 
 	def __getattr__(self, item: str) -> KVP.__ListWrapper__[bool | int | float | str | bytes | None] | KVP:
+		"""
+		Gets the specified mapping value
+		:param item: The mapping key
+		:return: The associated map value
+		:raises AssertionError: If the key is not a string
+		"""
+
 		return self[item]
 
 	def __setitem__(self, key: str, value: list[bool | int | float | str | bytes | None] | bool | int | float | str | bytes | None | KVP | dict) -> None:
+		"""
+		Sets the specified mapping key to a value
+		:param key: The mapping key
+		:param value: The new value
+		:raises AssertionError: If the key is not a string
+		:raises ValueError: If the value is not a bool, int, float, string, None, iterable of such, a KVP map or dict
+		"""
+
 		assert isinstance(key, str), f'KVP key must be \'str\', got \'{type(key)}\''
 		valid_types: tuple[type, ...] = (bool, int, float, str, type(None), type(self))
 		key = str(key)
@@ -437,16 +524,38 @@ class KVP:
 			raise ValueError(f'Expected either a bool, int, float, str, or None, an iterable of such, another KVP object, or a dictionary that can be converted to a KVP object; got \'{type(value)}\'')
 
 	def __setattr__(self, key: str, value: list[bool | int | float | str | bytes | None] | bool | int | float | str | bytes | None | KVP | dict) -> None:
+		"""
+		Sets the specified mapping key to a value
+		:param key: The mapping key
+		:param value: The new value
+		:raises AssertionError: If the key is not a string
+		:raises ValueError: If the value is not a bool, int, float, string, None, iterable of such, a KVP map or dict
+		"""
+
 		if super().__getattribute__('__initialized__'):
 			self[key] = value
 		else:
 			super().__setattr__(key, value)
 
 	def __delitem__(self, key: str):
+		"""
+		Deletes the specified mapping key
+		:param key: The mapping key
+		:return: The associated map value
+		:raises AssertionError: If the key is not a string
+		"""
+
 		assert isinstance(key, str), f'KVP key must be \'str\', got \'{type(key)}\''
 		del self.__mapping__[key]
 
 	def __delattr__(self, item: str):
+		"""
+		Deletes the specified mapping key
+		:param key: The mapping key
+		:return: The associated map value
+		:raises AssertionError: If the key is not a string
+		"""
+
 		assert isinstance(item, str), f'KVP key must be \'str\', got \'{type(item)}\''
 		del self.__mapping__[item]
 
@@ -456,24 +565,24 @@ class KVP:
 
 	def keys(self) -> tuple[str, ...]:
 		"""
-		Gets the keys for this KVP map
-		:return: (tuple[str]) The list of keys
+		:return: The keys of this KVP map
 		"""
 
 		return tuple(self.__mapping__.keys())
 
 	def values(self) -> tuple[list[typing.Any], ...]:
 		"""
-		Gets the values for this KVP map
-		:return: (tuple[ANY]) The list of values
+		:return: The values of this KVP map
 		"""
 
 		return tuple(x if type(x) is type(self) else [a.value for a in x] for x in self.__mapping__.values())
 
-	def pretty_print(self) -> str:
+	def pretty_print(self, tab_size: int = 1) -> str:
 		"""
 		Pretty prints the KVP tree
-		:return: (str) The printed tree
+		:param tab_size: The tab size
+		:return: The printed tree
+		:raises AssertionError: If tab size is not an integer or is negative
 		"""
 
 		def _format(value: KVP.__FormatMarker__) -> str:
@@ -494,7 +603,7 @@ class KVP:
 				return str(value)
 
 		def _printer(namespace: KVP, indent: int = 1) -> None:
-			tab: str = '\t' * indent
+			tab: str = '\t' * indent * tab_size
 			k: str
 			v: list[bool | int | float | str | bytes | None] | bool | int | float | str | bytes | None | KVP
 
@@ -505,6 +614,7 @@ class KVP:
 				else:
 					output.append(f'{tab}{k}=[{", ".join(_format(x) for x in v)}]')
 
+		assert isinstance(tab_size, int) and (tab_size := int(tab_size)) > 0, 'Invalid tab size'
 		output: list[str] = [f'{self.__namespace__}:']
 		_printer(self)
 		return '\n'.join(output)
@@ -512,8 +622,9 @@ class KVP:
 	def encode(self, explicit_str_format: bool = False) -> str:
 		"""
 		Converts this KVP object back into a string for writing
-		:param explicit_str_format: (bool) If true, values of type str will have the format marker set
-		:return: (str) The encoded data
+		:param explicit_str_format: If true, values of type str will have the format marker set
+		:return: The encoded data
+		:raises KVPEncodeError: If an error occurred during encode
 		"""
 
 		def _format(value: KVP.__FormatMarker__) -> str:

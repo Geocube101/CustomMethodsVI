@@ -3,38 +3,43 @@
 from __future__ import annotations
 
 import asyncio
+import flask
+import flask_socketio
 import os
+import socketio
+import sys
 import threading
 import time
-
-import socketio
-import flask_socketio
-import flask
 import typing
-import sys
+
+from . import Exceptions
+from . import Misc
 
 __PRIVATE_IDS__ = ('connect', 'disconnect', 'error', 'join', 'leave')
 
 
 class FlaskSocketioServer:
 	"""
-	[FlaskSocketioServer] - Operations for socket-io server-side interface (Flask)
+	Operations for socket-io server-side interface (Flask)
 	"""
 
 	def __init__(self, app: flask.Flask, **kwargs) -> None:
 		"""
-		[FlaskSocketioServer] - Operations for socket-io server-side interface (Flask)
+		Operations for socket-io server-side interface (Flask)
 		- Constructor -
 		:param app: The Flask application
+		:raises InvalidArgumentException: If 'app' is not a flask.Flask instance
 		"""
 
-		self.__app: flask.Flask = app
-		self.__socket: flask_socketio.SocketIO = flask_socketio.SocketIO(app, **kwargs)
-		self.__spaces: list[FlaskSocketioNamespace] = [FlaskSocketioNamespace(self, '/')]
-		self.__state: bool = False
-		self.__async_listener: threading.Thread | None = None
-		self.__host: str = ...
-		self.__port: int = ...
+		Misc.raise_ifn(isinstance(app, flask.Flask), Exceptions.InvalidArgumentException(FlaskSocketioServer.__init__, 'app', type(app), (flask.Flask,)))
+
+		self.__app__: flask.Flask = app
+		self.__socket__: flask_socketio.SocketIO = flask_socketio.SocketIO(app, **kwargs)
+		self.__spaces__: list[FlaskSocketioNamespace] = [FlaskSocketioNamespace(self, '/')]
+		self.__state__: bool = False
+		self.__async_listener__: threading.Thread | None = None
+		self.__host__: str = ...
+		self.__port__: int = ...
 
 	def __enter__(self, app: flask.Flask) -> FlaskSocketioServer:
 		return FlaskSocketioServer(app)
@@ -48,22 +53,26 @@ class FlaskSocketioServer:
 		:param host: The IP address to listen to
 		:param port: The port to listen to
 		:param kwargs: Extra keyword arguments to pass into "flask_socketio.SocketIO.run"
-		:return: (None)
 		:raises IOError: If the server is already running
+		:raises InvalidArgumentException: If 'host' is not a string
+		:raises InvalidArgumentException: If 'port' is not a positive integer
 		"""
 
-		if self.__state:
+		Misc.raise_ifn(isinstance(host, str), Exceptions.InvalidArgumentException(FlaskSocketioServer.listen, 'host', type(host), (str,)))
+		Misc.raise_ifn(isinstance(port, int) and int(port) >= 0, Exceptions.InvalidArgumentException(FlaskSocketioServer.listen, 'port', type(port), (int,)))
+
+		if self.__state__:
 			raise IOError(f'Server already listening')
 
-		for namespace in self.__spaces:
-			namespace.__prepare_socket__(self.__socket)
+		for namespace in self.__spaces__:
+			namespace.__prepare_socket__(self.__socket__)
 
-		self.__state = True
+		self.__state__ = True
 
 		try:
-			self.__host = host
-			self.__port = port
-			self.__socket.run(self.__app, host=host, port=port, **kwargs)
+			self.__host__ = str(host)
+			self.__port__ = int(port)
+			self.__socket__.run(self.__app__, host=host, port=port, **kwargs)
 		except (KeyboardInterrupt, SystemExit):
 			pass
 		finally:
@@ -75,65 +84,75 @@ class FlaskSocketioServer:
 		:param host: The IP address to listen to
 		:param port: The port to listen to
 		:param kwargs: Extra keyword arguments to pass into "flask_socketio.SocketIO.run"
-		:return: (threading.Thread) The new listening thread
+		:return: The new listening thread
 		:raises IOError: If the server is already running
+		:raises InvalidArgumentException: If 'host' is not a string
+		:raises InvalidArgumentException: If 'port' is not a positive integer
 		"""
 
-		if self.__state:
+		Misc.raise_ifn(isinstance(host, str), Exceptions.InvalidArgumentException(FlaskSocketioServer.listen, 'host', type(host), (str,)))
+		Misc.raise_ifn(isinstance(port, int) and int(port) >= 0, Exceptions.InvalidArgumentException(FlaskSocketioServer.listen, 'port', type(port), (int,)))
+
+		if self.__state__:
 			raise IOError(f'Server already listening')
 
-		self.__async_listener: threading.Thread = threading.Thread(target=self.listen, args=(host, port), kwargs=kwargs)
-		self.__async_listener.start()
-		return self.__async_listener
+		self.__async_listener__: threading.Thread = threading.Thread(target=self.listen, args=(host, port), kwargs=kwargs)
+		self.__async_listener__.start()
+		return self.__async_listener__
 
 	def close(self) -> None:
 		"""
 		Closes the server's listening thread and exits main thread
-		:return: (None)
 		"""
 
-		if not self.__state:
+		if not self.__state__:
 			return
 
-		self.__state = False
-		self.__socket.stop()
-		self.__async_listener = None
+		self.__state__ = False
+		self.__socket__.stop()
+		self.__async_listener__ = None
 
 	def on(self, eid: str, func: typing.Callable = None) -> None | typing.Callable:
 		"""
 		Binds a callback to a socket event id
-		:param eid: (str) The event id to listen to
-		:param func: (CALLABLE) The callback or None if used as a decorator
-		:return: (None or CALLABLE)
+		:param eid: The event id to listen to
+		:param func: The callback or None if used as a decorator
+		:return: The binder if used as a decorator
+		:raises InvalidArgumentException: If eid is not a string
+		:raises InvalidArgumentException: If callback is not callable
 		"""
+
+		Misc.raise_ifn(isinstance(eid, str), Exceptions.InvalidArgumentException(FlaskSocketioServer.on, 'eid', type(eid), (str,)))
+		eid = str(eid)
 
 		if func is None:
 			def binder(sub_func: typing.Callable):
-				self.__spaces[0].on(eid, sub_func)
+				Misc.raise_ifn(callable(sub_func), Exceptions.InvalidArgumentException(FlaskSocketioServer.on, 'func', type(sub_func)))
+				self.__spaces__[0].on(eid, sub_func)
 			return binder
 		else:
-			self.__spaces[0].on(eid, func)
+			Misc.raise_ifn(callable(func), Exceptions.InvalidArgumentException(FlaskSocketioServer.on, 'func', type(func)))
+			self.__spaces__[0].on(eid, func)
 
 	def of(self, namespace: str) -> FlaskSocketioNamespace:
 		"""
 		Creates a new namespace
-		:param namespace: (str) The namespace name
-		:return: (FlaskSocketioNamespace) The new socketio namespace
+		:param namespace: The namespace name
+		:return: The new socketio namespace
 		"""
 
 		namespace: FlaskSocketioNamespace = FlaskSocketioNamespace(self, namespace)
-		self.__spaces.append(namespace)
-		self.__state and namespace.__prepare_socket__(self.__socket)
+		self.__spaces__.append(namespace)
+		self.__state__ and namespace.__prepare_socket__(self.__socket__)
 		return namespace
 
 	def off(self, eid: str) -> None:
 		"""
 		Unbinds all listeners from an event
 		:param eid: The event id to ignore
-		:return: (None)
 		"""
 
-		self.__spaces[0].off(eid)
+		self.__spaces__[0].off(eid)
 
 	def emit(self, eid: str, *data, wl: tuple[str | FlaskSocketioSocket, ...] = (), bl: tuple[str | FlaskSocketioSocket, ...] = ()) -> None:
 		"""
@@ -142,62 +161,84 @@ class FlaskSocketioServer:
 		:param data: The data to send
 		:param wl: Sockets to whitelist
 		:param bl: Sockets to blacklist
-		:return: (None)
 		"""
 
-		for namespace in self.__spaces:
+		for namespace in self.__spaces__:
 			namespace.emit(eid, *data, wl=wl, bl=bl)
 
 	@property
 	def closed(self) -> bool:
-		return not self.__state
+		"""
+		:return: Whether the server is closed
+		"""
+
+		return not self.__state__
 
 	@property
-	def host(self) -> str | None:
-		return None if self.__host is None or self.__host is ... else str(self.__host)
+	def host(self) -> typing.Optional[str]:
+		"""
+		:return: The host or None if not started
+		"""
+
+		return None if self.__host__ is None or self.__host__ is ... else str(self.__host__)
 
 	@property
-	def port(self) -> int | None:
-		return None if self.__port is None or self.__port is ... else int(self.__port)
+	def port(self) -> typing.Optional[int]:
+		"""
+		:return: The port or None if not started
+		"""
+		return None if self.__port__ is None or self.__port__ is ... else int(self.__port__)
 
 	@property
 	def socketio(self) -> flask_socketio.SocketIO:
-		return self.__socket
+		"""
+		:return: The underlying flask_socket.SocketIO instance
+		"""
+
+		return self.__socket__
 
 	@property
 	def app(self) -> flask.Flask:
-		return self.__app
+		"""
+		:return: The underlying flask.Flask instance
+		"""
+
+		return self.__app__
 
 
 class FlaskSocketioNamespace:
 	"""
-	[FlaskSocketioNamespace] - Flask socketio namespace object
+	Flask socketio namespace object
 	"""
 
 	def __init__(self, server: FlaskSocketioServer, namespace: str) -> None:
 		"""
-		[FlaskSocketioNamespace] - Flask socketio namespace object
+		Flask socketio namespace object
 		- Constructor -
 		SHOULD NOT BE CALLED DIRECTLY; USE 'FlaskSocketioServer.of'
-		:param server: (FlaskSocketioServer) The socketio server
-		:param namespace: (str) The namespace name
+		:param server: The socketio server
+		:param namespace: The namespace name
+		:raises InvalidArgumentException: If 'server' is not a FlaskSocketioServer instance
+		:raises InvalidArgumentException: If 'namespace' is not a string
 		"""
 
-		self.__server: FlaskSocketioServer = server
-		self.__ready: bool = False
-		self.__namespace__: str = namespace
+		Misc.raise_ifn(isinstance(server, FlaskSocketioServer), Exceptions.InvalidArgumentException(FlaskSocketioNamespace.__init__, 'server', type(server), (FlaskSocketioServer,)))
+		Misc.raise_ifn(isinstance(namespace, str), Exceptions.InvalidArgumentException(FlaskSocketioNamespace.__init__, 'namespace', type(namespace), (str,)))
+
+		self.__server__: FlaskSocketioServer = server
+		self.__ready__: bool = False
+		self.__namespace__: str = str(namespace)
 		self.__events__: dict[str, typing.Callable] = {}
 		self.__sockets__: dict[str, FlaskSocketioSocket] = {}
 		self.__socket_events__: dict[str, dict[str, FlaskSocketioSocket]] = {}
 
 	def __exec__(self, eid: str, *args, **kwargs) -> None:
 		"""
-		INTERNAL METHOD; DO NOT USE
+		INTERNAL METHOD
 		Executes all callbacks for a given event id
 		:param eid: The event id to execute
 		:param args: The positional arguments to call with
 		:param kwargs: The keyword arguments to call with
-		:return: (None)
 		"""
 
 		if eid in self.__events__:
@@ -205,7 +246,7 @@ class FlaskSocketioNamespace:
 
 	def __prepare_socket__(self, flask_socket: flask_socketio.SocketIO) -> None:
 		"""
-		INTERNAL METHOD; DO NOT USE
+		INTERNAL METHOD
 		Prepares a flask socket for use
 		:param flask_socket: The flask socket to prepare
 		"""
@@ -213,7 +254,7 @@ class FlaskSocketioNamespace:
 		@flask_socket.on('connect', namespace=self.__namespace__)
 		def on_connect(auth):
 			sid = flask.request.sid
-			socket = FlaskSocketioSocket(self.__server, self, sid, auth, flask.request)
+			socket = FlaskSocketioSocket(self.__server__, self, sid, auth, flask.request)
 			self.__sockets__[sid] = socket
 			self.__exec__('connect', socket)
 
@@ -226,15 +267,14 @@ class FlaskSocketioNamespace:
 				del self.__sockets__[sid]
 
 		self.__socket = flask_socket
-		self.__ready = True
+		self.__ready__ = True
 
 	def __bind_socket_event__(self, socket: FlaskSocketioSocket, eid: str) -> None:
 		"""
-		INTERNAL METHOD; DO NOT USE
+		INTERNAL METHOD
 		Binds a socket internally to an event
 		:param socket: The socket to bind to
 		:param eid: The event id
-		:return: (None)
 		"""
 
 		if eid in self.__socket_events__:
@@ -250,11 +290,10 @@ class FlaskSocketioNamespace:
 
 	def __unbind_socket_event__(self, socket: FlaskSocketioSocket, eid: str) -> None:
 		"""
-		INTERNAL METHOD; DO NOT USE
+		INTERNAL METHOD
 		Unbinds a socket internally to an event
 		:param socket: The socket to unbind from
 		:param eid: The event id
-		:return: (None)
 		"""
 
 		if eid in self.__socket_events__ and socket in self.__socket_events__[eid]:
@@ -265,40 +304,41 @@ class FlaskSocketioNamespace:
 
 	def __emit_to_socket__(self, socket: FlaskSocketioSocket, eid: str, data: tuple = ()) -> None:
 		"""
+		INTERNAL METHOD
 		Emits data to a socket
 		:param socket: The socket to emit to
 		:param eid: The event id
 		:param data: The data to send
-		:return: (None)
 		"""
 
 		self.__socket.emit(eid, data, to=socket.uid, namespace=self.__namespace__)
 
-	def on(self, eid: str, func: typing.Callable = None) -> 'None | typing.Callable':
+	def on(self, eid: str, func: typing.Callable = None) -> typing.Optional[typing.Callable]:
 		"""
 		Binds a callback to a socket event id
-		:param eid: (str) The event id to listen to
-		:param func: (CALLABLE) The callback or None if used as a decorator
-		:return: (None or CALLABLE)
+		:param eid: The event id to listen to
+		:param func: The callback or None if used as a decorator
+		:return: The binder if used as a decorator
+		:raises InvalidArgumentException: If eid is not a string
+		:raises InvalidArgumentException: If callback is not callable
 		"""
+
+		Misc.raise_ifn(isinstance(eid, str), Exceptions.InvalidArgumentException(FlaskSocketioNamespace.on, 'eid', type(eid), (str,)))
+		eid = str(eid)
 
 		if func is None:
 			def binder(sub_func: typing.Callable):
-				if callable(sub_func):
-					self.__events__[eid] = sub_func
-				else:
-					raise TypeError(f"Cannot bind non-callable object '{sub_func}'")
+				Misc.raise_ifn(callable(sub_func), Exceptions.InvalidArgumentException(FlaskSocketioNamespace.on, 'func', type(sub_func)))
+				self.__events__[eid] = sub_func
 			return binder
-		elif callable(func):
-			self.__events__[eid] = func
 		else:
-			raise TypeError(f"Cannot bind non-callable object '{func}'")
+			Misc.raise_ifn(callable(func), Exceptions.InvalidArgumentException(FlaskSocketioNamespace.on, 'func', type(func)))
+			self.__events__[eid] = func
 
 	def off(self, eid: str) -> None:
 		"""
 		Unbinds all listeners from an event
 		:param eid: The event id to ignore
-		:return: (None)
 		"""
 
 		if eid in self.__events__:
@@ -313,11 +353,12 @@ class FlaskSocketioNamespace:
 		:param data: The data to send
 		:param wl: Sockets to whitelist
 		:param bl: Sockets to blacklist
-		:return: (None)
+		:raises InvalidArgumentException: If 'eid' is not a string
 		"""
 
-		wl: tuple[str, ...] = tuple(s.uid if type(s) is FlaskSocketioSocket else s for s in wl)
-		bl: tuple[str, ...] = tuple(s.uid if type(s) is FlaskSocketioSocket else s for s in bl)
+		Misc.raise_ifn(isinstance(eid, str), Exceptions.InvalidArgumentException(FlaskSocketioNamespace.emit, 'eid', type(eid), (str,)))
+		wl: tuple[str, ...] = tuple(s.uid if isinstance(s, FlaskSocketioSocket) else str(s) for s in wl)
+		bl: tuple[str, ...] = tuple(s.uid if isinstance(s, FlaskSocketioSocket) else str(s) for s in bl)
 
 		if len(wl) > 0:
 			sockets: tuple[str, ...] = tuple(s for s in self.__sockets__ if s in wl)
@@ -341,43 +382,58 @@ class FlaskSocketioNamespace:
 	@property
 	def ready(self) -> bool:
 		"""
-		Gets if this namespace is ready for IO
-		:return: Readiness
+		:return: Whether this namespace is ready for IO
 		"""
 
-		return self.__ready
+		return self.__ready__
 
 	@property
 	def sockets(self) -> tuple[FlaskSocketioSocket, ...]:
 		"""
-		Gets all sockets connected to this namespace
-		:return: All connected sockets
+		:return: All sockets connected to this namespace
 		"""
 
 		return tuple(self.__sockets__.values())
 
+	@property
+	def server(self) -> FlaskSocketioServer:
+		"""
+		:return: The FlaskSocketioServer instance this namespace is bound to
+		"""
+
+		return self.__server__
+
 
 class FlaskSocketioSocket:
 	"""
-	[FlaskSocketioSocket] - Flask socketio socket object
+	Flask socketio socket object
 	"""
 
 	def __init__(self, server: FlaskSocketioServer, namespace: FlaskSocketioNamespace, uid: str, auth, request: flask.Request):
 		"""
-		[FlaskSocketioSocket] - Flask socketio socket object
+		Flask socketio socket object
 		- Constructor -
 		SHOULD NOT BE CALLED DIRECTLY
-		:param server: (FlaskSocketioServer) The socketio server
-		:param namespace: (FlaskSocketioNamespace) The socketio namespace
-		:param uid: (str) This socket's UID
+		:param server: The socketio server
+		:param namespace: The socketio namespace
+		:param uid: This socket's UID
 		:param auth: This socket's authentication info
-		:param request: (flask.Request) This socket's flask request
+		:param request: This socket's flask request
+		:raises InvalidArgumentException: If 'server' is not a FlaskSocketioServer instance
+		:raises InvalidArgumentException: If 'namespace' is not a FlaskSocketioNamespace instance
+		:raises InvalidArgumentException: If 'uid' is not a string
+		:raises InvalidArgumentException: If 'request' is not a flask.Request instance
 		"""
 
-		self.__server: FlaskSocketioServer = server
-		self.__space: FlaskSocketioNamespace = namespace
+		Misc.raise_ifn(isinstance(server, FlaskSocketioServer), Exceptions.InvalidArgumentException(FlaskSocketioSocket.__init__, 'server', type(server), (FlaskSocketioServer,)))
+		Misc.raise_ifn(isinstance(namespace, FlaskSocketioNamespace), Exceptions.InvalidArgumentException(FlaskSocketioSocket.__init__, 'namespace', type(namespace), (FlaskSocketioNamespace,)))
+		Misc.raise_ifn(isinstance(uid, str), Exceptions.InvalidArgumentException(FlaskSocketioSocket.__init__, 'uid', type(uid), (str,)))
+		Misc.raise_ifn(isinstance(request, flask.Request), Exceptions.InvalidArgumentException(FlaskSocketioSocket.__init__, 'request', type(request), (flask.Request,)))
+
+		self.__server__: FlaskSocketioServer = server
+		self.__space__: FlaskSocketioNamespace = namespace
 		self.__is_disconnector__: bool = False
-		self.__uid: str = uid
+		self.__uid__: str = uid
 		self.__events__: dict[str, typing.Callable] = {}
 		self.__auth__ = auth
 		self.__connected__: bool = True
@@ -385,12 +441,11 @@ class FlaskSocketioSocket:
 		
 	def __exec__(self, eid: str, *args, **kwargs) -> None:
 		"""
-		INTERNAL METHOD; DO NOT USE
+		INTERNAL METHOD
 		Executes all callbacks for a given event id
 		:param eid: The event id to execute
 		:param args: The positional arguments to call with
 		:param kwargs: The keyword arguments to call with
-		:return: (None)
 		"""
 
 		if eid in self.__events__:
@@ -398,9 +453,10 @@ class FlaskSocketioSocket:
 
 	def __bind_event__(self, eid: str, func: typing.Callable) -> None:
 		"""
+		INTERNAL EVENT
 		Binds a callback to an event
-		:param eid: (str) The event id
-		:param func: (CALLABLE) The callback
+		:param eid: The event id
+		:param func: The callback
 		:return:
 		"""
 
@@ -408,145 +464,196 @@ class FlaskSocketioSocket:
 			self.__events__[eid] = func
 
 			if eid not in __PRIVATE_IDS__:
-				self.__space.__bind_socket_event__(self, eid)
+				self.__space__.__bind_socket_event__(self, eid)
 		else:
 			raise TypeError(f"Cannot bind non-callable object '{func}'")
 
 	def on(self, eid: str, func: typing.Callable = None) -> None | typing.Callable:
 		"""
 		Binds a callback to a socket event id
-		:param eid: (str) The event id to listen to
-		:param func: (CALLABLE) The callback or None if used as a decorator
-		:return: (None or CALLABLE)
+		:param eid: The event id to listen to
+		:param func: The callback or None if used as a decorator
+		:return: The binder if used as a decorator
+		:raises InvalidArgumentException: If eid is not a string
+		:raises InvalidArgumentException: If callback is not callable
 		"""
+
+		Misc.raise_ifn(isinstance(eid, str), Exceptions.InvalidArgumentException(FlaskSocketioSocket.on, 'eid', type(eid), (str,)))
+		eid = str(eid)
 
 		if func is None:
 			def binder(sub_func):
+				Misc.raise_ifn(callable(sub_func), Exceptions.InvalidArgumentException(FlaskSocketioSocket.on, 'func', type(sub_func)))
 				self.__bind_event__(eid, sub_func)
 			return binder
 		else:
+			Misc.raise_ifn(callable(func), Exceptions.InvalidArgumentException(FlaskSocketioSocket.on, 'func', type(func)))
 			self.__bind_event__(eid, func)
 
 	def off(self, eid: str) -> None:
 		"""
 		Unbinds all listeners from an event
 		:param eid: The event id to ignore
-		:return: (None)
+		:raises InvalidArgumentException: If eid is not a string
 		"""
 
-		if eid in self.__events__:
+		Misc.raise_ifn(isinstance(eid, str), Exceptions.InvalidArgumentException(FlaskSocketioSocket.emit, 'eid', type(eid), (str,)))
+
+		if (eid := str(eid)) in self.__events__:
 			del self.__events__[eid]
 
 			if eid not in __PRIVATE_IDS__:
-				self.__space.__unbind_socket_event__(self, eid)
+				self.__space__.__unbind_socket_event__(self, eid)
 
 	def emit(self, eid: str, *data) -> None:
 		"""
 		Emits data to client from this socket
 		:param eid: The event id to emit on
 		:param data: The data to send
-		:return: (None)
+		:raises InvalidArgumentException: If eid is not a string
 		"""
 
-		self.__space.__emit_to_socket__(self, eid, data)
+		Misc.raise_ifn(isinstance(eid, str), Exceptions.InvalidArgumentException(FlaskSocketioSocket.emit, 'eid', type(eid), (str,)))
+		self.__space__.__emit_to_socket__(self, str(eid), data)
 	
 	def disconnect(self) -> None:
 		"""
 		Disconnects this socket
-		:return: (None)
 		"""
 
 		self.__is_disconnector__ = True
 		self.__connected__ = False
-		flask_socketio.disconnect(self.__uid, self.__space.__namespace__)
+		flask_socketio.disconnect(self.__uid__, self.__space__.__namespace__)
 
 	@property
 	def connected(self) -> bool:
+		"""
+		:return: Whether this socket is connected
+		"""
+
 		return self.__connected__
+
+	@property
+	def is_disconnector(self) -> bool:
+		"""
+		:return: Whether this socket disconnected itself from client
+		"""
+
+		return self.__is_disconnector__
 
 	@property
 	def uid(self) -> str:
 		"""
-		Gets the UID of this socket
-		:return: UIDness
+		:return: This socket's UID
 		"""
 
-		return self.__uid
+		return self.__uid__
 
 	@property
 	def auth(self):
+		"""
+		:return:  This socket's auth
+		"""
+
 		return self.__auth__
 
 	@property
 	def ip_address(self) -> str:
+		"""
+		:return: This socket's IP address
+		"""
+
 		return self.__request__.remote_addr
 
 	@property
 	def request(self) -> flask.request:
+		"""
+		:return: The flask request that created this socket
+		"""
+
 		return flask.request
+
+	@property
+	def server(self) -> FlaskSocketioServer:
+		"""
+		:return: The FlaskSocketioServer instance this socket is bound to
+		"""
+
+		return self.__server__
+
+	@property
+	def namespace(self) -> FlaskSocketioNamespace:
+		"""
+		:return: The FlaskSocketioNamespace instance this socket is bound to
+		"""
+
+		return self.__space__
 
 
 class SocketioClient:
 	"""
-	[SocketioClient] - Operations for client-side socketio
+	Operations for client-side socketio
 	"""
 
 	def __init__(self, host: str, namespace: str = '/') -> None:
 		"""
-		[SocketioClient] - Operations for client-side socketio
+		Operations for client-side socketio
 		- Constructor -
 		:param host: The server IP address/URL
 		:param namespace: The namespace to connect to
+		:raises InvalidArgumentException: If 'host' is not a string
+		:raises InvalidArgumentException: If 'namespace' is not a string
 		"""
 
-		self.__host: str = host if host[-1] != '/' else host[0:-1]
-		self.__space: str = namespace if namespace[0] == '/' else '/' + namespace
+		Misc.raise_ifn(isinstance(host, str), Exceptions.InvalidArgumentException(SocketioClient.__init__, 'host', type(host), (str,)))
+		Misc.raise_ifn(isinstance(namespace, str), Exceptions.InvalidArgumentException(SocketioClient.__init__, 'namespace', type(namespace), (str,)))
+
+		self.__host__: str = str(host).rstrip('/')
+		self.__space__: str = str(namespace).rstrip('/')
 		self.__is_disconnector__: bool = False
-		self.__events: dict[str, list[typing.Callable]] = {}
-		self.__soc: socketio.Client = socketio.Client()
+		self.__events__: dict[str, list[typing.Callable]] = {}
+		self.__socket__: socketio.Client = socketio.Client()
 
 	def __enter__(self) -> SocketioClient:
 		return self
 
 	def __exit__(self, e1, e2, e3, tb) -> None:
-		self.__soc.disconnect()
+		self.__socket__.disconnect()
 
 	def __mainloop__(self) -> None:
 		"""
-		INTERNAL METHOD; DO NOT USE
+		INTERNAL METHOD
 		Mainloop for event listening
-		:return:
 		"""
 
-		@self.__soc.on('connect', namespace=self.__space)
+		@self.__socket__.on('connect', namespace=self.__space__)
 		def connection():
-			while not self.__soc.connected:
+			while not self.__socket__.connected:
 				pass
 			self.__exec__('connect')
 
-		@self.__soc.on('disconnect', namespace=self.__space)
+		@self.__socket__.on('disconnect', namespace=self.__space__)
 		def disconnection():
 			self.__exec__('disconnect', self.__is_disconnector__)
 
-		@self.__soc.on('error', namespace=self.__space)
+		@self.__socket__.on('error', namespace=self.__space__)
 		def error():
 			self.__exec__('error')
 
-		self.__soc.connect(self.__host, namespaces=self.__space)
+		self.__socket__.connect(self.__host__, namespaces=self.__space__)
 
 	def __exec__(self, eid: str, *args, **kwargs) -> None:
 		"""
-		INTERNAL METHOD; DO NOT USE
+		INTERNAL METHOD
 		Executes all callbacks for a given event id
 		:param eid: The event id to execute
 		:param args: The positional arguments to call with
 		:param kwargs: The keyword arguments to call with
-		:return: (None)
 		"""
 
-		if eid in self.__events:
-			for callback in self.__events[eid]:
-				if asyncio.iscoroutinefunction(self.__events[eid]):
+		if eid in self.__events__:
+			for callback in self.__events__[eid]:
+				if asyncio.iscoroutinefunction(self.__events__[eid]):
 					asyncio.run(callback(*args, **kwargs))
 				else:
 					callback(*args, **kwargs)
@@ -554,74 +661,80 @@ class SocketioClient:
 	def on(self, eid: str, func: typing.Callable = None) -> None | typing.Callable:
 		"""
 		Binds a callback to a socket event id
-		:param eid: (str) The event id to listen to
-		:param func: (CALLABLE) The callback or None if used as a decorator
-		:return: (None or CALLABLE)
+		:param eid: The event id to listen to
+		:param func: The callback or None if used as a decorator
+		:return: The binder if used as a decorator
+		:raises InvalidArgumentException: If eid is not a string
+		:raises InvalidArgumentException: If callback is not callable
 		"""
+
+		Misc.raise_ifn(isinstance(eid, str), Exceptions.InvalidArgumentException(SocketioClient.on, 'eid', type(eid), (str,)))
+		eid = str(eid)
 
 		if func is None:
 			def bind_event(callback: typing.Callable):
 				if callable(callback):
-					if eid not in self.__events:
-						self.__events[eid] = [callback]
+					if eid not in self.__events__:
+						self.__events__[eid] = [callback]
 
-						@self.__soc.on(eid, namespace=self.__space)
+						@self.__socket__.on(eid, namespace=self.__space__)
 						def handler(*args, **kwargs):
 							self.__exec__(eid, *args, **kwargs)
 					else:
-						self.__events[eid].append(callback)
+						self.__events__[eid].append(callback)
 				else:
-					raise TypeError('Cannot bind non-callable \'{}\''.format(callback))
+					raise Exceptions.InvalidArgumentException(SocketioClient.on, 'func', type(callback))
 			return bind_event
 		elif callable(func):
-			if eid not in self.__events:
-				self.__events[eid] = [func]
+			if eid not in self.__events__:
+				self.__events__[eid] = [func]
 
-				@self.__soc.on(eid, namespace=self.__space)
+				@self.__socket__.on(eid, namespace=self.__space__)
 				def handler(*args, **kwargs):
 					self.__exec__(eid, *args, **kwargs)
 			else:
-				self.__events[eid].append(func)
+				self.__events__[eid].append(func)
+		else:
+			raise Exceptions.InvalidArgumentException(SocketioClient.on, 'func', type(func))
 
 	def off(self, eid: str) -> None:
 		"""
 		Unbinds all listeners from an event
 		:param eid: The event id to ignore
-		:return: (None)
+		:raises InvalidArgumentException: If eid is not a string
 		"""
 
-		if eid in self.__events:
-			del self.__soc.handlers[self.__space][eid]
-			del self.__events[eid]
-		else:
-			raise KeyError(f'No bound event found with trigger \'{eid}\'')
+		Misc.raise_ifn(isinstance(eid, str), Exceptions.InvalidArgumentException(SocketioClient.emit, 'eid', type(eid), (str,)))
+
+		if (eid := str(eid)) in self.__events__:
+			del self.__socket__.handlers[self.__space__][eid]
+			del self.__events__[eid]
 
 	def emit(self, eid: str, *data) -> None:
 		"""
-		Emits data to server from this socket
+		Emits data to client from this socket
 		:param eid: The event id to emit on
 		:param data: The data to send
-		:return: (None)
+		:raises InvalidArgumentException: If eid is not a string
 		"""
 
-		self.__soc.emit(eid, data, namespace=self.__space)
+		Misc.raise_ifn(isinstance(eid, str), Exceptions.InvalidArgumentException(SocketioClient.emit, 'eid', type(eid), (str,)))
+		self.__socket__.emit(eid, data, namespace=self.__space__)
 
 	def connect(self) -> None:
 		"""
 		Connects this socket to server
 		Internal event listener is started and thread blocked until socket closed
-		:return: (None)
 		"""
 
 		self.__is_disconnector__ = False
 		self.__mainloop__()
-		self.__soc.wait()
+		self.__socket__.wait()
 
 	def async_connect(self) -> None:
 		"""
 		Connects this socket to server
 		Internal event listener is started
-		:return: (None)
 		"""
 
 		self.__is_disconnector__ = False
@@ -630,33 +743,42 @@ class SocketioClient:
 	def disconnect(self) -> None:
 		"""
 		Disconnects this socket from server
-		:return: (None)
 		"""
 
 		self.__is_disconnector__ = True
-		self.__soc.disconnect()
+		self.__socket__.disconnect()
 
 	@property
 	def connected(self) -> bool:
 		"""
-		Checks if this socket is connected
-		:return: Connectedness
+		:return: Whether this socket is connected
 		"""
 
-		return self.__soc.connected
+		return self.__socket__.connected
+
+	@property
+	def is_disconnector(self) -> bool:
+		"""
+		:return: Whether this socket disconnected itself from server
+		"""
+
+		return self.__is_disconnector__
 
 	@property
 	def namespace(self) -> str:
 		"""
-		Gets the name of the connected namespace
-		:return: Namespace name
+		:return: The name of the connected namespace
 		"""
 
-		return self.__space
+		return self.__space__
 
 	@property
 	def socket(self) -> socketio.Client:
-		return self.__soc
+		"""
+		:return: The underlying socketio.Client instance
+		"""
+
+		return self.__socket__
 
 
 if sys.platform == 'win32':
@@ -674,7 +796,7 @@ if sys.platform == 'win32':
 
 	class WinNamedPipe:
 		"""
-		[WinNamedPipe] - A windows-only duplex named pipe implementation
+		A windows-only duplex named pipe implementation
 		"""
 
 		__PIPE_SECURITY__: win32security.SECURITY_ATTRIBUTES = win32security.SECURITY_ATTRIBUTES()
@@ -684,8 +806,9 @@ if sys.platform == 'win32':
 
 		def __init__(self):
 			"""
-			[WinNamedPipe] - A windows-only duplex named pipe implementation
+			A windows-only duplex named pipe implementation
 			- Constructor -
+			:raises IOError: If failed to create named pipe
 			"""
 
 			self.__pipename__: str = f'\\\\.\\pipe\\{hex(id(self))}::{datetime.datetime.now(datetime.timezone.utc).timestamp()}'
@@ -706,8 +829,8 @@ if sys.platform == 'win32':
 		def __setstate__(self, state: dict[str, typing.Any]) -> None:
 			"""
 			Deserializing function for setting from pickled state
-			:param state: (dict[str, ANY]) The pickled state
-			:return: (None)
+			:param state: The pickled state
+			:raises IOError: If failed to connect to named pipe
 			"""
 
 			isserver: bool = state['__isserver__']
@@ -722,7 +845,7 @@ if sys.platform == 'win32':
 		def __getstate__(self) -> dict[str, typing.Any]:
 			"""
 			Serializing function for retrieving pickle safe state
-			:return: (dict[str, ANY]) The pickle-able state
+			:return: The pickle-able state
 			"""
 
 			attributes: dict[str, typing.Any] = self.__dict__.copy()
@@ -739,7 +862,6 @@ if sys.platform == 'win32':
 			"""
 			Closes the pipe
 			All in-writing information is lost
-			:return: (None)
 			:raises IOError: If the pipe is already closed
 			"""
 
@@ -757,7 +879,6 @@ if sys.platform == 'win32':
 			"""
 			Flushes all data into pipe
 			Blocks until data is written and read
-			:return: (None)
 			:raises IOError: If the pipe is closed
 			"""
 
@@ -769,7 +890,7 @@ if sys.platform == 'win32':
 		def poll(self) -> int:
 			"""
 			Polls the number of bytes waiting in the buffer
-			:return: (int) The number of in-waiting bytes
+			:return: The number of in-waiting bytes
 			:raises IOError: If the pipe is closed
 			"""
 
@@ -784,7 +905,7 @@ if sys.platform == 'win32':
 		def dup(self) -> WinNamedPipe:
 			"""
 			Duplicates the pipe, returning a client-side pipe connection
-			:return: (WinNamedPipe) The new pipe connection
+			:return: The new pipe connection
 			:raises IOError: If the pipe failed to connect
 			"""
 
@@ -797,8 +918,8 @@ if sys.platform == 'win32':
 			Sends an object over the pipe
 			Objects are serialized before transmission
 			To write raw binary data, see WinNamedPipe::write
-			:param data: (ANY) The object to write
-			:return: (WinNamedPipe) This instance
+			:param data: The object to write
+			:return: This instance
 			:raises IOError: If the pipe is closed or the write operation failed
 			"""
 
@@ -817,9 +938,10 @@ if sys.platform == 'win32':
 			"""
 			Writes binary data to the pipe
 			To send standard objects, see WinNamedPipe::send
-			:param data: (bytes | bytearray) The bytes to write
-			:return: (WinNamedPipe) This instance
+			:param data: The bytes to write
+			:return: This instance
 			:raises IOError: If the pipe is closed or the write operation failed
+			:raises InvalidArgumentException: If 'data' is not a bytes object or bytearray
 			"""
 
 			if self.closed:
@@ -842,7 +964,7 @@ if sys.platform == 'win32':
 			Receives an object from the pipe
 			Objects are deserialized before returning
 			To read raw binary data, see WinNamedPipe::read
-			:return: (ANY) The deserialized object
+			:return: The deserialized object
 			:raises IOError: If the pipe is closed or the read operation failed
 			"""
 
@@ -882,8 +1004,8 @@ if sys.platform == 'win32':
 			"""
 			Reads binary data from the pipe
 			To read standard objects, see WinNamedPipe::recv
-			:param n: (int) The number of bytes to read or all data if less than 0
-			:return: (bytes) The read bytes
+			:param n: The number of bytes to read or all data if less than 0
+			:return: The read bytes
 			:raises IOError: If the pipe is closed or the read operation failed
 			"""
 
@@ -913,14 +1035,17 @@ if sys.platform == 'win32':
 		@property
 		def closed(self) -> bool:
 			"""
-			Returns if this pipe connection is closed
-			:return: (bool) Closedness
+			:return: Whether this pipe connection is closed
 			"""
 
 			return not self.__open__
 
 		@property
 		def is_server(self) -> bool:
+			"""
+			:return: Whether this is the initial server pipe
+			"""
+
 			return self.__isserver__
 
 	NamedPipe = WinNamedPipe
@@ -931,13 +1056,14 @@ else:
 
 	class UnixNamedPipe:
 		"""
-		[UnixNamedPipe] - A unix-only duplex named pipe implementation
+		A unix-only duplex named pipe implementation
 		"""
 
 		def __init__(self):
 			"""
-			[UnixNamedPipe] - A unix-only duplex named pipe implementation
+			A unix-only duplex named pipe implementation
 			- Constructor -
+			:raises IOError: If failed to create named pipe
 			"""
 
 			self.__pipename__: str = f'/tmp/pipe_{hex(id(self))}::{datetime.datetime.now(datetime.timezone.utc).timestamp()}'
@@ -963,8 +1089,8 @@ else:
 		def __setstate__(self, state: dict[str, typing.Any]) -> None:
 			"""
 			Deserializing function for setting from pickled state
-			:param state: (dict[str, ANY]) The pickled state
-			:return: (None)
+			:param state: The pickled state
+			:raises IOError: If failed to connect named pipe
 			"""
 
 			self.__dict__.update(state)
@@ -977,7 +1103,7 @@ else:
 		def __getstate__(self) -> dict[str, typing.Any]:
 			"""
 			Serializing function for retrieving pickle safe state
-			:return: (dict[str, ANY]) The pickle-able state
+			:return: The pickle-able state
 			"""
 
 			attributes: dict[str, typing.Any] = self.__dict__.copy()
@@ -994,7 +1120,6 @@ else:
 			"""
 			Closes the pipe
 			All in-writing information is lost
-			:return: (None)
 			:raises IOError: If the pipe is already closed
 			"""
 
@@ -1010,7 +1135,6 @@ else:
 			"""
 			Flushes all data into pipe
 			Blocks until data is written and read
-			:return: (None)
 			:raises IOError: If the pipe is closed
 			"""
 
@@ -1022,7 +1146,7 @@ else:
 		def poll(self) -> int:
 			"""
 			Polls the number of bytes waiting in the buffer
-			:return: (int) The number of in-waiting bytes
+			:return: The number of in-waiting bytes
 			:raises IOError: If the pipe is closed
 			"""
 
@@ -1034,7 +1158,7 @@ else:
 		def dup(self) -> UnixNamedPipe:
 			"""
 			Duplicates the pipe, returning a client-side pipe connection
-			:return: (WinNamedPipe) The new pipe connection
+			:return: The new pipe connection
 			:raises IOError: If the pipe failed to connect
 			"""
 
@@ -1047,8 +1171,8 @@ else:
 			Sends an object over the pipe
 			Objects are serialized before transmission
 			To write raw binary data, see UnixNamedPipe::write
-			:param data: (ANY) The object to write
-			:return: (UnixNamedPipe) This instance
+			:param data: The object to write
+			:return: This instance
 			:raises IOError: If the pipe is closed or the write operation failed
 			"""
 
@@ -1064,9 +1188,10 @@ else:
 			"""
 			Writes binary data to the pipe
 			To send standard objects, see UnixNamedPipe::send
-			:param data: (bytes | bytearray) The bytes to write
-			:return: (UnixNamedPipe) This instance
+			:param data: The bytes to write
+			:return: This instance
 			:raises IOError: If the pipe is closed or the write operation failed
+			:raises InvalidArgumentException: If 'data' is not a bytes object or bytearray
 			"""
 
 			if self.closed:
@@ -1087,7 +1212,7 @@ else:
 			Receives an object from the pipe
 			Objects are deserialized before returning
 			To read raw binary data, see UnixNamedPipe::read
-			:return: (ANY) The deserialized object
+			:return: The deserialized object
 			:raises IOError: If the pipe is closed or the read operation failed
 			"""
 
@@ -1116,8 +1241,8 @@ else:
 			"""
 			Reads binary data from the pipe
 			To read standard objects, see UnixNamedPipe::recv
-			:param n: (int) The number of bytes to read or all data if less than 0
-			:return: (bytes) The read bytes
+			:param n: The number of bytes to read or all data if less than 0
+			:return: The read bytes
 			:raises IOError: If the pipe is closed or the read operation failed
 			"""
 
@@ -1141,14 +1266,17 @@ else:
 		@property
 		def closed(self) -> bool:
 			"""
-			Returns if this pipe connection is closed
-			:return: (bool) Closedness
+			:return: Whether this pipe connection is closed
 			"""
 
 			return self.__conn__.closed
 
 		@property
 		def is_server(self) -> bool:
+			"""
+			:return: Whether this is the initial server pipe
+			"""
+
 			return self.__isserver__
 
 	NamedPipe = UnixNamedPipe
