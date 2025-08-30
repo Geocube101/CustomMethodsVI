@@ -1,7 +1,7 @@
 import cmath
 import sys
 
-import Math.Algebra as Algebra
+import CustomMethodsVI.Math.Algebra as Algebra
 
 
 if __name__ == '__main__':

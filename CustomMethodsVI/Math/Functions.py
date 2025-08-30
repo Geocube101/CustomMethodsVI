@@ -67,6 +67,25 @@ def safe_floor_divide(a: float, b: float) -> float:
 
 
 @Overload
+def safe_modulo(a: float, b: float) -> float:
+	"""
+	Performs a safe divide of two numbers
+	If A and B is 0, returns NaN
+	If B is 0, returns 0
+	If A and B is inf, returns NaN
+	If B is inf, returns inf
+	:param a: First operand
+	:param b: Second operand
+	:return: The remainder
+	"""
+
+	a = float(a)
+	b = float(b)
+	inf: float = float('inf')
+	return float('nan') if a == 0 and b == 0 or a == inf and b == inf else inf if b == inf else 0 if b == 0 else (a % b)
+
+
+@Overload
 def safe_divmod(a: float, b: float) -> tuple[float, float]:
 	"""
 	Performs a safe div-mod of two numbers
@@ -84,3 +103,46 @@ def safe_divmod(a: float, b: float) -> tuple[float, float]:
 	inf: float = float('inf')
 	nan: float = float('nan')
 	return (nan, nan) if a == 0 and b == 0 or a == inf and b == inf else (0, nan) if b == inf else (inf, 0) if b == 0 else divmod(a, b)
+
+@Overload
+def is_prime(x: int) -> bool:
+	"""
+	:param x: The number to check
+	:return: Whether 'x' is prime
+	"""
+
+	if x < 2:
+		return False
+
+	sqrt: int = int(x ** 0.5)
+
+	for i in range(2, sqrt + 1):
+		if x % i == 0:
+			return False
+
+	return True
+
+
+@Overload
+def factors(x: int) -> tuple[tuple[int, int], ...]:
+	"""
+	:param x: The number to check
+	:return: All non-repeating factors of 'x'
+	"""
+
+	facs: list[tuple[int, int]] = []
+
+	for i in range((x // 2) + 1):
+		facs.append((i, x - i))
+
+	return tuple(facs)
+
+
+@Overload
+def prime_factors(x: int) -> tuple[tuple[int, int], ...]:
+	"""
+	:param x: The number to check
+	:return: All non-repeating prime factors of 'x'
+	"""
+
+	return tuple((i, j) for i, j in factors(x) if is_prime(i) and is_prime(j))

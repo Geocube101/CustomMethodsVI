@@ -4,7 +4,6 @@ import struct
 from . import Exceptions
 from . import Decorators
 from . import Misc
-from .Exceptions import InvalidArgumentException
 from .Math import Tensor
 
 class TensorEncryption:
@@ -32,9 +31,16 @@ class TensorEncryption:
 		"""
 
 		Misc.raise_ifn(isinstance(tensor, Tensor.Tensor), Exceptions.InvalidArgumentException(TensorEncryption.__init__, 'tensor', type(tensor), (Tensor.Tensor,)))
-		self.__tensor__: Tensor.Tensor = tensor
-		self.__operations__: Tensor.Tensor = tensor % TensorEncryption.__HIGHEST_OPERATION
-		self.__extra_data__: Tensor.Tensor = tensor // TensorEncryption.__HIGHEST_OPERATION * TensorEncryption.__HIGHEST_OPERATION
+		data: list[float] = []
+
+		for cell in tensor.flattened():
+			if cell is None:
+				raise ValueError('Empty cell in tensor')
+
+			a, b = divmod(cell, TensorEncryption.__HIGHEST_OPERATION)
+			data.append((b + 1) if a % 2 == 0 else -(b + 1))
+
+		self.__tensor__: Tensor.Tensor = Tensor.Tensor.shaped(data, *tensor.dimensions)
 
 	def encrypt(self, data: bytes | bytearray) -> bytes:
 		"""
@@ -45,17 +51,17 @@ class TensorEncryption:
 		:raises ValueError: If the supplied tensor cannot be used to encrypt the specified data
 		"""
 
-		Misc.raise_ifn(isinstance(data, (bytes, bytearray)), InvalidArgumentException(TensorEncryption.encrypt, 'data', type(data), (bytes, bytearray)))
-		padding: int = len(self.__operations__) - len(data)
+		Misc.raise_ifn(isinstance(data, (bytes, bytearray)), Exceptions.InvalidArgumentException(TensorEncryption.encrypt, 'data', type(data), (bytes, bytearray)))
+		padding: int = len(self.__tensor__) - len(data)
 		operand: tuple[int, ...] = (*data, *[0 for _ in range(max(0, padding))])
 
-		if len(operand) > len(self.__operations__):
+		if len(operand) > len(self.__tensor__):
 			raise ValueError(f'Supplied {"x".join(str(x) for x in self.__tensor__.dimensions)} is insufficient for {len(data)} bytes')
 
-		operations: Tensor.Tensor = self.__operations__
+		operations: Tensor.Tensor = self.__tensor__
 		matrix: Tensor.Tensor = Tensor.Tensor.shaped(operand, *self.__tensor__.dimensions)
 
-		for i, operation in enumerate(self.__operations__.flattened()):
+		for operation in self.__tensor__.flattened():
 			if operation == TensorEncryption.__OPERATION_TRANSPOSE:
 				matrix = matrix.transposed()
 				operations = operations.transposed()
@@ -65,9 +71,8 @@ class TensorEncryption:
 				matrix -= operations
 			elif TensorEncryption.__OPERATION_MUL:
 				matrix *= operations
-				pass
 			elif TensorEncryption.__OPERATION_MATRIX_MUL:
-				matrix @= operations
+				#matrix @= operations
 				pass
 			elif TensorEncryption.__OPERATION_DIV:
 				matrix /= operations
@@ -87,17 +92,13 @@ class TensorEncryption:
 		:raises InvalidArgumentException: If 'data' is not a bytes object or bytearray
 		"""
 
-		Misc.raise_ifn(isinstance(data, (bytes, bytearray)), InvalidArgumentException(TensorEncryption.encrypt, 'data', type(data), (bytes, bytearray)))
+		Misc.raise_ifn(isinstance(data, (bytes, bytearray)), Exceptions.InvalidArgumentException(TensorEncryption.encrypt, 'data', type(data), (bytes, bytearray)))
 		data: bytes = bytes(data)
 		padding = int.from_bytes(data[:8], 'little')
-		operations: Tensor.Tensor = self.__operations__
+		operations: Tensor.Tensor = self.__tensor__
 		matrix: Tensor.Tensor = Tensor.Tensor.shaped((struct.unpack('<d', data[i * 8 + 8:i * 8 + 16])[0] for i in range(len(operations))), *operations.dimensions)
 
-		for operation in self.__operations__.flattened():
-			if operation == TensorEncryption.__OPERATION_TRANSPOSE:
-				operations = operations.transposed()
-
-		for operation in self.__operations__.flattened():
+		for operation in reversed(self.__tensor__.flattened()):
 			if operation == TensorEncryption.__OPERATION_TRANSPOSE:
 				matrix = matrix.transposed()
 				operations = operations.transposed()
@@ -107,18 +108,16 @@ class TensorEncryption:
 				matrix += operations
 			elif TensorEncryption.__OPERATION_MUL:
 				matrix /= operations
-				pass
 			elif TensorEncryption.__OPERATION_MATRIX_MUL:
-				matrix @= operations.inverted()
+				# matrix @= operations
 				pass
 			elif TensorEncryption.__OPERATION_DIV:
 				matrix *= operations
-				pass
 			elif TensorEncryption.__OPERATION_POW:
 				matrix **= 1 / operations
 			elif TensorEncryption.__OPERATION_INVERT:
 				matrix = -matrix
 
-		data: bytes = bytes(int(x) for x in matrix.flattened()[:-padding] if not math.isinf(x))
+		data: bytes = bytes(int(x) % 256 for x in matrix.flattened()[:-padding] if not math.isinf(x))
 		return data
 

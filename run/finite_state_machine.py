@@ -1,10 +1,10 @@
 import sys
 
-import Automata
+import CustomMethodsVI.Automata
 
 
 if __name__ == '__main__':
-	fa: Automata.FiniteAutomaton = Automata.FiniteAutomaton({'A', 'B', 'C'}, '01', 'A', {'C'}, {
+	fa: CustomMethodsVI.Automata.FiniteAutomaton = CustomMethodsVI.Automata.FiniteAutomaton({'A', 'B', 'C'}, '01', 'A', {'C'}, {
 		'A': {'0': {'A'}, '1': {'A', 'B'}},
 		'B': {'1': 'C'}
 	}, deterministic=False)

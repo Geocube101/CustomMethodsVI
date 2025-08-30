@@ -4,6 +4,7 @@ import collections.abc
 import math
 import typing
 
+from .. import Exceptions
 from .. import Math
 from .. import Misc
 from ..Decorators import Overload
@@ -28,6 +29,9 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		vectors: tuple[Vector, ...] = (vector_0, vector_1, *vectors)
 		assert all(isinstance(v, cls) for v in vectors), f'Expected a variadic list of vectors; got:\n({",".join(str(type(x)) for x in vectors)})'
 
+		if any(not v.complete for v in vectors):
+			return False
+
 		for i in range(len(vectors)):
 			for j in range(i + 1, len(vectors)):
 				if vectors[i].dot(vectors[j]) != 0:
@@ -48,6 +52,9 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		vectors: tuple[Vector, ...] = (vector_0, vector_1, *vectors)
 		assert all(isinstance(v, cls) for v in vectors), f'Expected a variadic list of vectors; got:\n({",".join(str(type(x)) for x in vectors)})'
+
+		if any(not v.complete for v in vectors):
+			return False
 
 		for i in range(len(vectors)):
 			for j in range(i + 1, len(vectors)):
@@ -89,10 +96,10 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:param vector: Another vector
 		"""
 
-		self.__components__: tuple[float, ...] = tuple(vector.__components__)
+		self.__components__: tuple[typing.Optional[float], ...] = tuple(vector.__components__)
 
 	@Overload(strict=True)
-	def __init__(self, iterable: typing.Iterable[int | float | typing.Sized]):
+	def __init__(self, iterable: typing.Iterable[float | typing.Sized | None]):
 		"""
 		Class representing an N-dimensional immutable vector
 		- Constructor -
@@ -101,10 +108,12 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:raises TypeError: If any value is not a float or integer
 		"""
 
-		components: list[float] = []
+		components: list[typing.Optional[float]] = []
 
 		for i, value in enumerate(iterable):
-			if hasattr(value, '__float__') or isinstance(value, (int, float)):
+			if value is None:
+				components.append(None)
+			elif hasattr(value, '__float__') or isinstance(value, (int, float)):
 				components.append(float(value))
 			elif hasattr(value, '__int__'):
 				components.append(float(int(value)))
@@ -120,13 +129,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 				except Exception as _:
 					raise TypeError(f'Component at {i} is not a float or int: {value} ({type(value)})') from None
 
-		self.__components__: tuple[float, ...] = tuple(components)
+		self.__components__: tuple[typing.Optional[float], ...] = tuple(components)
 
 		if len(self.__components__) < 1:
 			raise ValueError(f'Vector dimension \'{len(self.__components__)}\' is less than 2')
 
 	@Overload(strict=True)
-	def __init__(self, *components: int | float):
+	def __init__(self, *components: typing.Optional[float]):
 		"""
 		Class representing an N-dimensional immutable vector
 		- Constructor -
@@ -135,10 +144,12 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:raises TypeError: If any value is not a float or integer
 		"""
 
-		_components: list[float] = []
+		_components: list[typing.Optional[float]] = []
 
 		for i, value in enumerate(components):
-			if hasattr(value, '__float__') or type(value) is int or type(value) is float:
+			if value is None:
+				_components.append(None)
+			elif hasattr(value, '__float__') or type(value) is int or type(value) is float:
 				_components.append(float(value))
 			elif hasattr(value, '__int__'):
 				_components.append(float(int(value)))
@@ -154,15 +165,15 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 				except Exception as _:
 					raise TypeError(f'Component at {i} is not a float or int: {value} ({type(value)})') from None
 
-		self.__components__: tuple[float, ...] = tuple(_components)
+		self.__components__: tuple[typing.Optional[float], ...] = tuple(_components)
 
 		if len(self.__components__) < 1:
 			raise ValueError(f'Vector dimension is \'{len(self.__components__)}\' is less than 2')
 
-	def __iter__(self) -> typing.Iterator[float]:
+	def __iter__(self) -> typing.Iterator[typing.Optional[float]]:
 		return iter(self.__components__)
 
-	def __add__(self, other: Vector | float | int) -> Vector:
+	def __add__(self, other: Vector | float) -> Vector:
 		"""
 		Adds this vector with another vector or number
 		:param other: The single number or vector to add
@@ -172,13 +183,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(a + b for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else (a + b) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(x + other for x in self.__components__)
+			return Vector(None if x is other else (x + float(other)) for x in self.__components__)
 		else:
 			return NotImplemented
 
-	def __sub__(self, other: Vector | float | int) -> Vector:
+	def __sub__(self, other: Vector | float) -> Vector:
 		"""
 		Subtracts this vector by another vector or number
 		:param other: The single number or vector to subtract
@@ -188,13 +199,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(a - b for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else (a - b) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(x - other for x in self.__components__)
+			return Vector(None if x is other else (x - float(other)) for x in self.__components__)
 		else:
 			return NotImplemented
 
-	def __mul__(self, other: Vector | float | int) -> Vector:
+	def __mul__(self, other: Vector | float) -> Vector:
 		"""
 		Multiplies this vector with another vector or number
 		:param other: The single number or vector to multiply
@@ -204,13 +215,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(a * b for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else (a * b) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(x * other for x in self.__components__)
+			return Vector(None if x is other else (x * float(other)) for x in self.__components__)
 		else:
 			return NotImplemented
 
-	def __truediv__(self, other: Vector | float | int) -> Vector:
+	def __truediv__(self, other: Vector | float) -> Vector:
 		"""
 		Divides this vector by another vector or number
 		:param other: The single number or vector to divide
@@ -220,13 +231,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(Math.Functions.safe_divide(a, b) for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else Math.Functions.safe_divide(a, b) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(Math.Functions.safe_divide(x, float(other)) for x in self.__components__)
+			return Vector(None if x is other else Math.Functions.safe_divide(x, float(other)) for x in self.__components__)
 		else:
 			return NotImplemented
 
-	def __floordiv__(self, other: Vector | float | int) -> Vector:
+	def __floordiv__(self, other: Vector | float) -> Vector:
 		"""
 		Floor-divides this vector by another vector or number
 		:param other: The single number or vector to floor-divide
@@ -236,13 +247,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(Math.Functions.safe_floor_divide(a, b) for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else Math.Functions.safe_floor_divide(a, b) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(Math.Functions.safe_floor_divide(x, float(other)) for x in self.__components__)
+			return Vector(None if x is other else Math.Functions.safe_floor_divide(x, float(other)) for x in self.__components__)
 		else:
 			return NotImplemented
 
-	def __divmod__(self, other: Vector | float | int) -> Math.Tensor.Tensor:
+	def __divmod__(self, other: Vector | float) -> Math.Tensor.Tensor:
 		"""
 		Div-mods this vector by another vector or number
 		:param other: The single number or vector to div-mod
@@ -252,15 +263,15 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			result: list[tuple[float, float]] = [Math.Functions.safe_divmod(a, b) for a, b in zip(self.__components__, other.__components__)]
+			result: list[tuple[float, float]] = [None if a is None or b is None else Math.Functions.safe_divmod(a, b) for a, b in zip(self.__components__, other.__components__)]
 			return Math.Tensor.Tensor(result)
 		elif isinstance(other, (float, int)):
-			result: list[tuple[float, float]] = [Math.Functions.safe_divmod(a, float(other)) for a in self.__components__]
+			result: list[tuple[float, float]] = [None if a is None else Math.Functions.safe_divmod(a, float(other)) for a in self.__components__]
 			return Math.Tensor.Tensor(result)
 		else:
 			return NotImplemented
 
-	def __mod__(self, other: Vector | float | int) -> Vector:
+	def __mod__(self, other: Vector | float) -> Vector:
 		"""
 		Modulos this vector by another vector or number
 		:param other: The single number or vector to modulo
@@ -270,13 +281,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(a % b for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else Math.Functions.safe_modulo(a, b) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(x % other for x in self.__components__)
+			return Vector(None if x is other else Math.Functions.safe_modulo(x, float(other)) for x in self.__components__)
 		else:
 			return NotImplemented
 
-	def __pow__(self, other: Vector | float | int, modulo: int | float = None) -> Vector:
+	def __pow__(self, other: Vector | float, modulo: int | float = None) -> Vector:
 		"""
 		Raises this vector by another vector or number
 		:param other: The single number or vector to raise by
@@ -286,13 +297,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(pow(a, b, modulo) for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else pow(a, b, modulo) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(pow(x, other, modulo) for x in self.__components__)
+			return Vector(None if x is other else pow(x, float(other), modulo) for x in self.__components__)
 		else:
 			return NotImplemented
 
-	def __radd__(self, other: Vector | float | int) -> Vector:
+	def __radd__(self, other: Vector | float) -> Vector:
 		"""
 		Adds this vector to another vector or number
 		:param other: The single number or vector to add
@@ -300,9 +311,15 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:raises ValueError: If the specified vector's dimensions do not match
 		"""
 
-		return self + other
+		if isinstance(other, Vector):
+			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
+			return Vector(None if a is None or b is None else (b + a) for a, b in zip(self.__components__, other.__components__))
+		elif isinstance(other, (float, int)):
+			return Vector(None if x is other else (float(other) + x) for x in self.__components__)
+		else:
+			return NotImplemented
 
-	def __rsub__(self, other: Vector | float | int) -> Vector:
+	def __rsub__(self, other: Vector | float) -> Vector:
 		"""
 		Subtracts this vector from another vector or number
 		:param other: The single number or vector to subtract
@@ -312,13 +329,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(b - a for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else (b - a) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(other - x for x in self.__components__)
+			return Vector(None if x is other else (float(other) - x) for x in self.__components__)
 		else:
 			return NotImplemented
 
-	def __rmul__(self, other: Vector | float | int) -> Vector:
+	def __rmul__(self, other: Vector | float) -> Vector:
 		"""
 		Multiplies this vector to another vector or number
 		:param other: The single number or vector to multiply
@@ -326,9 +343,15 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:raises ValueError: If the specified vector's dimensions do not match
 		"""
 
-		return self * other
+		if isinstance(other, Vector):
+			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
+			return Vector(None if a is None or b is None else (b * a) for a, b in zip(self.__components__, other.__components__))
+		elif isinstance(other, (float, int)):
+			return Vector(None if x is other else (float(other) * x) for x in self.__components__)
+		else:
+			return NotImplemented
 
-	def __rtruediv__(self, other: Vector | float | int) -> Vector:
+	def __rtruediv__(self, other: Vector | float) -> Vector:
 		"""
 		Divides this vector from another vector or number
 		:param other: The single number or vector to divide
@@ -338,13 +361,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(Math.Functions.safe_divide(b, a) for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else Math.Functions.safe_divide(b, a) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(Math.Functions.safe_divide(float(other), x) for x in self.__components__)
+			return Vector(None if x is other else Math.Functions.safe_divide(float(other), x) for x in self.__components__)
 		else:
 			return NotImplemented
 
-	def __rfloordiv__(self, other: Vector | float | int) -> Vector:
+	def __rfloordiv__(self, other: Vector | float) -> Vector:
 		"""
 		Floor-divides this vector from another vector or number
 		:param other: The single number or vector to floor-divide
@@ -354,13 +377,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(Math.Functions.safe_floor_divide(b, a) for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else Math.Functions.safe_floor_divide(b, a) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(Math.Functions.safe_floor_divide(float(other), x) for x in self.__components__)
+			return Vector(None if x is other else Math.Functions.safe_floor_divide(float(other), x) for x in self.__components__)
 		else:
 			return NotImplemented
 
-	def __rdivmod__(self, other: Vector | float | int) -> Math.Tensor.Tensor:
+	def __rdivmod__(self, other: Vector | float) -> Math.Tensor.Tensor:
 		"""
 		Div-mods this vector by another vector or number
 		:param other: The single number or vector to div-mod
@@ -370,15 +393,15 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			result: list[tuple[float, float]] = [Math.Functions.safe_divmod(b, a) for a, b in zip(self.__components__, other.__components__)]
+			result: list[tuple[float, float]] = [None if a is None or b is None else Math.Functions.safe_divmod(b, a) for a, b in zip(self.__components__, other.__components__)]
 			return Math.Tensor.Tensor(result)
 		elif isinstance(other, (float, int)):
-			result: list[tuple[float, float]] = [Math.Functions.safe_divmod(float(other), a) for a in self.__components__]
+			result: list[tuple[float, float]] = [None if a is None else Math.Functions.safe_divmod(float(other), a) for a in self.__components__]
 			return Math.Tensor.Tensor(result)
 		else:
 			return NotImplemented
 
-	def __rmod__(self, other: Vector | float | int) -> Vector:
+	def __rmod__(self, other: Vector | float) -> Vector:
 		"""
 		Modulos this vector from another vector or number
 		:param other: The single number or vector to modulo
@@ -388,13 +411,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(b / a for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else Math.Functions.safe_modulo(b, a) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(other % x for x in self.__components__)
+			return Vector(None if x is other else Math.Functions.safe_modulo(float(other), x) for x in self.__components__)
 		else:
 			return NotImplemented
 
-	def __rpow__(self, other: Vector | float | int, modulo: int | float = None) -> Vector:
+	def __rpow__(self, other: Vector | float, modulo: int | float = None) -> Vector:
 		"""
 		Raises another vector or number by this vector
 		:param other: The single number or vector to raise
@@ -404,13 +427,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(pow(b, a, modulo) for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else pow(b, a, modulo) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(pow(other, x, modulo) for x in self.__components__)
+			return Vector(None if x is other else pow(float(other), x, modulo) for x in self.__components__)
 		else:
 			return NotImplemented
 
-	def __lt__(self, other: Vector | float | int) -> bool:
+	def __lt__(self, other: Vector | float) -> bool:
 		"""
 		Compares the length of this vector with 'other'
 		:param other: The vector or number to compare against
@@ -420,13 +443,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return self.length() < other.length()
+			return self.length_squared() < other.length_squared()
 		elif isinstance(other, (float, int)):
-			return self.length() < other
+			return self.length_squared() < (other * other)
 		else:
 			return NotImplemented
 
-	def __le__(self, other: Vector | float | int) -> bool:
+	def __le__(self, other: Vector | float) -> bool:
 		"""
 		Compares the length of this vector with 'other'
 		:param other: The vector or number to compare against
@@ -436,13 +459,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return self.length() <= other.length()
+			return self.length_squared() <= other.length_squared()
 		elif isinstance(other, (float, int)):
-			return self.length() <= other
+			return self.length_squared() <= (other * other)
 		else:
 			return NotImplemented
 
-	def __gt__(self, other: Vector | float | int) -> bool:
+	def __gt__(self, other: Vector | float) -> bool:
 		"""
 		Compares the length of this vector with 'other'
 		:param other: The vector or number to compare against
@@ -452,13 +475,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return self.length() > other.length()
+			return self.length_squared() > other.length_squared()
 		elif isinstance(other, (float, int)):
-			return self.length() > other
+			return self.length_squared() > (other * other)
 		else:
 			return NotImplemented
 
-	def __ge__(self, other: Vector | float | int) -> bool:
+	def __ge__(self, other: Vector | float) -> bool:
 		"""
 		Compares the length of this vector with 'other'
 		:param other: The vector or number to compare against
@@ -468,13 +491,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return self.length() >= other.length()
+			return self.length_squared() >= other.length_squared()
 		elif isinstance(other, (float, int)):
-			return self.length() >= other
+			return self.length_squared() >= (other * other)
 		else:
 			return NotImplemented
 
-	def __eq__(self, other: Vector | float | int) -> bool:
+	def __eq__(self, other: Vector | float) -> bool:
 		"""
 		If other is a number: Compares the length of this vector with 'other'
 		If other is a Vector: Checks for equality
@@ -485,11 +508,11 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		if isinstance(other, Vector):
 			return self.dimension == other.dimension and self.__components__ == other.__components__
 		elif isinstance(other, (float, int)):
-			return self.length() == other
+			return self.length_squared() == (other * other)
 		else:
 			return False
 
-	def __ne__(self, other: Vector | float | int) -> bool:
+	def __ne__(self, other: Vector | float) -> bool:
 		"""
 		If other is a number: Compares the length of this vector with 'other'
 		If other is a Vector: Checks for equality
@@ -499,7 +522,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		return not (self == other)
 
-	def __getitem__(self, item: int | slice) -> float | tuple[float, ...]:
+	def __getitem__(self, item: int | slice) -> typing.Optional[float] | tuple[typing.Optional[float], ...]:
 		"""
 		Gets a component or components from this vector
 		:param item: The components to get
@@ -513,7 +536,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:return: Whether this vector is a zero vector
 		"""
 
-		return any(self.__components__)
+		return all(x is None or x == 0 for x in self.__components__)
 
 	def __hash__(self) -> int:
 		return hash(self.__components__)
@@ -523,21 +546,21 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:return: Returns the absolute value of this vector "|v|"
 		"""
 
-		return Vector(abs(x) for x in self.__components__)
+		return Vector(None if x is None else abs(x) for x in self.__components__)
 
 	def __neg__(self) -> Vector:
 		"""
 		:return: Returns the negation of this vector "-v"
 		"""
 
-		return Vector(-x for x in self.__components__)
+		return Vector(None if x is None else -x for x in self.__components__)
 
 	def __pos__(self) -> Vector:
 		"""
 		:return: Returns a copy of this vector "+v"
 		"""
 
-		return Vector(+x for x in self.__components__)
+		return Vector(None if x is None else +x for x in self.__components__)
 
 	def __round__(self, n: int = None) -> Vector | int:
 		"""
@@ -545,28 +568,28 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:return: Returns this vector rounded to 'n' places
 		"""
 
-		return Vector(round(x, n) for x in self.__components__)
+		return Vector(None if x is None else round(x, n) for x in self.__components__)
 
 	def __trunc__(self) -> Vector:
 		"""
 		:return: Returns this vector truncated
 		"""
 
-		return Vector(math.trunc(x) for x in self.__components__)
+		return Vector(None if x is None else math.trunc(x) for x in self.__components__)
 
 	def __floor__(self) -> Vector:
 		"""
 		:return: Returns this vector floored
 		"""
 
-		return Vector(math.floor(x) for x in self.__components__)
+		return Vector(None if x is None else math.floor(x) for x in self.__components__)
 
 	def __ceil__(self) -> Vector:
 		"""
 		:return: Returns this vector ceiled
 		"""
 
-		return Vector(math.ceil(x) for x in self.__components__)
+		return Vector(None if x is None else math.ceil(x) for x in self.__components__)
 
 	def __repr__(self) -> str:
 		return f'<{Vector.__name__} {self.dimension}D at {hex(id(self))}>'
@@ -579,14 +602,14 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:return: The length of this vector
 		"""
 
-		return math.sqrt(sum(pow(a, 2) for a in self.__components__))
+		return float('nan') if None in self.__components__ else math.sqrt(sum(pow(a, 2) for a in self.__components__))
 
 	def length_squared(self) -> float:
 		"""
 		:return: The square length of this vector
 		"""
 
-		return sum(pow(a, 2) for a in self.__components__)
+		return float('nan') if None in self.__components__ else sum(pow(a, 2) for a in self.__components__)
 
 	@Overload
 	def dot(self, other: Vector) -> float:
@@ -594,12 +617,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		Applies inner dot-product between two vectors
 		:param other: The second vector
 		:return: The dot product of these two vectors
-		:raises AssertionError: If 'other' is not a vector or vector dimensions are mismatched
+		:raises InvalidArgumentException: If 'other' is not a vector
+		:raises ValueError: If vector dimensions are mismatched
 		"""
 
-		assert isinstance(other, Vector), 'Not a vector'
+		Misc.raise_ifn(isinstance(other, Vector), Exceptions.InvalidArgumentException(Vector.dot, 'other', type(other), (Vector,)))
 		Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-		return sum(a * b for a, b in zip(self.__components__, other.__components__))
+		return float('nan') if None in self.__components__ or None in other.__components__ else sum(a * b for a, b in zip(self.__components__, other.__components__))
 
 	@Overload
 	def distance(self, other: Vector) -> float:
@@ -607,12 +631,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		Calculates distance between two vectors
 		:param other: The second vector
 		:return: The distance between these two vectors
-		:raises AssertionError: If 'other' is not a vector or vector dimensions are mismatched
+		:raises InvalidArgumentException: If 'other' is not a vector
+		:raises ValueError: If vector dimensions are mismatched
 		"""
 
-		assert isinstance(other, Vector), 'Not a vector'
+		Misc.raise_ifn(isinstance(other, Vector), Exceptions.InvalidArgumentException(Vector.dot, 'other', type(other), (Vector,)))
 		Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-		return (other - self).length()
+		return float('nan') if None in self.__components__ or None in other.__components__ else (other - self).length()
 
 	@Overload
 	def distance_squared(self, other: Vector) -> float:
@@ -620,12 +645,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		Calculates square distance between two vectors
 		:param other: The second vector
 		:return: The square distance between these two vectors
-		:raises AssertionError: If 'other' is not a vector or vector dimensions are mismatched
+		:raises InvalidArgumentException: If 'other' is not a vector
+		:raises ValueError: If vector dimensions are mismatched
 		"""
 
-		assert isinstance(other, Vector), 'Not a vector'
+		Misc.raise_ifn(isinstance(other, Vector), Exceptions.InvalidArgumentException(Vector.dot, 'other', type(other), (Vector,)))
 		Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-		return (other - self).length_squared()
+		return float('nan') if None in self.__components__ or None in other.__components__ else (other - self).length_squared()
 
 	@Overload
 	def angle(self, other: Vector) -> float:
@@ -633,12 +659,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		Calculates the angle between two vectors
 		:param other: The second vector
 		:return: The angle (in radians) between these two vectors
-		:raises AssertionError: If 'other' is not a vector or vector dimensions are mismatched
+		:raises InvalidArgumentException: If 'other' is not a vector
+		:raises ValueError: If vector dimensions are mismatched
 		"""
 
-		assert isinstance(other, Vector), 'Not a vector'
+		Misc.raise_ifn(isinstance(other, Vector), Exceptions.InvalidArgumentException(Vector.dot, 'other', type(other), (Vector,)))
 		Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-		return math.acos(round(self.dot(other) / (self.length() * other.length()), 7))
+		return float('nan') if None in self.__components__ or None in other.__components__ else math.acos(round(self.dot(other) / (self.length() * other.length()), 7))
 
 	def normalized(self) -> Vector:
 		"""
@@ -655,6 +682,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:param others: The other vectors to compute against (The number of vectors must equal this vector's dimension minus 2)
 		:return: (float) The hodge product of all included vectors
 		:raises AssertionError: If 'callback' is not a Vector or vector dimensions are mismatched
+		:raises ValueError: If any vector is incomplete
 		"""
 
 		others: list[Vector] = [self, *others]
@@ -662,6 +690,9 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		assert all(isinstance(x, Vector) for x in others), 'One or more object is not a Vector'
 		assert len(others) == dimension - 1, f'Need {dimension - 1} vector(s) to compute {dimension} cross product'
 		components: list[float] = []
+
+		if any(not v.complete for v in others):
+			raise ValueError('Incomplete vector')
 
 		for i in range(dimension):
 			indices: tuple[int, ...] = tuple(j for j in range(dimension) if j != i)
@@ -676,21 +707,22 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		Calculates cross product between vectors
 		:param other: The second vector
 		:return: A vector rotated 90 degrees to both vectors
-		:raises AssertionError: If 'other' is not a vector or vector dimensions are mismatched
+		:raises InvalidArgumentException: If 'other' is not a vector
+		:raises ValueError: If vector dimensions are mismatched
 		"""
 
-		assert isinstance(other, Vector), 'Not a vector'
+		Misc.raise_ifn(isinstance(other, Vector), Exceptions.InvalidArgumentException(Vector.dot, 'other', type(other), (Vector,)))
 		assert self.dimension == other.dimension and self.dimension == 3, 'Vector not 3D'
 
 		a1, a2, a3 = self
 		b1, b2, b3 = other
 
-		c1: float = a2 * b3
-		c2: float = a1 * b3
-		c3: float = a1 * b2
+		c1: typing.Optional[float] = None if a2 is None or b3 is None else (a2 * b3)
+		c2: typing.Optional[float] = None if a1 is None or b3 is None else (a1 * b3)
+		c3: typing.Optional[float] = None if a1 is None or b2 is None else (a1 * b2)
 		return Vector(c1, c2, c3) * self.length() * other.length() * math.sin(self.angle(other))
 
-	def components(self) -> tuple[float, ...]:
+	def components(self) -> tuple[typing.Optional[float], ...]:
 		"""
 		:return: Returns the individual components of this vector
 		"""
@@ -735,10 +767,17 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		return self.dot(u1) * u1 + self.dot(u2) * u2
 
 	@property
+	def complete(self) -> bool:
+		"""
+		:return: Whether any component of this vector is None
+		"""
+
+		return None not in self.__components__
+
+	@property
 	def dimension(self) -> int:
 		"""
 		:return: The total dimension of this vector
 		"""
 
 		return len(self.__components__)
-
