@@ -823,7 +823,7 @@ if sys.platform == 'win32':
 			try:
 				if not self.closed:
 					self.close()
-			except (IOError, AttributeError):
+			except (IOError, AttributeError, pywintypes.error):
 				pass
 
 		def __setstate__(self, state: dict[str, typing.Any]) -> None:

@@ -1,144 +1,252 @@
-import typing
+from __future__ import annotations
 
-from ..Chemistry import Atom
-from ..Chemistry import util
+from .. import Chemistry
+from .. import Exceptions
+from .. import Misc
+from .. import Stream
 
 
 class Compound:
-	def __init__(self, *atoms):
-		self.__elements: list[Atom.Atoms] = []
+	"""
+	Class representing a grouping of different elements
+	"""
+
+	def __init__(self, *atoms: Chemistry.Atom.Atom | Chemistry.Atom.Atoms | Compound, count: int = 1):
+		"""
+		Class representing a grouping of different elements
+		- Constructor -
+		:param atoms: The atoms or compounds that make up this compound
+		:raises InvalidArgumentException: If any atom is not an Atom instance, Atoms instance, or Compound instance
+		:raises InvalidArgumentException: If 'count' is not an integer
+		:raises ValueError: If 'count' is negative
+		"""
+
+		Misc.raise_ifn(isinstance(count, int), Exceptions.InvalidArgumentException(Compound.__init__, 'count', type(count), (int,)))
+		Misc.raise_ifn((count := int(count)) > 0, ValueError('Count cannot be negative'))
+		self.__atoms__: list[Chemistry.Atom.Atoms | Compound] = []
+		self.__count__: int = int(count)
 
 		for atom in atoms:
-			atom: Atom.Atom | Atom.Atoms | Compound
-
-			if type(atom) is Atom.Atom:
-				self.__elements.append(Atom.Atoms(atom, 1))
-			elif type(atom) is Atom.Atoms:
-				self.__elements.append(atom)
-			elif type(atom) is Compound:
-				self.__elements.extend(atom.__elements)
-			else:
-				raise TypeError(f'Cannot convert "{atom}" (type {type(atom).__name__}) to Compound.Compound')
+			if isinstance(atom, Chemistry.Atom.Atom):
+				self.__atoms__.append(Chemistry.Atom.Atoms(atom, 1))
+			elif isinstance(atom, Chemistry.Atom.Atoms) and atom.count >= 1:
+				self.__atoms__.append(atom)
+			elif isinstance(atom, Compound):
+				self.__atoms__.append(atom)
+			elif not isinstance(atom, (Chemistry.Atom.Atom, Chemistry.Atom.Atoms, Compound)):
+				raise Exceptions.InvalidArgumentException(Compound.__init__, 'atoms', type(atom), (Chemistry.Atom.Atom, Chemistry.Atom.Atoms, Compound))
 
 	def __repr__(self) -> str:
 		return str(self)
 
 	def __str__(self) -> str:
-		return ''.join(str(elem) for elem in self.__elements)
+		msg: str = ''.join(f'({elem})' if isinstance(elem, Compound) else str(elem) for elem in self.__atoms__)
+		return msg if self.__count__ == 1 else f'({msg}){Chemistry.util.convert_int_to_subscript_str(self.__count__)}'
 
-	def __mul__(self, other: int) -> 'Compounds':
-		if type(other) is not int:
+	def __eq__(self, other: Compound):
+		return isinstance(other, Compound) and self.__atoms__ == other.__atoms__ and self.__count__ == other.__count__
+
+	def __mul__(self, n: int) -> Compound:
+		"""
+		Multiplies this compound 'n' times
+		:param n: The number of times to multiply this grouping by
+		:return: The multiplied compound
+		"""
+
+		if not isinstance(n, int):
 			return NotImplemented
+		elif (n := int(n)) < 0:
+			raise ValueError('Multiplier cannot be negative')
 		else:
-			return Compounds(self, other)
+			return Compound(*self.__atoms__, count=self.__count__ * int(n))
 
-	def __rmul__(self, other: int) -> 'Compounds':
-		if type(other) is not int:
+	def __rmul__(self, n: int) -> Compound:
+		"""
+		Multiplies this compound 'n' times
+		:param n: The number of times to multiply this grouping by
+		:return: The multiplied compound
+		"""
+
+		return self * n
+
+	def __matmul__(self, n: int) -> Compound:
+		"""
+		Multiplies this compound's elements 'n' times
+		:param n: The number of times to multiply this grouping by
+		:return: The multiplied compound
+		"""
+
+		if not isinstance(n, int):
 			return NotImplemented
+		elif (n := int(n)) < 0:
+			raise ValueError('Multiplier cannot be negative')
 		else:
-			return Compounds(self, other)
+			return Compound(*[atoms * int(n) for atoms in self.__atoms__])
 
-	def __add__(self, other: 'Atom.Atom | Atom.Atoms | Compound.Compound') -> 'Compound':
-		if type(other) not in (Atom.Atom, Atom.Atoms, Compound):
-			return NotImplemented
+	def __rmatmul__(self, n: int) -> Compound:
+		"""
+		Multiplies this compound's elements 'n' times
+		:param n: The number of times to multiply this grouping by
+		:return: The multiplied compound
+		"""
+
+		return self @ n
+
+	def __add__(self, other: Chemistry.Atom.Atom | Chemistry.Atom.Atoms | Compound) -> Compound:
+		"""
+		Adds either another atom, atom group, or compound to this compound
+		:param other: The other atom, atom group, or compound
+		:return: The resulting compound
+		"""
+
+		return Compound(*self.__atoms__, count=self.__count__ + other.__count__) if isinstance(other, Compound) and other.__atoms__ == self.__atoms__ else Compound(self, other) if isinstance(other, (Chemistry.Atom.Atom, Chemistry.Atom.Atoms, Compound)) else NotImplemented
+
+	def __radd__(self, other: Chemistry.Atom.Atom | Chemistry.Atom.Atoms | Compound) -> Compound:
+		"""
+		Adds this compound to either another atom, atom group, or compound
+		:param other: The other atom, atom group, or compound
+		:return: The resulting compound
+		"""
+
+		return Compound(other, self) if isinstance(other, (Chemistry.Atom.Atom, Chemistry.Atom.Atoms, Compound)) else NotImplemented
+
+	def __rtruediv__(self, coefficient: int) -> Chemistry.Equation.EquationCompound:
+		"""
+		Appends a coefficient to this compound
+		:param coefficient: The coefficient
+		:return: The new compound
+		"""
+
+		return Chemistry.Equation.EquationCompound(self, Chemistry.Equation.EquationCompound.Phase.UNKNOWN, coefficient) if isinstance(coefficient, int) else NotImplemented
+
+	def __rfloordiv__(self, coefficient: int) -> Chemistry.Equation.EquationCompound:
+		"""
+		Appends a coefficient to this compound
+		:param coefficient: The coefficient
+		:return: The new compound
+		"""
+
+		return coefficient / self
+
+	def __rmod__(self, coefficient: int) -> Chemistry.Equation.EquationCompound:
+		"""
+		Appends a coefficient to this compound
+		:param coefficient: The coefficient
+		:return: The new compound
+		"""
+
+		return coefficient / self
+
+	def __rxor__(self, coefficient: int) -> Chemistry.Equation.EquationCompound:
+		"""
+		Appends a coefficient to this compound
+		:param coefficient: The coefficient
+		:return: The new compound
+		"""
+
+		return coefficient / self
+
+	def __getitem__(self, key: int | Chemistry.Atom.Atom) -> Chemistry.Atom.Atoms:
+		"""
+		Gets the atom group in this compound by index if 'key' is an integer
+		Gets the combined atom group in this compound by symbol if 'key' is an Atom instance
+		:param key: The group index or atomic element
+		:return: The atom group
+		:raises IndexError: If the index is out of bounds
+		:raises TypeError: If the key is not an integer or Atom instance
+		"""
+
+		if isinstance(key, int):
+			return self.__atoms__[int(key)]
+		elif isinstance(key, Chemistry.Atom.Atom):
+			return Chemistry.Atom.Atoms(key, Stream.LinqStream(self.__atoms__).filter(lambda atoms: atoms.atom == key).transform(lambda atoms: atoms.count).sum())
 		else:
-			return Compound(*self.__elements, other)
-
-	def __getitem__(self, item: 'str | int | Atom.Atom') -> 'Atom.Atoms':
-		if type(item) is str:
-			for atom in self.__elements:
-				if atom.atom().Name == item or atom.atom().Symbol == item:
-					return atom
-			raise KeyError(f'No atom with name or symbol: {item}')
-		elif type(item) is int:
-			for atom in self.__elements:
-				if atom.atom().proton_count() == item:
-					return atom
-			raise KeyError(f'No atom with atomic number: {item}')
-		elif type(item) is Atom.Atom:
-			for atom in self.__elements:
-				if atom.atom() == item:
-					return atom
-			raise KeyError(f'No atom: {item}')
-		else:
-			return NotImplemented
-
-	def __getattr__(self, item: 'str | int | Atom.Atom') -> 'Atom.Atoms':
-		return self[item]
+			raise TypeError(f'Compound indices must be either an integer or an Atom instance, got \'{type(key).__name__}\'')
 
 	def normalize(self) -> None:
-		mapping: dict[Atom.Atom, int] = {}
-		order: list[Atom.Atom] = []
+		"""
+		Normalizes this compound
+		Example: H6O2 -> H3O
+		"""
 
-		for atoms in self.__elements:
-			if atoms.atom() not in mapping:
-				mapping[atoms.atom()] = atoms.count()
+		if len(self.__atoms__) == 0:
+			return
+
+		sort_order: list[int] = sorted(atom.count for atom in self.__atoms__ if isinstance(atom, Chemistry.Atom.Atoms))
+		smallest: int = ...
+
+		if 1 in sort_order:
+			return
+
+		for small in sort_order:
+			if all(x % small == 0 for x in sort_order):
+				smallest = small
+				break
+
+		if smallest is ...:
+			return
+
+		for i, atoms in enumerate(self.__atoms__):
+			if isinstance(atoms, Chemistry.Atom.Atoms):
+				self.__atoms__[i] = Chemistry.Atom.Atoms(atoms.atom, atoms.count // smallest)
 			else:
-				mapping[atoms.atom()] += atoms.count()
+				self.__atoms__[i].normalize()
 
-			if atoms.atom() not in order:
-				order.append(atoms.atom())
+	def normalized(self) -> Compound:
+		"""
+		Normalizes this compound
+		Example: H6O2 -> H3O
+		:return: The normalized compound
+		"""
 
-		self.__elements.clear()
-
-		for atom in order:
-			self.__elements.append(Atom.Atoms(atom, mapping[atom]))
-
-	def mass(self) -> float:
-		return sum(elem.mass() for elem in self.__elements)
-
-	def valence_count(self) -> float:
-		return sum(atoms.atom().valence_count() * atoms.count() for atoms in self.__elements if atoms.atom().valence_count() >= 0)
-
-	def calc_mass_to_moles(self) -> tuple[float]:
-		import Equations
-		return tuple(Equations.calc_gram_to_mol(elem.mass(), elem.atom()) for elem in self.__elements)
-
-	def elements(self) -> 'tuple[Atom.Atoms, ...]':
-		return tuple(self.__elements)
-
-	def atoms(self) -> 'tuple[Atom.Atom, ...]':
-		atoms_list: list[Atom.Atom] = []
-
-		for atoms in self.__elements:
-			atoms_list.extend([atoms.atom()] * atoms.count())
-
-		return tuple(atoms_list)
-
-	def normalized(self) -> 'Compound':
 		copy: Compound = Compound(self)
 		copy.normalize()
 		return copy
 
-
-class Compounds:
-	def __init__(self, compound: Compound, count: int):
-		self.__compound: Compound = compound if type(compound) is Compound else Compound(compound)
-		self.__count = count
-
-	def __repr__(self) -> str:
-		return str(self)
-
-	def __str__(self) -> str:
-		return str(self.__compound) if self.__count == 1 else f'{self.__count}({self.__compound})'
-
-	def __mul__(self, other: int) -> 'Compounds':
-		if type(other) is not int:
-			return NotImplemented
-		else:
-			return Compounds(self.__compound, self.__count * other)
-
-	def __rmul__(self, other: int) -> 'Compounds':
-		if type(other) is not int:
-			return NotImplemented
-		else:
-			return Compounds(self.__compound, self.__count * other)
-
-	def mass(self) -> float:
-		return self.__compound.mass() * self.__count
-
-	def compound(self) -> Compound:
-		return self.__compound
-
+	@property
 	def count(self) -> int:
-		return self.__count
+		"""
+		:return: The subscript count of this compound
+		"""
+
+		return self.__count__
+
+	@property
+	def mass(self) -> float:
+		"""
+		:return: The total mass of this compound
+		"""
+
+		return sum(elem.mass for elem in self.__atoms__) * self.__count__
+
+	@property
+	def valence_count(self) -> float:
+		"""
+		:return: The valence count of this compound
+		"""
+
+		return sum(atoms.valence_count if isinstance(atoms, Compound) else (atoms.atom.valence_count * atoms.count) for atoms in self.__atoms__ if atoms.atom.valence_count >= 0)
+
+	@property
+	def elements(self) -> tuple[Chemistry.Atom.Atoms | Compound, ...]:
+		"""
+		:return: The individual element terms in this compound
+		"""
+
+		return tuple(self.__atoms__)
+
+	@property
+	def atoms(self) -> set[Chemistry.Atom.Atoms]:
+		"""
+		:return: The atomic element groups in this compound
+		"""
+
+		atoms: set[Chemistry.Atom.Atoms] = set()
+
+		for atom in self.__atoms__:
+			if isinstance(atom, Compound):
+				atoms.update(x * self.__count__ for x in atom.atoms)
+			else:
+				atoms.add(atom * self.__count__)
+
+		return atoms

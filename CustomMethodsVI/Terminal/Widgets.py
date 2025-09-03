@@ -412,7 +412,7 @@ class MyWidget:
 
 			return self.send('focused')
 
-	def __init__(self, parent: Terminal.Terminal | MySubTerminal, x: int, y: int, z: int, width: int, height: int, *,
+	def __init__(self, parent: Terminal.Terminal.Terminal | MySubTerminal, x: int, y: int, z: int, width: int, height: int, *,
 				 callback: typing.Optional[typing.Callable[[MyWidget, str, ...], typing.Any]] = ...,
 				 on_focus: typing.Optional[typing.Callable[[MyWidget], typing.Any]] = ..., off_focus: typing.Optional[typing.Callable[[MyWidget], typing.Any]] = ...,
 				 on_mouse_enter: typing.Optional[typing.Callable[[MyWidget, Terminal.Struct.MouseInfo], typing.Any]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[MyWidget, Terminal.Struct.MouseInfo], typing.Any]] = ..., on_mouse_press: typing.Optional[typing.Callable[[MyWidget, Terminal.Struct.MouseInfo], typing.Any]] = ..., on_mouse_release: typing.Optional[typing.Callable[[MyWidget, Terminal.Struct.MouseInfo], typing.Any]] = ..., on_mouse_click: typing.Optional[typing.Callable[[MyWidget, Terminal.Struct.MouseInfo], typing.Any]] = ...,
@@ -495,7 +495,7 @@ class MyWidget:
 		self.__on_close__: typing.Callable[[MyWidget], None] = on_close
 
 	def __reduce__(self) -> tuple[typing.Callable, tuple, dict]:
-		topmost: Terminal.Terminal.WindowTerminal.SubprocessTerminal | Terminal.Terminal = self.topmost_parent()
+		topmost: Terminal.Terminal.WindowTerminal.SubprocessTerminal | Terminal.Terminal.Terminal = self.topmost_parent()
 		assert isinstance(topmost, Terminal.Terminal.WindowTerminal.SubprocessTerminal), 'Cannot pickle main process widget'
 		serializer: type[MyWidget.MySerializedWidget] = self.__serializer__
 		assert isinstance(serializer, type) and issubclass(serializer, MyWidget.MySerializedWidget), 'Serializer is not a type or not a subclass of MySerializedWidget'
@@ -847,6 +847,8 @@ class MyWidget:
 
 		if border is None:
 			return
+		elif border is ...:
+			border = Terminal.Struct.BorderInfo()
 		elif not isinstance(border, Terminal.Struct.BorderInfo):
 			raise Exceptions.InvalidArgumentException(MyWidget.draw_border, 'border', type(border), (Terminal.Struct.BorderInfo,))
 
@@ -897,7 +899,7 @@ class MyWidget:
 		:return: The topmost terminal this widget is bound to
 		"""
 
-		parent: Terminal.Terminal | MySubTerminal = self.__terminal__
+		parent: Terminal.Terminal.Terminal | MySubTerminal = self.__terminal__
 
 		while isinstance(parent, MySubTerminal):
 			parent = parent.parent
@@ -1000,7 +1002,7 @@ class MyWidget:
 		return self.__position__[3], self.__position__[4]
 
 	@property
-	def parent(self) -> Terminal.Terminal | MySubTerminal:
+	def parent(self) -> Terminal.Terminal.Terminal | MySubTerminal:
 		"""
 		:return: This widget's immediate parent
 		"""
@@ -1192,7 +1194,7 @@ class MyActivatableWidget(MyWidget):
 
 			return self.send('active_border')
 
-	def __init__(self, parent: Terminal.Terminal | MySubTerminal, x: int, y: int, z: int, width: int, height: int, *,
+	def __init__(self, parent: Terminal.Terminal.Terminal | MySubTerminal, x: int, y: int, z: int, width: int, height: int, *,
 				 border: typing.Optional[Terminal.Struct.BorderInfo] = ..., highlight_border: typing.Optional[Terminal.Struct.BorderInfo] = ..., active_border: typing.Optional[Terminal.Struct.BorderInfo] = ...,
 				 color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_fg: typing.Optional[Terminal.Enums.Color_T] = ...,
 				 callback: typing.Optional[typing.Callable[[MyWidget, str, ...], None]] = ...,
@@ -1511,7 +1513,7 @@ class MyButton(MyActivatableWidget):
 
 			return self.send('justify')
 
-	def __init__(self, parent: Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, text: str | Terminal.Struct.AnsiStr | Iterable.String, *, z_index: int = 0, justify: int = Terminal.Enums.CENTER, word_wrap: int = Terminal.Enums.WORDWRAP_NONE,
+	def __init__(self, parent: Terminal.Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, text: str | Terminal.Struct.AnsiStr | Iterable.String, *, z_index: int = 0, justify: int = Terminal.Enums.CENTER, word_wrap: int = Terminal.Enums.WORDWRAP_NONE,
 				 border: typing.Optional[Terminal.Struct.BorderInfo] = ..., highlight_border: typing.Optional[Terminal.Struct.BorderInfo] = ..., active_border: typing.Optional[Terminal.Struct.BorderInfo] = ...,
 				 color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_fg: typing.Optional[Terminal.Enums.Color_T] = ...,
 				 callback: typing.Optional[typing.Callable[[MyWidget, str, ...], None]] = ...,
@@ -1917,7 +1919,7 @@ class MyToggleButton(MyButton):
 		def toggled(self, state: bool) -> None:
 			self.send('toggled', state)
 	
-	def __init__(self, parent: Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, text: str | Terminal.Struct.AnsiStr, *, z_index: int = 0, justify: int = Terminal.Enums.CENTER, word_wrap: int = Terminal.Enums.WORDWRAP_NONE,
+	def __init__(self, parent: Terminal.Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, text: str | Terminal.Struct.AnsiStr, *, z_index: int = 0, justify: int = Terminal.Enums.CENTER, word_wrap: int = Terminal.Enums.WORDWRAP_NONE,
 				 border: typing.Optional[Terminal.Struct.BorderInfo] = ..., highlight_border: typing.Optional[Terminal.Struct.BorderInfo] = ..., active_border: typing.Optional[Terminal.Struct.BorderInfo] = ...,
 				 color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_fg: typing.Optional[Terminal.Enums.Color_T] = ...,
 				 callback: typing.Optional[typing.Callable[[MyWidget, str, ...], None]] = ...,
@@ -2279,7 +2281,7 @@ class MyCheckbox(MyActivatableWidget):
 
 			self.send('checked', checked)
 
-	def __init__(self, parent: Terminal.Terminal | MySubTerminal, x: int, y: int, *, z_index: int = 0, text: str | Terminal.Struct.AnsiStr = '', active_text: str | Terminal.Struct.AnsiStr = 'X',
+	def __init__(self, parent: Terminal.Terminal.Terminal | MySubTerminal, x: int, y: int, *, z_index: int = 0, text: str | Terminal.Struct.AnsiStr = '', active_text: str | Terminal.Struct.AnsiStr = 'X',
 				 border: typing.Optional[Terminal.Struct.BorderInfo] = ..., highlight_border: typing.Optional[Terminal.Struct.BorderInfo] = ..., active_border: typing.Optional[Terminal.Struct.BorderInfo] = ...,
 				 color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_fg: typing.Optional[Terminal.Enums.Color_T] = ...,
 				 callback: typing.Optional[typing.Callable[[MyWidget, str, ...], None]] = ...,
@@ -2519,7 +2521,7 @@ class MyInlineCheckbox(MyActivatableWidget):
 	class MySerializedInlineCheckbox(MyCheckbox.MySerializedCheckbox):
 		pass
 
-	def __init__(self, parent: Terminal.Terminal | MySubTerminal, x: int, y: int, *, z_index: int = 0, text: str | Terminal.Struct.AnsiStr | Iterable.String = '', active_text: str | Terminal.Struct.AnsiStr = 'X',
+	def __init__(self, parent: Terminal.Terminal.Terminal | MySubTerminal, x: int, y: int, *, z_index: int = 0, text: str | Terminal.Struct.AnsiStr | Iterable.String = '', active_text: str | Terminal.Struct.AnsiStr = 'X',
 				 border: typing.Optional[Terminal.Struct.BorderInfo] = ..., highlight_border: typing.Optional[Terminal.Struct.BorderInfo] = ..., active_border: typing.Optional[Terminal.Struct.BorderInfo] = ...,
 				 color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_fg: typing.Optional[Terminal.Enums.Color_T] = ...,
 				 callback: typing.Optional[typing.Callable[[MyWidget, str, ...], None]] = ...,
@@ -2830,7 +2832,7 @@ class MyRadialSpinner(MyWidget):
 
 			return self.send('phases')
 
-	def __init__(self, parent: Terminal.Terminal | MySubTerminal, x: int, y: int, *, z_index: int = 0, phases: typing.Iterable[str | Terminal.Struct.AnsiStr | Iterable.String] = ('--', '\\', '|', '/'), bg_phase_colors: typing.Optional[Terminal.Enums.Color_T] | typing.Iterable[typing.Optional[Terminal.Enums.Color_T]] = Terminal.Struct.Color(0xFFFFFF), fg_phase_colors: typing.Optional[Terminal.Enums.Color_T] | typing.Iterable[typing.Optional[Terminal.Enums.Color_T]] = Terminal.Struct.Color(0xFFFFFF),
+	def __init__(self, parent: Terminal.Terminal.Terminal | MySubTerminal, x: int, y: int, *, z_index: int = 0, phases: typing.Iterable[str | Terminal.Struct.AnsiStr | Iterable.String] = ('--', '\\', '|', '/'), bg_phase_colors: typing.Optional[Terminal.Enums.Color_T] | typing.Iterable[typing.Optional[Terminal.Enums.Color_T]] = Terminal.Struct.Color(0xFFFFFF), fg_phase_colors: typing.Optional[Terminal.Enums.Color_T] | typing.Iterable[typing.Optional[Terminal.Enums.Color_T]] = Terminal.Struct.Color(0xFFFFFF),
 				 callback: typing.Optional[typing.Callable[[MyWidget, str, ...], None]] = ...,
 				 on_focus: typing.Optional[typing.Callable[[MyWidget], None]] = ..., off_focus: typing.Optional[typing.Callable[[MyWidget], None]] = ...,
 				 on_mouse_enter: typing.Optional[typing.Callable[[MyWidget, Terminal.Struct.MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[MyWidget, Terminal.Struct.MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[MyWidget, Terminal.Struct.MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[MyWidget, Terminal.Struct.MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[MyWidget, Terminal.Struct.MouseInfo], None]] = ...,
@@ -2876,7 +2878,7 @@ class MyRadialSpinner(MyWidget):
 
 		bg_phase_color: Terminal.Struct.Color = parse_color(bg_phase_colors)
 		fg_phase_color: Terminal.Struct.Color = parse_color(fg_phase_colors)
-		root: Terminal.Terminal = self.topmost_parent()
+		root: Terminal.Terminal.Terminal = self.topmost_parent()
 
 		if bg_phase_color is None and hasattr(bg_phase_colors, '__iter__'):
 			self.__bg_colors__: tuple[Terminal.Struct.Color, ...] = tuple(parse_color(color, Exceptions.InvalidArgumentException(MyRadialSpinner.__init__, 'bg_phase_colors[i]', type(color), (Terminal.Struct.Color,))) for i, color in enumerate(bg_phase_colors))
@@ -2932,7 +2934,7 @@ class MyRadialSpinner(MyWidget):
 
 		super().configure(x=x, y=y, z=z_index, callback=callback, on_focus=on_focus, off_focus=off_focus, on_mouse_enter=on_mouse_enter, on_mouse_leave=on_mouse_leave, on_mouse_press=on_mouse_press, on_mouse_release=on_mouse_release, on_mouse_click=on_mouse_click, on_tick=on_tick, on_close=on_close)
 		self.__phases__: tuple[Terminal.Struct.AnsiStr, ...] = self.__phases__ if phases is ... or phases is None else tuple(Terminal.Struct.AnsiStr(x) for x in phases)
-		root: Terminal.Terminal = self.topmost_parent()
+		root: Terminal.Terminal.Terminal = self.topmost_parent()
 
 		if self.__bg_colors__ is not None and self.__bg_colors__ is not ...:
 			bg_phase_color: Terminal.Struct.Color = parse_color(bg_phase_colors)
@@ -3161,7 +3163,7 @@ class MyHorizontalSlider(MyActivatableWidget):
 
 			self.send('percentage', percent)
 
-	def __init__(self, parent: Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, *, z_index: int = 0, step: float = 1, fill_char: str | Terminal.Struct.AnsiStr = '|', _max: float = 10, _min: float = 0, on_input: typing.Optional[typing.Callable[[MyHorizontalSlider], None]] = ...,
+	def __init__(self, parent: Terminal.Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, *, z_index: int = 0, step: float = 1, fill_char: str | Terminal.Struct.AnsiStr = '|', _max: float = 10, _min: float = 0, on_input: typing.Optional[typing.Callable[[MyHorizontalSlider], None]] = ...,
 				 border: typing.Optional[Terminal.Struct.BorderInfo] = ..., highlight_border: typing.Optional[Terminal.Struct.BorderInfo] = ..., active_border: typing.Optional[Terminal.Struct.BorderInfo] = ...,
 				 color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_fg: typing.Optional[Terminal.Enums.Color_T] = ...,
 				 callback: typing.Optional[typing.Callable[[MyWidget, str, ...], None]] = ...,
@@ -3565,7 +3567,7 @@ class MyVerticalSlider(MyActivatableWidget):
 	class MySerializedVerticalSlider(MyHorizontalSlider.MySerializedHorizontalSlider):
 		pass
 	
-	def __init__(self, parent: Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, *, z_index: int = 0, step: float = 1, fill_char: str | Terminal.Struct.AnsiStr = '=', _max: float = 10, _min: float = 0, on_input: typing.Optional[typing.Callable[[MyVerticalSlider], None]] = ...,
+	def __init__(self, parent: Terminal.Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, *, z_index: int = 0, step: float = 1, fill_char: str | Terminal.Struct.AnsiStr = '=', _max: float = 10, _min: float = 0, on_input: typing.Optional[typing.Callable[[MyVerticalSlider], None]] = ...,
 				 border: typing.Optional[Terminal.Struct.BorderInfo] = ..., highlight_border: typing.Optional[Terminal.Struct.BorderInfo] = ..., active_border: typing.Optional[Terminal.Struct.BorderInfo] = ...,
 				 color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_fg: typing.Optional[Terminal.Enums.Color_T] = ...,
 				 callback: typing.Optional[typing.Callable[[MyWidget, str, ...], None]] = ...,
@@ -4078,7 +4080,7 @@ class MyText(MyActivatableWidget):
 
 			return self.send('justify')
 	
-	def __init__(self, parent: Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, text: str | Terminal.Struct.AnsiStr, *, z_index: int = 0, justify: int = Terminal.Enums.NORTH_WEST, word_wrap: int = Terminal.Enums.WORDWRAP_NONE,
+	def __init__(self, parent: Terminal.Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, text: str | Terminal.Struct.AnsiStr, *, z_index: int = 0, justify: int = Terminal.Enums.NORTH_WEST, word_wrap: int = Terminal.Enums.WORDWRAP_NONE,
 				 color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_fg: typing.Optional[Terminal.Enums.Color_T] = ...,
 				 callback: typing.Optional[typing.Callable[[MyWidget, str, ...], None]] = ...,
 				 on_focus: typing.Optional[typing.Callable[[MyWidget], None]] = ..., off_focus: typing.Optional[typing.Callable[[MyWidget], None]] = ...,
@@ -4675,7 +4677,7 @@ class MyDropdown(MyActivatableWidget):
 		Widget class representing a dropdown menu option
 		"""
 
-		def __init__(self, parent: Terminal.Terminal | MySubTerminal, dropdown: MyDropdown, x: int, y: int, width: int, height: int, text: str | Terminal.Struct.AnsiStr, *, z_index: int = 0, justify: int = Terminal.Enums.CENTER, word_wrap: int = Terminal.Enums.WORDWRAP_NONE,
+		def __init__(self, parent: Terminal.Terminal.Terminal | MySubTerminal, dropdown: MyDropdown, x: int, y: int, width: int, height: int, text: str | Terminal.Struct.AnsiStr, *, z_index: int = 0, justify: int = Terminal.Enums.CENTER, word_wrap: int = Terminal.Enums.WORDWRAP_NONE,
 					 border: typing.Optional[Terminal.Struct.BorderInfo] = ..., highlight_border: typing.Optional[Terminal.Struct.BorderInfo] = ..., active_border: typing.Optional[Terminal.Struct.BorderInfo] = ...,
 					 color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_fg: typing.Optional[Terminal.Enums.Color_T] = ...,
 					 callback: typing.Optional[typing.Callable[[MyWidget, str, ...], None]] = ...,
@@ -4735,7 +4737,7 @@ class MyDropdown(MyActivatableWidget):
 			self.__dropdown__: MyDropdown = dropdown
 			self.hide()
 
-	def __init__(self, parent: Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, choices: tuple[str | Terminal.Struct.AnsiStr, ...], *, z_index: int = 0, justify: int = Terminal.Enums.CENTER,
+	def __init__(self, parent: Terminal.Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, choices: tuple[str | Terminal.Struct.AnsiStr, ...], *, z_index: int = 0, justify: int = Terminal.Enums.CENTER,
 				 display_count: int | None = None, word_wrap: int = Terminal.Enums.WORDWRAP_WORD, allow_scroll_rollover: bool = False, on_select: typing.Optional[typing.Callable[[MyWidget, bool], bool | None]] = ...,
 				 border: typing.Optional[Terminal.Struct.BorderInfo] = ..., highlight_border: typing.Optional[Terminal.Struct.BorderInfo] = ..., active_border: typing.Optional[Terminal.Struct.BorderInfo] = ...,
 				 color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_fg: typing.Optional[Terminal.Enums.Color_T] = ...,
@@ -4808,7 +4810,7 @@ class MyDropdown(MyActivatableWidget):
 			raise ValueError('Dropbox is empty')
 
 		self.__choices__: tuple[Terminal.Struct.AnsiStr, ...] = tuple(Terminal.Struct.AnsiStr(text) for text in choices)
-		self.__options__: tuple[MyDropdown.__Option__, ...] = tuple(parent.add_widget(MyDropdown.__Option__, parent, self.x, self.y + (i + 1) * self.height, self.width, self.height, choice, z_index=z_index + 1, justify=justify, word_wrap=word_wrap, border=border, highlight_border=highlight_border, active_border=active_border, color_fg=color_fg, highlight_color_fg=highlight_color_fg, active_color_fg=active_color_fg, color_bg=color_bg, highlight_color_bg=highlight_color_bg, active_color_bg=active_color_bg, on_mouse_click=lambda _1, mouse, index=i: self.__select_choice__(index, mouse)) for i, choice in enumerate(self.__choices__))
+		self.__options__: tuple[MyDropdown.__Option__, ...] = tuple(parent.add_widget(MyDropdown.__Option__, self, self.x, self.y + (i + 1) * self.height, self.width, self.height, choice, z_index=z_index + 1, justify=justify, word_wrap=word_wrap, border=border, highlight_border=highlight_border, active_border=active_border, color_fg=color_fg, highlight_color_fg=highlight_color_fg, active_color_fg=active_color_fg, color_bg=color_bg, highlight_color_bg=highlight_color_bg, active_color_bg=active_color_bg, on_mouse_click=lambda _1, mouse, index=i: self.__select_choice__(index, mouse)) for i, choice in enumerate(self.__choices__))
 		self.__option_callback__: typing.Optional[typing.Callable[[int, Terminal.Struct.MouseInfo], None]] = None
 		self.__choice_override__: Terminal.Struct.AnsiStr | None = None
 		self.__selected__: int = 0
@@ -5213,6 +5215,12 @@ class MyDropdown(MyActivatableWidget):
 		self.__scroll_rollover__ = self.__scroll_rollover__ if allow_scroll_rollover is None or allow_scroll_rollover is ... else bool(allow_scroll_rollover)
 		self.__on_select__ = None if on_select is None else self.__on_select__ if on_select is ... else on_select
 
+		if choices is not None and choices is not ...:
+			for option in self.__options__:
+				self.__terminal__.del_widget(option.id)
+
+			self.__options__: tuple[MyDropdown.__Option__, ...] = tuple(self.__terminal__.add_widget(MyDropdown.__Option__, self, self.x, self.y + (i + 1) * self.height, self.width, self.height, choice, z_index=z_index + 1, justify=justify, word_wrap=word_wrap, border=border, highlight_border=highlight_border, active_border=active_border, color_fg=color_fg, highlight_color_fg=highlight_color_fg, active_color_fg=active_color_fg, color_bg=color_bg, highlight_color_bg=highlight_color_bg, active_color_bg=active_color_bg, on_mouse_click=lambda _1, mouse, index=i: self.__select_choice__(index, mouse)) for i, choice in enumerate(self.__choices__))
+
 	def option_configure(self, *, x: typing.Optional[int] = ..., y: typing.Optional[int] = ..., z_index: typing.Optional[int] = ..., width: typing.Optional[int] = ..., height: typing.Optional[int] = ...,
 						 callback: typing.Optional[typing.Callable[[MyWidget, str, ...], None]] = ...,
 						 on_focus: typing.Optional[typing.Callable[[MyWidget], None]] = ..., off_focus: typing.Optional[typing.Callable[[MyWidget], None]] = ...,
@@ -5481,7 +5489,7 @@ class MyEntry(MyActivatableWidget):
 
 			self.send('cursor', cursor)
 
-	def __init__(self, parent: Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, *, z_index: int = 0, word_wrap: int = Terminal.Enums.WORDWRAP_WORD, justify: int = Terminal.Enums.NORTH_WEST, replace_chars: str | Terminal.Struct.AnsiStr | Iterable.String = '', placeholder: typing.Optional[str | Terminal.Struct.AnsiStr | Iterable.String] = ..., cursor_blink_speed: int = 0, on_text: typing.Optional[typing.Callable[[MyEntry, bool], bool | Terminal.Struct.AnsiStr | None]] = ..., on_input: typing.Optional[typing.Callable[[MyEntry, Terminal.Struct.AnsiStr, int], bool | str | Terminal.Struct.AnsiStr | None]] = ...,
+	def __init__(self, parent: Terminal.Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, *, z_index: int = 0, word_wrap: int = Terminal.Enums.WORDWRAP_WORD, justify: int = Terminal.Enums.NORTH_WEST, replace_chars: str | Terminal.Struct.AnsiStr | Iterable.String = '', placeholder: typing.Optional[str | Terminal.Struct.AnsiStr | Iterable.String] = ..., cursor_blink_speed: int = 0, on_text: typing.Optional[typing.Callable[[MyEntry, bool], bool | Terminal.Struct.AnsiStr | None]] = ..., on_input: typing.Optional[typing.Callable[[MyEntry, Terminal.Struct.AnsiStr, int], bool | str | Terminal.Struct.AnsiStr | None]] = ...,
 				 color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_fg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_fg: typing.Optional[Terminal.Enums.Color_T] = ...,
 				 callback: typing.Optional[typing.Callable[[MyWidget, str, ...], None]] = ...,
 				 on_focus: typing.Optional[typing.Callable[[MyWidget], None]] = ..., off_focus: typing.Optional[typing.Callable[[MyWidget], None]] = ...,
@@ -6187,7 +6195,7 @@ class MyImage(MyActivatableWidget):
 
 			return self.send('raw_image')
 
-	def __init__(self, parent: Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, image: str | Terminal.Struct.AnsiStr | numpy.ndarray | PIL.Image.Image | None, *, div: typing.Optional[int] = ..., use_subpad: bool = True, z_index: int = 0,
+	def __init__(self, parent: Terminal.Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, image: str | Terminal.Struct.AnsiStr | numpy.ndarray | PIL.Image.Image | None, *, div: typing.Optional[int] = ..., use_subpad: bool = True, z_index: int = 0,
 				 border: typing.Optional[Terminal.Struct.BorderInfo] = ..., highlight_border: typing.Optional[Terminal.Struct.BorderInfo] = ..., active_border: typing.Optional[Terminal.Struct.BorderInfo] = ...,
 				 color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., highlight_color_bg: typing.Optional[Terminal.Enums.Color_T] = ..., active_color_bg: typing.Optional[Terminal.Enums.Color_T] = ...,
 				 callback: typing.Optional[typing.Callable[[MyWidget, str, ...], None]] = ..., on_focus: typing.Optional[typing.Callable[[MyWidget], None]] = ..., off_focus: typing.Optional[typing.Callable[[MyWidget], None]] = ..., on_mouse_enter: typing.Optional[typing.Callable[[MyWidget, Terminal.Struct.MouseInfo], None]] = ..., on_mouse_leave: typing.Optional[typing.Callable[[MyWidget, Terminal.Struct.MouseInfo], None]] = ..., on_mouse_press: typing.Optional[typing.Callable[[MyWidget, Terminal.Struct.MouseInfo], None]] = ..., on_mouse_release: typing.Optional[typing.Callable[[MyWidget, Terminal.Struct.MouseInfo], None]] = ..., on_mouse_click: typing.Optional[typing.Callable[[MyWidget, Terminal.Struct.MouseInfo], None]] = ..., on_tick: typing.Optional[typing.Callable[[MyWidget, int], None]] = ..., on_close: typing.Optional[typing.Callable[[MyWidget], None]] = ...):
@@ -6270,7 +6278,7 @@ class MyImage(MyActivatableWidget):
 
 				if div is None or div is ...:
 					divs: tuple[int, ...] = (4, 8, 16, 32, 64, 128)
-					topmost: Terminal.Terminal = self.topmost_parent()
+					topmost: Terminal.Terminal.Terminal = self.topmost_parent()
 					available: int = min(curses.COLORS - len(topmost.__colors__), curses.COLOR_PAIRS - len(topmost.__color_pairs__))
 
 					for true_div in divs:
@@ -6331,7 +6339,7 @@ class MyImage(MyActivatableWidget):
 		true_count: int = 0
 		char_count: int = 0
 		line_count: int = 0
-		root: Terminal.Terminal = self.topmost_parent()
+		root: Terminal.Terminal.Terminal = self.topmost_parent()
 		root.__touched_cols_rows__[0] = min(ix, root.__touched_cols_rows__[0])
 		root.__touched_cols_rows__[2] = min(iy, root.__touched_cols_rows__[2])
 
@@ -7588,7 +7596,7 @@ class MySubTerminal(MyActivatableWidget):
 			return self.send('default_fg')
 
 	### Magic methods
-	def __init__(self, parent: Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, name: str | Terminal.Struct.AnsiStr | Iterable.String = '', *, z_index: int = 0, transparent: bool = False,
+	def __init__(self, parent: Terminal.Terminal.Terminal | MySubTerminal, x: int, y: int, width: int, height: int, name: str | Terminal.Struct.AnsiStr | Iterable.String = '', *, z_index: int = 0, transparent: bool = False,
 				 border: typing.Optional[Terminal.Struct.BorderInfo] = ..., highlight_border: typing.Optional[Terminal.Struct.BorderInfo] = ..., active_border: typing.Optional[Terminal.Struct.BorderInfo] = ...,
 				 callback: typing.Optional[typing.Callable[[MyWidget, str, ...], None]] = ...,
 				 on_focus: typing.Optional[typing.Callable[[MyWidget], None]] = ..., off_focus: typing.Optional[typing.Callable[[MyWidget], None]] = ...,
@@ -7756,7 +7764,7 @@ class MySubTerminal(MyActivatableWidget):
 			self.__terminal__.putstr(f'[ {self.__title__} ]', self.__position__[0] + title_offset, self.__position__[1])
 
 		# Update mouse
-		root: Terminal.Terminal = self.topmost_parent()
+		root: Terminal.Terminal.Terminal = self.topmost_parent()
 		_id, x, y, z, bstate = root.mouse
 		scroll_x, scroll_y = self.__scroll__
 		gx, gy = self.global_pos()
@@ -7881,7 +7889,7 @@ class MySubTerminal(MyActivatableWidget):
 			return
 
 		msg = msg if isinstance(msg, Terminal.Struct.AnsiStr) else Terminal.Struct.AnsiStr(msg)
-		root: Terminal.Terminal = self.topmost_parent()
+		root: Terminal.Terminal.Terminal = self.topmost_parent()
 		my, mx = self.__stdscr__.getmaxyx()
 		cx, cy = self.__move__()
 		sx, sy = self.__total_scroll__()

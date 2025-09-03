@@ -1578,7 +1578,7 @@ class GridPlotDisplay:
 		:raises AssertionError: If the plot is not an instance of 'Plottable'
 		"""
 
-		assert hasattr(coordinate, '__iter__') and len(coordinate := tuple(coordinate)) == 2 and all(isinstance(x, int) and int(x) > 0 for x in coordinate), 'Coordinate must be an iterable containing exactly 2 integers >= 0'
+		assert hasattr(coordinate, '__iter__') and len(coordinate := tuple(coordinate)) == 2 and all(isinstance(x, int) and int(x) >= 0 for x in coordinate), 'Coordinate must be an iterable containing exactly 2 integers >= 0'
 		assert isinstance(plot, Plottable), 'Not a plottable plot'
 		row: int = int(coordinate[0])
 		col: int = int(coordinate[1])

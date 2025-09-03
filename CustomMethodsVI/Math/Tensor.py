@@ -293,13 +293,21 @@ class Tensor(typing.SupportsRound['Tensor'], typing.SupportsAbs['Tensor'], colle
 				return Tensor(self[i] for i in range(start, stop, step))
 		elif not isinstance(position, tuple):
 			raise TypeError(f'Matrix position must be a tuple, slice, or integer, not \'{type(position).__name__}\'')
+		elif len(position) > len(self.__dimensions__):
+			raise ValueError(f'Cannot index dimension \'{len(position)}\' for a tensor of rank \'{len(self.__dimensions__)}\'')
 
-		source: Tensor | Vector.Vector | typing.Optional[float] = self
+		def lister(source: list, posdex: int) -> None:
+			pos: int | slice = position[posdex]
 
-		for pos in position:
-			source = source[pos]
+			for i in range(len(source)):
+				source[i] = source[i][pos]
 
-		return source
+				if posdex + 1 < len(position):
+					lister(source[i], posdex + 1)
+
+		result: list = self.to_nested()[position[0]]
+		lister(result, 1)
+		return Tensor(result)
 
 	def __add__(self, other: float | int | Tensor) -> Tensor:
 		"""

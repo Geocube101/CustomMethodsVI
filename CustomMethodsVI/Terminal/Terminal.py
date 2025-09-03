@@ -975,7 +975,7 @@ class Terminal:
 			return self.__update_type__
 		else:
 			Misc.raise_ifn(isinstance(update_type, int), Exceptions.InvalidArgumentException(Terminal.update_type, 'update_type', type(update_type), (int,)))
-			Misc.raise_ifn(0 <= (update_type := int(update_type)) <= 2, ValueError(f'Invalid update type: \'{update_type}\''))
+			Misc.raise_ifn(0b00 <= (update_type := int(update_type)) <= 0b11, ValueError(f'Invalid update type: \'{update_type}\''))
 			self.__update_type__ = int(update_type)
 
 	def scroll_speed(self, scroll: typing.Optional[int] = ...) -> typing.Optional[int]:

@@ -1,8 +1,8 @@
-from Chemistry.Atom import *
-from Chemistry.Compound import *
-from Chemistry.PeriodicTable import PTable
+from CustomMethodsVI.Chemistry.Elements import *
+from CustomMethodsVI.Chemistry.Compound import *
+from CustomMethodsVI.Chemistry.Equation import *
 
 if __name__ == '__main__':
-	PTable.unpack_into(globals())
-	water: Compound = 2*H + O
-	print(water.calc_mass_to_moles())
+	water: Compound = 2*H+O
+	eq: Equation = Equation((EquationCompound(water, 'l', 2), Heat), (EquationCompound(2 * water, 'g'),), reversible=True)
+	print(eq, eq.is_balanced(), sep='\n')

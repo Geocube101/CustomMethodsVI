@@ -469,8 +469,8 @@ class Color:
 		"""
 
 		assert isinstance(r, int) and 0 <= (r := int(r)) < 256, 'Red out of range'
-		assert isinstance(g, int) and 0 <= (r := int(g)) < 256, 'Green out of range'
-		assert isinstance(b, int) and 0 <= (r := int(b)) < 256, 'Blue out of range'
+		assert isinstance(g, int) and 0 <= (g := int(g)) < 256, 'Green out of range'
+		assert isinstance(b, int) and 0 <= (b := int(b)) < 256, 'Blue out of range'
 		return cls((r << 16) | (g << 8) | b)
 
 	@classmethod
