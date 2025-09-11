@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "CustomMethodsVI"
-version = "1.0.0"
+version = "1.0.2"
 dependencies = [
     "requests",
     "windows-curses; os_name == 'nt'",
@@ -29,7 +29,8 @@ dependencies = [
     "python-socketio",
     "scipy",
     "screeninfo",
-    "typeguard"
+    "typeguard",
+    "bs4"
 ]
 requires-python = ">=3.12"
 authors = [

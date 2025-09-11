@@ -2,6 +2,7 @@ import math
 import typing
 
 from ... import Iterable
+from ... import Math
 from ... import Misc
 from ...Decorators import Overload
 
@@ -125,3 +126,7 @@ def standard_deviation_pn(p: float, n: float) -> float:
 
 	Misc.raise_ifn(0 <= p <= 1, ValueError('P must be a 0-1 clamped value'))
 	return math.sqrt((p * (1 - p)) / n)
+
+
+def poisson(lambda_: float, t: float, k: float) -> float:
+	return ((lambda_ * t) ** k / Math.Functions.factorial(k)) * math.e ** (-lambda_ * t)

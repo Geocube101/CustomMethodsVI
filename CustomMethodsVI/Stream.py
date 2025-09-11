@@ -113,7 +113,7 @@ class Stream[T](io.BufferedIOBase):
 	def __writer_stack__(self, __object: typing.Any) -> list[T]:
 		"""
 		INTERNAL METHOD
-		Executes the reader callback stack on read data
+		Executes the writer callback stack on written data
 		:param __object: The input object to transform
 		:return: The resulting object
 		"""
@@ -693,7 +693,7 @@ class ListStream[T](Stream[T]):
 
 		raise StreamFullError('Stream is full')
 
-	def writefrom(self, __buffer: typing.Iterable[T] | typing.IO | io.BufferedIOBase, __size: typing.Optional[int] = ..., *, ignore_invalid = False) -> ListStream:
+	def writefrom(self, __buffer: typing.Iterable[T] | typing.IO | io.BufferedIOBase, __size: typing.Optional[int] = ..., *, ignore_invalid=False) -> ListStream[T]:
 		"""
 		Reads all contents from the specified buffer into this stream
 		:param __buffer: The buffer to read from
@@ -884,12 +884,169 @@ class ByteStream(TypedStream[bytes | bytearray], io.BytesIO):
 		self.__buffer_writer__.append(ByteStream.__buffer_writer_cb__)
 
 	def read(self, __size: typing.Optional[int] = ...) -> bytes:
+		"""
+		Reads data from the internal queue
+		:param __size: If specified, reads this many items, otherwise reads all data
+		:return: The read data as a single bytes object
+		:raises StreamError: If this stream is closed or not readable
+		"""
+
 		data: int | tuple[int, ...] = super().read(__size)
 		return data.to_bytes(1) if isinstance(data, int) else bytes(data)
 
 	def peek(self, __size: typing.Optional[int] = ...) -> bytes:
+		"""
+		Reads data from the internal queue without removing it
+		:param __size: If specified, reads this many items, otherwise reads all data
+		:return: The read data as a single bytes object
+		:raises StreamError: If this stream is closed or not readable
+		"""
+
 		data: int | tuple[int, ...] = super().peek(__size)
 		return data.to_bytes(1) if isinstance(data, int) else bytes(data)
+
+
+class BitStream(TypedStream[bytes | bytearray | str | int | bool], io.BytesIO):
+	"""
+	Stream designed for storing individual bits
+	"""
+
+	@staticmethod
+	def __buffer_writer_cb__(__object: bytes | bytearray | int | str | bool) -> typing.Iterable[bool]:
+		"""
+		INTERNAL METHOD
+		Converts data to write into bits
+		:param __object: The object being written
+		:return: The resulting bits
+		"""
+
+		if isinstance(__object, bool):
+			return (bool(__object),)
+		elif isinstance(__object, int):
+			bits: list[bool] = []
+
+			for _ in range((__object := int(__object)).bit_length()):
+				bits.append(bool(__object & 0b1))
+				__object >>= 1
+
+			return reversed(bits)
+		elif isinstance(__object, str):
+			bytes_: list[bool] = []
+
+			for byte in str(__object).encode():
+				bits: list[bool] = []
+
+				for _ in range(8):
+					bits.append(bool(byte & 0b1))
+					byte >>= 1
+
+				bytes_.extend(reversed(bits))
+
+			return bytes_
+		elif isinstance(__object, (bytes, bytearray)):
+			bytes_: list[bool] = []
+
+			for byte in bytes(__object):
+				bits: list[bool] = []
+
+				for _ in range(8):
+					bits.append(bool(byte & 0b1))
+					byte >>= 1
+
+				bytes_.extend(reversed(bits))
+
+			return iter(bytes_)
+		else:
+			raise TypeError()
+
+	def __init__(self, max_length: int = -1, fifo: bool = True, pack: bool = True):
+		"""
+		Stream designed for storing individual bits
+		- Constructor -
+		:param max_length: The maximum length (in number of items) of this stream
+		:param fifo: Whether this stream is FIFO or LIFO
+		:param pack: Whether to read bits packed into bytes or read individual bits
+		"""
+
+		super().__init__((bool, int, bytes, bytearray, str), max_length, fifo)
+		self.__buffer_writer__.append(BitStream.__buffer_writer_cb__)
+		self.__packed__: bool = bool(pack)
+
+	def write_padded(self, data: bytes | bytearray | int | str | bool, size: int, pad_bit: bool = False) -> BitStream:
+		"""
+		Writes an object to the internal queue
+		:param data: The bit or bytes to write
+		:param size: The number of leading bits to pad
+		:param pad_bit: The bit to pad with
+		:return: This instance
+		:raises StreamError: If this stream is closed or not writable
+		:raises StreamFullError: If this stream is full
+		:raises AssertionError: If the object is not an instance of a whitelisted type
+		:raises ValueError: If the number of bits in 'data' exceeds 'size'
+		"""
+
+		bits: list[bool] = list(self.__buffer_writer_cb__(data))
+
+		if len(bits) > size:
+			raise ValueError('Object bit length exceeded size')
+
+		while len(bits) < size:
+			bits.insert(0, bool(pad_bit))
+
+		self.writefrom(bits)
+		return self
+
+	def read(self, __size: typing.Optional[int] = ...) -> bytes | bool | tuple[bool, ...]:
+		"""
+		Reads data from the internal queue
+		:param __size: If specified, reads this many items, otherwise reads all data
+		:return: The read bits as a single bytes object
+		:raises StreamError: If this stream is closed or not readable
+		"""
+
+		data: bool | tuple[bool, ...] = super().read(__size)
+
+		if not self.__packed__:
+			return data
+
+		packed: list[int] = []
+
+		for i in range(0, len(data), 8):
+			byte: int = 0
+
+			for bit in data[i:i+8]:
+				byte <<= 1
+				byte |= int(bit) & 0b1
+
+			packed.append(byte)
+
+		return bytes(packed)
+
+	def peek(self, __size: typing.Optional[int] = ...) -> bytes | bool | tuple[bool, ...]:
+		"""
+		Reads data from the internal queue without removing it
+		:param __size: If specified, reads this many items, otherwise reads all data
+		:return: The read bits as a single bytes object
+		:raises StreamError: If this stream is closed or not readable
+		"""
+
+		data: bool | tuple[bool, ...] = super().peek(__size)
+
+		if not self.__packed__:
+			return data
+
+		packed: list[int] = []
+
+		for i in range(0, len(data), 8):
+			byte: int = 0
+
+			for bit in data[i:i + 8]:
+				byte <<= 1
+				byte |= int(bit) & 0b1
+
+			packed.append(byte)
+
+		return bytes(packed)
 
 
 class StringStream(OrderedStream[str]):
@@ -912,8 +1069,8 @@ class StringStream(OrderedStream[str]):
 	def read(self, __size: typing.Optional[int] = ...) -> str:
 		"""
 		Reads data from the internal queue
-		:param __size: (int?) If specified, reads this many items, otherwise reads all data
-		:return: (str) The stored data
+		:param __size: If specified, reads this many items, otherwise reads all data
+		:return: The read data as a single string
 		:raises StreamError: If this stream is closed or not readable
 		"""
 
@@ -922,8 +1079,8 @@ class StringStream(OrderedStream[str]):
 	def peek(self, __size: typing.Optional[int] = ...) -> str:
 		"""
 		Reads data from the internal queue without removing it
-		:param __size: (int?) If specified, reads this many items, otherwise reads all data
-		:return: (str) The stored data
+		:param __size: If specified, reads this many items, otherwise reads all data
+		:return: The read data as a single string
 		:raises StreamError: If this stream is closed or not readable
 		"""
 

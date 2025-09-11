@@ -93,6 +93,13 @@ class EventHandler:
 
 		return callback in self.__callbacks__
 
+	def clear(self) -> None:
+		"""
+		Clears all registered callbacks from this handler
+		"""
+
+		self.__callbacks__.clear()
+
 	def invoke(self, *args, ignore_exceptions__: bool = False, raise_after__: bool = False, **kwargs) -> None:
 		"""
 		Invokes this event
@@ -197,6 +204,19 @@ class MultiEventHandler:
 		Misc.raise_ifn(all(isinstance(x, str) for x in event_ids), TypeError('One or more event IDs is not a string'))
 		self.__handlers__: dict[str, EventHandler] = {str(eid): EventHandler() for eid in event_ids}
 
+	def __contains__(self, eid_cb: str | typing.Callable) -> bool:
+		"""
+		:param eid_cb: The event ID or callback
+		:return: Whether an event ID or callback is held within this event handler
+		"""
+
+		if isinstance(eid_cb, str):
+			return str(eid_cb) in self.__handlers__
+		elif callable(eid_cb):
+			return any(eid_cb in event for event in self.__handlers__.values())
+		else:
+			return False
+
 	def __setitem__(self, eid: str, handler: EventHandler | typing.Iterable[typing.Callable] | typing.Callable) -> None:
 		"""
 		Overrides or adds a new event handler for the specified event ID
@@ -238,6 +258,16 @@ class MultiEventHandler:
 			raise KeyError('Specified event id does not exist')
 		else:
 			return self.__handlers__[eid]
+
+	def clear(self) -> None:
+		"""
+		Clears all registered callbacks from this handler
+		"""
+
+		for handler in self.__handlers__.values():
+			handler.clear()
+
+		self.__handlers__.clear()
 
 	def on(self, eid: str, callback: typing.Optional[typing.Callable] = ...) -> typing.Optional[typing.Callable]:
 		"""
@@ -334,3 +364,11 @@ class MultiEventHandler:
 			raise KeyError('Specified event id does not exist')
 		else:
 			self.__handlers__[eid].invoke_processed(*args, ignore_exceptions__=ignore_exceptions__, **kwargs)
+
+	@property
+	def event_ids(self) -> tuple[str, ...]:
+		"""
+		:return: All bound event IDs in this handler
+		"""
+
+		return tuple(self.__handlers__.keys())
