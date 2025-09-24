@@ -590,6 +590,13 @@ class ListStream[T](Stream[T]):
 
 		return len(self.__buffer__) == 0
 
+	def full(self) -> bool:
+		"""
+		:return: Whether the underlying buffer is full
+		"""
+
+		return len(self.__buffer__) == self.__max_len__
+
 	def readinto(self, __buffer: io.IOBase | typing.IO | bytearray | list[T] | set[T]) -> int:
 		"""
 		Reads all contents from this stream into the specified buffer
@@ -748,6 +755,14 @@ class ListStream[T](Stream[T]):
 
 		else:
 			raise TypeError('Source is neither a stream nor an iterable')
+
+	@property
+	def max_length(self) -> int:
+		"""
+		:return: This stream's max length or -1 if not bounded
+		"""
+
+		return self.__max_len__
 
 
 class OrderedStream[T](ListStream[T]):

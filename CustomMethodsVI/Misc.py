@@ -107,7 +107,7 @@ def convert_metric(value: float | int, unit: str, places: int = ...) -> str:
 	return f'{round(value, places)} {prefix}'
 
 
-def convert_scientific(value: float | int, places: int, e: str = " E "):
+def convert_scientific(value: float | int, places: int, e: str = " E ") -> str:
 	"""
 	Converts the value into its metric string
 	:param value: The value
@@ -126,6 +126,26 @@ def convert_scientific(value: float | int, places: int, e: str = " E "):
 	l10: int = math.floor(math.log10(abs(value)))
 	value = value / pow(10, l10)
 	return f'{round(value, places)}{e}{l10}'
+
+
+def convert_ddhhmmss(value: float | int) -> str:
+	"""
+	Converts this value into its temporal string
+	Resulting time follows the format DD:HH:MM:SS:mm
+	:param value: The value to convert
+	:return: The formatted time string
+	:raises InvalidArgumentException: If 'value' is not a float or integer
+	"""
+
+	raise_ifn(isinstance(value, (float, int)), Exceptions.InvalidArgumentException(convert_scientific, 'value', type(value), (float, int)))
+	upper: int = abs(int(value))
+	sign: str = '-' if value < 0 else '+'
+	milliseconds: int = round(abs(value - upper) * 1000)
+	seconds: int = round(upper % 60)
+	minutes: int = round(upper // 60)
+	hours: int = round(upper // 3600)
+	days: int = round(upper // 86400)
+	return f'{sign}{days:02}:{hours:02}:{minutes:02}:{seconds:02}:{milliseconds:04}'
 
 
 @Decorators.Overload

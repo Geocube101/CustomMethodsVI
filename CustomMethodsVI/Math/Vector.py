@@ -185,7 +185,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 			return Vector(None if a is None or b is None else (a + b) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is other else (x + float(other)) for x in self.__components__)
+			return Vector(None if x is None else (x + float(other)) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -201,7 +201,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 			return Vector(None if a is None or b is None else (a - b) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is other else (x - float(other)) for x in self.__components__)
+			return Vector(None if x is None else (x - float(other)) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -217,7 +217,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 			return Vector(None if a is None or b is None else (a * b) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is other else (x * float(other)) for x in self.__components__)
+			return Vector(None if x is None else (x * float(other)) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -233,7 +233,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 			return Vector(None if a is None or b is None else Math.Functions.safe_divide(a, b) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is other else Math.Functions.safe_divide(x, float(other)) for x in self.__components__)
+			return Vector(None if x is None else Math.Functions.safe_divide(x, float(other)) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -249,7 +249,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 			return Vector(None if a is None or b is None else Math.Functions.safe_floor_divide(a, b) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is other else Math.Functions.safe_floor_divide(x, float(other)) for x in self.__components__)
+			return Vector(None if x is None else Math.Functions.safe_floor_divide(x, float(other)) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -283,7 +283,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 			return Vector(None if a is None or b is None else Math.Functions.safe_modulo(a, b) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is other else Math.Functions.safe_modulo(x, float(other)) for x in self.__components__)
+			return Vector(None if x is None else Math.Functions.safe_modulo(x, float(other)) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -299,7 +299,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 			return Vector(None if a is None or b is None else pow(a, b, modulo) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is other else pow(x, float(other), modulo) for x in self.__components__)
+			return Vector(None if x is None else pow(x, float(other), modulo) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -315,7 +315,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 			return Vector(None if a is None or b is None else (b + a) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is other else (float(other) + x) for x in self.__components__)
+			return Vector(None if x is None else (float(other) + x) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -331,7 +331,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 			return Vector(None if a is None or b is None else (b - a) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is other else (float(other) - x) for x in self.__components__)
+			return Vector(None if x is None else (float(other) - x) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -347,7 +347,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 			return Vector(None if a is None or b is None else (b * a) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is other else (float(other) * x) for x in self.__components__)
+			return Vector(None if x is None else (float(other) * x) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -363,7 +363,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 			return Vector(None if a is None or b is None else Math.Functions.safe_divide(b, a) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is other else Math.Functions.safe_divide(float(other), x) for x in self.__components__)
+			return Vector(None if x is None else Math.Functions.safe_divide(float(other), x) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -379,7 +379,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 			return Vector(None if a is None or b is None else Math.Functions.safe_floor_divide(b, a) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is other else Math.Functions.safe_floor_divide(float(other), x) for x in self.__components__)
+			return Vector(None if x is None else Math.Functions.safe_floor_divide(float(other), x) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -413,7 +413,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 			return Vector(None if a is None or b is None else Math.Functions.safe_modulo(b, a) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is other else Math.Functions.safe_modulo(float(other), x) for x in self.__components__)
+			return Vector(None if x is None else Math.Functions.safe_modulo(float(other), x) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -429,7 +429,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 			return Vector(None if a is None or b is None else pow(b, a, modulo) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is other else pow(float(other), x, modulo) for x in self.__components__)
+			return Vector(None if x is None else pow(float(other), x, modulo) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -635,7 +635,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:raises ValueError: If vector dimensions are mismatched
 		"""
 
-		Misc.raise_ifn(isinstance(other, Vector), Exceptions.InvalidArgumentException(Vector.dot, 'other', type(other), (Vector,)))
+		Misc.raise_ifn(isinstance(other, Vector), Exceptions.InvalidArgumentException(Vector.distance, 'other', type(other), (Vector,)))
 		Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 		return float('nan') if None in self.__components__ or None in other.__components__ else (other - self).length()
 
@@ -649,7 +649,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:raises ValueError: If vector dimensions are mismatched
 		"""
 
-		Misc.raise_ifn(isinstance(other, Vector), Exceptions.InvalidArgumentException(Vector.dot, 'other', type(other), (Vector,)))
+		Misc.raise_ifn(isinstance(other, Vector), Exceptions.InvalidArgumentException(Vector.distance_squared, 'other', type(other), (Vector,)))
 		Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 		return float('nan') if None in self.__components__ or None in other.__components__ else (other - self).length_squared()
 
@@ -663,7 +663,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:raises ValueError: If vector dimensions are mismatched
 		"""
 
-		Misc.raise_ifn(isinstance(other, Vector), Exceptions.InvalidArgumentException(Vector.dot, 'other', type(other), (Vector,)))
+		Misc.raise_ifn(isinstance(other, Vector), Exceptions.InvalidArgumentException(Vector.angle, 'other', type(other), (Vector,)))
 		Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 		return float('nan') if None in self.__components__ or None in other.__components__ else math.acos(round(self.dot(other) / (self.length() * other.length()), 7))
 
@@ -711,16 +711,16 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:raises ValueError: If vector dimensions are mismatched
 		"""
 
-		Misc.raise_ifn(isinstance(other, Vector), Exceptions.InvalidArgumentException(Vector.dot, 'other', type(other), (Vector,)))
+		Misc.raise_ifn(isinstance(other, Vector), Exceptions.InvalidArgumentException(Vector.cross, 'other', type(other), (Vector,)))
 		assert self.dimension == other.dimension and self.dimension == 3, 'Vector not 3D'
 
 		a1, a2, a3 = self
 		b1, b2, b3 = other
 
-		c1: typing.Optional[float] = None if a2 is None or b3 is None else (a2 * b3)
-		c2: typing.Optional[float] = None if a1 is None or b3 is None else (a1 * b3)
-		c3: typing.Optional[float] = None if a1 is None or b2 is None else (a1 * b2)
-		return Vector(c1, c2, c3) * self.length() * other.length() * math.sin(self.angle(other))
+		c1: typing.Optional[float] = None if a2 is None or b3 is None else (a2 * b3 - a3 * b2)
+		c2: typing.Optional[float] = None if a1 is None or b3 is None else (a3 * b1 - a1 * b3)
+		c3: typing.Optional[float] = None if a1 is None or b2 is None else (a1 * b2 - a2 * b1)
+		return Vector(c1, c2, c3)
 
 	def components(self) -> tuple[typing.Optional[float], ...]:
 		"""
