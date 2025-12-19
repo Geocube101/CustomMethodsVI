@@ -43,6 +43,13 @@ class Stream[T](io.BufferedIOBase):
 		self.__buffer_writer__: list[typing.Callable] = []
 		self.__buffer_reader__: list[typing.Callable] = []
 
+	def __len__(self) -> int:
+		"""
+		:return: The number of items remaining in this stream
+		"""
+
+		return 0
+
 	def __enter__(self) -> Stream:
 		return self
 
@@ -256,7 +263,7 @@ class Stream[T](io.BufferedIOBase):
 		if not self.__state__:
 			raise StreamError('Stream is closed')
 
-		if self.readable():
+		if self.readable() and len(self) > 0:
 			for data in self.read(...):
 				for pipe in self.__pipes__:
 					if pipe.closed and not ignore_invalid:
@@ -550,6 +557,14 @@ class FileStream(Stream[str | bytes]):
 		self.__stream__.flush()
 		super().flush(ignore_invalid)
 		return self
+
+	@property
+	def filepath(self) -> str:
+		"""
+		:return: The filepath this stream points to
+		"""
+
+		return self.__filepath__
 
 
 class ListStream[T](Stream[T]):
@@ -1705,7 +1720,7 @@ class LinqStream[T](typing.Reversible):
 
 		return total / count
 
-	def collect[C: type[Stream] | type[typing.Iterable] | Stream](self, collector: C = tuple, *args, **kwargs) -> Stream | typing.Iterable:
+	def collect[C: typing.Iterable](self, collector: Stream[T] | type[C] = tuple, *args, **kwargs) -> Stream[T] | C:
 		"""
 		*Evaluates the query*
 		Collects all elements in this query into the specified collection or Stream
@@ -1944,8 +1959,10 @@ class LinqStream[T](typing.Reversible):
 		"""
 
 		def _distinct(stream: LinqStream[T]) -> typing.Generator[T]:
+			matched: set[typing.Hashable] = set()
+
 			for elem in stream:
-				_key: typing.Hashable = hash(elem) if key is None or key is ... else key(elem)
+				_key: typing.Hashable = key(elem) if callable(key) else elem
 
 				if _key in matched:
 					continue
@@ -1954,7 +1971,6 @@ class LinqStream[T](typing.Reversible):
 				yield elem
 
 		Misc.raise_ifn(callable(key), Exceptions.InvalidArgumentException(LinqStream.distinct, 'key', type(key)))
-		matched: set[typing.Hashable] = set()
 		return LinqStream(_distinct(self))
 
 	def set_difference(self, iterable: typing.Iterable[T], key: typing.Optional[typing.Callable[[T], typing.Hashable]] = ...) -> LinqStream[T]:

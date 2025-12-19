@@ -101,10 +101,10 @@ def convert_metric(value: float | int, unit: str, places: int = ...) -> str:
 
 	prefixes_up: tuple[str, ...] = ('', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'R', 'Q')
 	prefixes_down: tuple[str, ...] = ('', 'm', 'μ', 'n', 'p', 'f', 'a', 'z', 'y', 'r', 'q')
-	l10: int = math.floor(math.log10(abs(value))) // 3
+	l10: int = 0 if value == 0 else math.floor(math.log10(abs(value))) // 3
 	prefix: str = prefixes_up[min(len(prefixes_up) - 1, l10)] if l10 > 0 else prefixes_down[min(len(prefixes_down) - 1, -l10)]
 	value = value / pow(10, l10 * 3)
-	return f'{round(value, places)} {prefix}'
+	return f'{round(value, places)} {prefix}{unit}'
 
 
 def convert_scientific(value: float | int, places: int, e: str = " E ") -> str:
@@ -123,7 +123,7 @@ def convert_scientific(value: float | int, places: int, e: str = " E ") -> str:
 	raise_ifn(isinstance(places, int) and (places := int(places)) >= 0, Exceptions.InvalidArgumentException(convert_scientific, 'places', type(places), (int,)))
 	raise_ifn(isinstance(e, str), Exceptions.InvalidArgumentException(convert_scientific, 'e', type(e), (str,)))
 
-	l10: int = math.floor(math.log10(abs(value)))
+	l10: int = 0 if value == 0 else math.floor(math.log10(abs(value)))
 	value = value / pow(10, l10)
 	return f'{round(value, places)}{e}{l10}'
 
@@ -142,8 +142,8 @@ def convert_ddhhmmss(value: float | int) -> str:
 	sign: str = '-' if value < 0 else '+'
 	milliseconds: int = round(abs(value - upper) * 1000)
 	seconds: int = round(upper % 60)
-	minutes: int = round(upper // 60)
-	hours: int = round(upper // 3600)
+	minutes: int = round(upper % 3600 // 60)
+	hours: int = round(upper % 86400 // 3600)
 	days: int = round(upper // 86400)
 	return f'{sign}{days:02}:{hours:02}:{minutes:02}:{seconds:02}:{milliseconds:04}'
 

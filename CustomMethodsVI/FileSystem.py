@@ -25,7 +25,8 @@ class File:
 		"""
 
 		Misc.raise_ifn(isinstance(path, (str, File)), Exceptions.InvalidArgumentException(File.__init__, 'path', type(path), (str, File)))
-		self.__fpath__: str = path.__fpath__ if isinstance(path, File) else str(path)
+		self.__fpath__: str = ''
+		self.__fpath__ = path.__fpath__ if isinstance(path, File) else str(path)
 		self.__streams__: list[Stream.FileStream] = []
 
 		if os.path.isdir(self.__fpath__):
@@ -35,15 +36,10 @@ class File:
 		return f'<{type(self).__name__.upper()}: "{self.__fpath__}">'
 
 	def __eq__(self, other: File) -> bool:
-		return self.__fpath__ == other.__fpath__ if isinstance(other, File) else NotImplemented
+		return isinstance(other, File) and self.abspath == other.abspath
 
 	def __hash__(self) -> int:
-		base: int = 0
-
-		for char in self.__fpath__:
-			base = base << 16 | ord(char)
-
-		return base
+		return hash(self.abspath)
 
 	def __str__(self) -> str:
 		return self.__fpath__
@@ -162,6 +158,14 @@ class File:
 			return os.stat(self.__fpath__).st_size
 		else:
 			return -1
+
+	@property
+	def abspath(self) -> str:
+		"""
+		:return: The absolute filepath
+		"""
+
+		return os.path.abspath(self.__fpath__)
 
 	@property
 	def filepath(self) -> str:
@@ -303,7 +307,7 @@ class Directory:
 		"""
 
 		Misc.raise_ifn(isinstance(path, (str, Directory)), Exceptions.InvalidArgumentException(Directory.__init__, 'path', type(path), (str, Directory)))
-		self.__dpath__: str = path.__dpath__ if isinstance(path, Directory) else str(path).rstrip(os.sep) + os.sep
+		self.__dpath__: str = path.__dpath__ if isinstance(path, Directory) else str(path).translate(str.maketrans({'/': os.sep, '\\': os.sep})).rstrip(os.sep) + os.sep
 
 		if os.path.isfile(self.__dpath__):
 			raise OSError(f'The object at "{self.__dpath__}" is a file')
@@ -312,15 +316,10 @@ class Directory:
 		return f'<{type(self).__name__.upper()}: "{self.__dpath__}">'
 
 	def __eq__(self, other: Directory) -> bool:
-		return self.__dpath__ == other.__dpath__ if isinstance(other, Directory) else NotImplemented
+		return isinstance(other, Directory) and self.abspath == other.abspath
 
 	def __hash__(self) -> int:
-		base: int = 0
-
-		for char in self.__dpath__:
-			base = base << 16 | ord(char)
-
-		return base
+		return hash(self.abspath)
 
 	def __str__(self) -> str:
 		return self.__dpath__
@@ -333,7 +332,9 @@ class Directory:
 		"""
 
 		Misc.raise_ifn(isinstance(new_name, str), Exceptions.InvalidArgumentException(Directory.rename, 'new_name', type(new_name), (str,)))
-		os.rename(self.__dpath__, self.up().directory(new_name).__dpath__)
+		new_path: str = self.up().directory(new_name).__dpath__
+		os.rename(self.__dpath__, new_path)
+		self.__dpath__ = new_path
 
 	def copy_to(self, dst: str | Directory) -> None:
 		"""
@@ -355,7 +356,7 @@ class Directory:
 		"""
 
 		Misc.raise_ifn(isinstance(rel_path, str), Exceptions.InvalidArgumentException(Directory.cd, 'rel_path', type(rel_path), (str,)))
-		return Directory(self.__dpath__ + rel_path.replace('\\', os.sep).replace('/', os.sep).lstrip(os.sep))
+		return Directory(self.__dpath__ + rel_path.translate(str.maketrans({'/': os.sep, '\\': os.sep})).lstrip(os.sep))
 
 	def up(self) -> Directory:
 		"""
@@ -425,7 +426,7 @@ class Directory:
 		"""
 
 		Misc.raise_ifn(isinstance(path, str), Exceptions.InvalidArgumentException(Directory.delete_file, 'path', type(path), (str,)))
-		fpath = self.__dpath__ + path.replace('\\', '/').lstrip('/')
+		fpath = self.__dpath__ + path.translate(str.maketrans({'/': os.sep, '\\': os.sep})).lstrip('/')
 
 		if os.path.isfile(fpath):
 			os.remove(fpath)
@@ -443,7 +444,7 @@ class Directory:
 		"""
 
 		Misc.raise_ifn(isinstance(path, str), Exceptions.InvalidArgumentException(Directory.file, 'path', type(path), (str,)))
-		return File(self.__dpath__ + path.replace('\\', os.sep).replace('/', os.sep).lstrip(os.sep))
+		return File(self.__dpath__ + path.translate(str.maketrans({'/': os.sep, '\\': os.sep})).lstrip(os.sep))
 
 	def directory(self, path: str) -> Directory:
 		"""
@@ -455,7 +456,7 @@ class Directory:
 		"""
 
 		Misc.raise_ifn(isinstance(path, str), Exceptions.InvalidArgumentException(Directory.directory, 'path', type(path), (str,)))
-		return Directory(self.__dpath__ + path.replace('\\', os.sep).replace('/', os.sep).lstrip(os.sep))
+		return Directory(self.__dpath__ + path.translate(str.maketrans({'/': os.sep, '\\': os.sep})).lstrip(os.sep))
 
 	@property
 	def dirpath(self) -> str:
@@ -488,6 +489,14 @@ class Directory:
 		"""
 
 		return self.__dpath__.split(os.sep)[-2]
+
+	@property
+	def parent(self) -> Directory:
+		"""
+		:return: This directory's parent directory
+		"""
+
+		return Directory(self.__dpath__.rsplit(os.sep, 2)[0])
 
 	@property
 	def contents(self) -> dict[str, tuple[File | Directory, ...]]:

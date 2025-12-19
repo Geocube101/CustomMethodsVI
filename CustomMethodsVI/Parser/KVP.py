@@ -277,7 +277,7 @@ class KVP:
 				except ValueError:
 					raise KVPDecodeError(f'Failed to format value \'{value}\' as double - LINE.{line_number + 1} {line}')
 			elif formatter == '&X':
-				return  KVP.__FormatMarker__(base64.b64decode(value.encode()), 'X')
+				return KVP.__FormatMarker__(base64.b64decode(value.encode()), 'X')
 			elif formatter == '&S':
 				return KVP.__FormatMarker__(value, 'S')
 			elif formatter == '&':
@@ -324,6 +324,8 @@ class KVP:
 						elif char == ';' and not isstring and last_char != '%':
 							values.append(_decode_value(line_number, line, ''.join(token)))
 							token.clear()
+						elif char == ';' and not isstring and last_char == '%':
+							token[-1] = char
 						else:
 							token.append(char)
 

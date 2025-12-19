@@ -16,7 +16,3 @@ class NormalDistribution:
 
 	def zscore(self, value: float) -> float:
 		return (value - self.__mean__) / self.__stddev__
-
-	def confidence_intervals(self, percentage_decimal: float) -> tuple[float, float]:
-		offset: float = self.zscore(self.__mean__) * sigma
-		return p_hat - offset, p_hat + offset

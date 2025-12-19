@@ -1,4 +1,11 @@
-from CustomMethodsVI.Network.Functions import *
+import PIL.Image
+
+from CustomMethodsVI.Code import PixelCode
+from CustomMethodsVI.Stream import BitStream
+from CustomMethodsVI.Graph import *
+from PIL import Image
+from CustomMethodsVI.Stream import LinqStream
+from CustomMethodsVI.Iterable import *
 
 
 def steam():
@@ -22,42 +29,27 @@ def steam():
 	print(result)
 
 
-def is_prime(x: int) -> bool:
-	if x < 2:
-		return False
+def code():
+	# pc = PixelCode(1)
+	# code = pc.encode(b'Hello World')
+	# print(pc.decode(code))
+	ug = UnweightedGraph({
+		'A': ('B', 'C', 'D'),
+		'B': ('A',)
+	})
+	#print(ug.nodes, ug.has_bfs_connection('A', 'B'))
 
-	sqrt: int = int(x ** 0.5)
-
-	for i in range(2, sqrt + 1):
-		if x % i == 0:
-			return False
-
-	return True
-
-
-def factors(x: int) -> tuple[tuple[int, int], ...]:
-	facs: list[tuple[int, int]] = []
-
-	for i in range((x // 2) + 1):
-		facs.append((i, x - i))
-
-	return tuple(facs)
-
-
-def prime_factors(x: int) -> tuple[tuple[int, int], ...]:
-	return tuple((i, j) for i, j in factors(x) if is_prime(i) and is_prime(j))
+	a: list[int] = [1, 2, 3, 4, 5]
+	b: set[int] = LinqStream(a).filter(lambda d: d >= 3).collect(set)
+	print(b)
 
 
 def main():
-	print(baudrate_noise(1e15, 48, 0))
-	return
-
-	maxint: int = 0xFFF
-
-	for i in range(2, maxint, 2):
-		primes: tuple[tuple[int, int], ...] = prime_factors(i)
-		j: int = len(primes)
-		print(f'{str(i).zfill(4)}: {str(j).zfill(4)}')
+	src: String = String('World')
+	dst: String = String()
+	print(src, dst)
+	res = src >> dst
+	print(src, dst, res is dst)
 
 
 if __name__ == '__main__':

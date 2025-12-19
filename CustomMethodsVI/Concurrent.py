@@ -30,6 +30,12 @@ class Promise[T]:
 		self.__response__: tuple[bool, typing.Any] | None = None
 		self.__callbacks__: list[typing.Callable] = []
 
+	def __await__(self):
+		while not self.fulfilled():
+			yield None
+
+		return self.response(True)
+
 	def fulfilled(self) -> bool:
 		"""
 		:return: Whether this promise is fulfilled
@@ -79,17 +85,27 @@ class Promise[T]:
 					sys.stderr.write(f'Error-{type(e).__name__} during Promise callback[{i}]:\n\t...\n{"".join(traceback.format_exception(e))}')
 					sys.stderr.flush()
 
-	def wait(self, throw_err: bool = True) -> T | BaseException:
+	def wait(self, throw_err: bool = True, timeout: typing.Optional[float] = ...) -> T | BaseException:
 		"""
 		Blocks current thread until this promise is fulfilled
 		Will raise an error if producer resolved with "throw"
-		:return: The response value
+		:param throw_err: If true, will throw error if promise erred
+		:param timeout: The time in seconds to wait before throwing a timeout error if 'throw_err' else '...'
+		:return: The response value or '...' if not fulfilled in time and 'throw_err' is False
+		:raises TimeoutError: If timeout is specified, 'throw_err' is True, and promise not fulfilled before timeout
 		"""
 
-		while self.__response__ is None:
+		Misc.raise_ifn(timeout is ... or timeout is None or isinstance(timeout, (float, int)), Exceptions.InvalidArgumentException(Promise.wait, 'timeout', type(timeout), (float, int)))
+		timeout: typing.Optional[float] = None if timeout is None or timeout is ... else float(timeout)
+		t1: float = time.perf_counter()
+
+		while not self.fulfilled() and (timeout is None or time.perf_counter() - t1 < timeout):
 			time.sleep(1e-6)
 
-		return self.response(throw_err)
+		if not (done := self.fulfilled()) and throw_err:
+			raise TimeoutError('Promise timed out')
+
+		return self.response(throw_err) if done else ...
 
 	def then(self, callback: typing.Callable[[Promise[T]], None]) -> None:
 		"""
@@ -135,7 +151,7 @@ class Promise[T]:
 			return None
 
 
-class ConcurrentPromise[T](Promise[T]):
+class ConcurrentPromise[T](Promise):
 	"""
 	Class handling single IPC event from ConcurrentFunction
 	"""
@@ -150,6 +166,10 @@ class ConcurrentPromise[T](Promise[T]):
 		self.__pipes__: tuple[multiprocessing.connection.Connection, ...] = multiprocessing.Pipe(False)
 		self.__src__: int = os.getpid()
 		self.__poll_thread__: typing.Optional[threading.Thread] = None
+
+	def __await__(self) -> typing.Iterator[None]:
+		while not self.fulfilled():
+			yield
 
 	def __poll_loop(self) -> None:
 		"""
@@ -205,19 +225,29 @@ class ConcurrentPromise[T](Promise[T]):
 			self.__pipes__[1].send((True, obj))
 			self.__pipes__[1].close()
 
-	def wait(self, throw_err: bool = True) -> T | BaseException:
+	def wait(self, throw_err: bool = True, timeout: typing.Optional[float] = ...) -> T | BaseException:
 		"""
 		Blocks current thread until this promise is fulfilled
 		Will raise an error if producer resolved with "throw"
-		:return: The response value
+		:param throw_err: If true, will throw error if promise erred
+		:param timeout: The time in seconds to wait before throwing a timeout error if 'throw_err' else '...'
+		:return: The response value or '...' if not fulfilled in time and 'throw_err' is False
 		:raises IOError: If polled from producer end
+		:raises TimeoutError: If timeout is specified, 'throw_err' is True, and promise not fulfilled before timeout
 		"""
 
+		Misc.raise_ifn(timeout is ... or timeout is None or isinstance(timeout, (float, int)), Exceptions.InvalidArgumentException(Promise.wait, 'timeout', type(timeout), (float, int)))
+		timeout: typing.Optional[float] = None if timeout is None or timeout is ... else float(timeout)
+		t1: float = time.perf_counter()
+
 		if os.getpid() == self.__src__:
-			while not self.__pipes__[0].poll():
+			while not self.fulfilled() and (timeout is None or time.perf_counter() - t1 < timeout):
 				time.sleep(1e-6)
 
-			return self.response(throw_err)
+			if not (done := self.fulfilled()) and throw_err:
+				raise TimeoutError('Promise timed out')
+
+			return self.response(throw_err) if done else ...
 		else:
 			raise IOError('Cannot poll reply as producer')
 
@@ -286,7 +316,7 @@ class ConcurrentPromise[T](Promise[T]):
 			return None
 
 
-class ThreadedPromise[T](Promise[T]):
+class ThreadedPromise[T](Promise):
 	"""
 	Class handling single ITC event from ThreadedFunction
 	"""
@@ -352,19 +382,29 @@ class ThreadedPromise[T](Promise[T]):
 					sys.stderr.write(f'Error-{type(e).__name__} during Promise callback[{i}]:\n\t...\n{"".join(traceback.format_exception(e))}')
 					sys.stderr.flush()
 
-	def wait(self, throw_err: bool = True) -> T | BaseException:
+	def wait(self, throw_err: bool = True, timeout: typing.Optional[float] = ...) -> T | BaseException:
 		"""
 		Blocks current thread until this promise is fulfilled
 		Will raise an error if producer resolved with "throw"
-		:return: The response value
+		:param throw_err: If true, will throw error if promise erred
+		:param timeout: The time in seconds to wait before throwing a timeout error if 'throw_err' else '...'
+		:return: The response value or '...' if not fulfilled in time and 'throw_err' is False
 		:raises IOError: If polled from producer end
+		:raises TimeoutError: If timeout is specified, 'throw_err' is True, and promise not fulfilled before timeout
 		"""
 
+		Misc.raise_ifn(timeout is ... or timeout is None or isinstance(timeout, (float, int)), Exceptions.InvalidArgumentException(Promise.wait, 'timeout', type(timeout), (float, int)))
+		timeout: typing.Optional[float] = None if timeout is None or timeout is ... else float(timeout)
+		t1: float = time.perf_counter()
+
 		if threading.current_thread().native_id == self.__src__ or self.fulfilled():
-			while not self.fulfilled():
+			while not self.fulfilled() and (timeout is None or time.perf_counter() - t1 < timeout):
 				time.sleep(1e-6)
 
-			return self.response(throw_err)
+			if not (done := self.fulfilled()) and throw_err:
+				raise TimeoutError('Promise timed out')
+
+			return self.response(throw_err) if done else ...
 		else:
 			raise IOError('Cannot poll reply as producer')
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import datetime
 import flask
 import flask_socketio
 import json
@@ -15,8 +14,7 @@ import time
 import typing
 import uuid
 
-from . import Event
-from . import Exceptions
+from . import Concurrent
 from . import Misc
 
 __PRIVATE_IDS__ = ('connect', 'disconnect', 'error', 'join', 'leave')
@@ -232,11 +230,11 @@ class FlaskSocketioNamespace:
 		self.__server__: FlaskSocketioServer = server
 		self.__ready__: bool = False
 		self.__namespace__: str = str(namespace)
-		self.__events__: dict[str, typing.Callable] = {}
+		self.__events__: dict[str, list[typing.Callable]] = {}
 		self.__sockets__: dict[str, FlaskSocketioSocket] = {}
 		self.__socket_events__: dict[str, dict[str, FlaskSocketioSocket]] = {}
 
-	def __exec__(self, eid: str, *args, **kwargs) -> None:
+	def __exec__(self, eid: str, *args, **kwargs) -> typing.Optional[tuple[typing.Any, ...]]:
 		"""
 		INTERNAL METHOD
 		Executes all callbacks for a given event id
@@ -246,7 +244,19 @@ class FlaskSocketioNamespace:
 		"""
 
 		if eid in self.__events__:
-			self.__events__[eid](*args, **kwargs)
+			responses: list[typing.Any] = []
+
+			for callback in self.__events__[eid]:
+				response: typing.Any
+
+				if asyncio.iscoroutinefunction(callback):
+					response = asyncio.run(callback(*args, **kwargs))
+				else:
+					response = callback(*args, **kwargs)
+
+				responses.append(response)
+
+			return tuple(responses)
 
 	def __prepare_socket__(self, flask_socket: flask_socketio.SocketIO) -> None:
 		"""
@@ -264,11 +274,19 @@ class FlaskSocketioNamespace:
 
 		@flask_socket.on('disconnect', namespace=self.__namespace__)
 		def on_disconnect():
-			sid = flask.request.sid
-			if sid in self.__sockets__:
-				self.__sockets__[sid].__exec__('disconnect', self.__sockets__[sid].__is_disconnector__)
-				self.__sockets__[sid].__connected__ = False
+			if (sid := flask.request.sid) in self.__sockets__:
+				socket: FlaskSocketioSocket = self.__sockets__[sid]
+				socket.__exec__('disconnect', socket.__is_disconnector__)
+				socket.__connected__ = False
 				del self.__sockets__[sid]
+
+		@flask_socket.on('*', namespace=self.__namespace__)
+		def catchall(event: str, *data) -> None:
+			if (sid := flask.request.sid) in self.__sockets__ and event.startswith('roundtrip.'):
+				eid: str = event.split('.')[1]
+				socket: FlaskSocketioSocket = self.__sockets__[sid]
+				response: typing.Optional[tuple[typing.Any, ...]] = socket.__exec__(eid, *data)
+				socket.emit(event, *response)
 
 		self.__socket = flask_socket
 		self.__ready__ = True
@@ -317,6 +335,22 @@ class FlaskSocketioNamespace:
 
 		self.__socket.emit(eid, data, to=socket.uid, namespace=self.__namespace__)
 
+	def __bind_callback__(self, eid: str, callback: typing.Callable) -> None:
+		"""
+		INTERNAL METHOD
+		Binds a new callback for the specified event id
+		:param eid: The event id to bind to
+		:param callback: The callback to bind
+		:raises AssertionError: If 'eid' is not a string or 'callback' is not callable
+		"""
+
+		assert isinstance(eid, str) and callable(callback)
+
+		if eid not in self.__events__:
+			self.__events__[eid] = [callback]
+		else:
+			self.__events__[eid].append(callback)
+
 	def on(self, eid: str, func: typing.Callable = None) -> typing.Optional[typing.Callable]:
 		"""
 		Binds a callback to a socket event id
@@ -333,11 +367,11 @@ class FlaskSocketioNamespace:
 		if func is None:
 			def binder(sub_func: typing.Callable):
 				Misc.raise_ifn(callable(sub_func), Exceptions.InvalidArgumentException(FlaskSocketioNamespace.on, 'func', type(sub_func)))
-				self.__events__[eid] = sub_func
+				self.__bind_callback__(eid, sub_func)
 			return binder
 		else:
 			Misc.raise_ifn(callable(func), Exceptions.InvalidArgumentException(FlaskSocketioNamespace.on, 'func', type(func)))
-			self.__events__[eid] = func
+			self.__bind_callback__(eid, func)
 
 	def off(self, eid: str) -> None:
 		"""
@@ -438,12 +472,12 @@ class FlaskSocketioSocket:
 		self.__space__: FlaskSocketioNamespace = namespace
 		self.__is_disconnector__: bool = False
 		self.__uid__: str = uid
-		self.__events__: dict[str, typing.Callable] = {}
+		self.__events__: dict[str, list[typing.Callable]] = {}
 		self.__auth__ = auth
 		self.__connected__: bool = True
 		self.__request__: flask.Request = request
 		
-	def __exec__(self, eid: str, *args, **kwargs) -> None:
+	def __exec__(self, eid: str, *args, **kwargs) -> typing.Optional[tuple[typing.Any, ...]]:
 		"""
 		INTERNAL METHOD
 		Executes all callbacks for a given event id
@@ -453,24 +487,39 @@ class FlaskSocketioSocket:
 		"""
 
 		if eid in self.__events__:
-			self.__events__[eid](*args, **kwargs)
+			responses: list[typing.Any] = []
 
-	def __bind_event__(self, eid: str, func: typing.Callable) -> None:
+			for callback in self.__events__[eid]:
+				response: typing.Any
+
+				if asyncio.iscoroutinefunction(callback):
+					response = asyncio.run(callback(*args, **kwargs))
+				else:
+					response = callback(*args, **kwargs)
+
+				responses.append(response)
+
+			return tuple(responses)
+
+	def __bind_callback__(self, eid: str, callback: typing.Callable) -> None:
 		"""
-		INTERNAL EVENT
-		Binds a callback to an event
-		:param eid: The event id
-		:param func: The callback
-		:return:
+		INTERNAL METHOD
+		Binds a new callback for the specified event id
+		:param eid: The event id to bind to
+		:param callback: The callback to bind
+		:raises AssertionError: If 'eid' is not a string or 'callback' is not callable
 		"""
 
-		if callable(func):
-			self.__events__[eid] = func
+		assert isinstance(eid, str) and callable(callback)
+
+		if eid not in self.__events__:
+			self.__events__[eid] = [callback]
 
 			if eid not in __PRIVATE_IDS__:
 				self.__space__.__bind_socket_event__(self, eid)
+
 		else:
-			raise TypeError(f"Cannot bind non-callable object '{func}'")
+			self.__events__[eid].append(callback)
 
 	def on(self, eid: str, func: typing.Callable = None) -> None | typing.Callable:
 		"""
@@ -488,22 +537,33 @@ class FlaskSocketioSocket:
 		if func is None:
 			def binder(sub_func):
 				Misc.raise_ifn(callable(sub_func), Exceptions.InvalidArgumentException(FlaskSocketioSocket.on, 'func', type(sub_func)))
-				self.__bind_event__(eid, sub_func)
+				self.__bind_callback__(eid, sub_func)
 			return binder
 		else:
 			Misc.raise_ifn(callable(func), Exceptions.InvalidArgumentException(FlaskSocketioSocket.on, 'func', type(func)))
-			self.__bind_event__(eid, func)
+			self.__bind_callback__(eid, func)
 
-	def off(self, eid: str) -> None:
+	def off(self, eid: str, func: typing.Callable = None) -> None:
 		"""
-		Unbinds all listeners from an event
+		Unbinds a specific listener from an event or all listeners if not specified
 		:param eid: The event id to ignore
+		:param func: The callback to remove or None for all callbacks
 		:raises InvalidArgumentException: If eid is not a string
 		"""
 
-		Misc.raise_ifn(isinstance(eid, str), Exceptions.InvalidArgumentException(FlaskSocketioSocket.emit, 'eid', type(eid), (str,)))
+		Misc.raise_ifn(isinstance(eid, str), Exceptions.InvalidArgumentException(SocketioClient.emit, 'eid', type(eid), (str,)))
+		contained: bool = (eid := str(eid)) in self.__events__
 
-		if (eid := str(eid)) in self.__events__:
+		if contained and func is not None and func in self.__events__[eid]:
+			self.__events__[eid].remove(func)
+
+			if len(self.__events__[eid]) == 0:
+				del self.__events__[eid]
+
+				if eid not in __PRIVATE_IDS__:
+					self.__space__.__unbind_socket_event__(self, eid)
+
+		elif contained and func is None:
 			del self.__events__[eid]
 
 			if eid not in __PRIVATE_IDS__:
@@ -528,6 +588,26 @@ class FlaskSocketioSocket:
 		self.__is_disconnector__ = True
 		self.__connected__ = False
 		flask_socketio.disconnect(self.__uid__, self.__space__.__namespace__)
+
+	def emit_await_response[T](self, eid: str, *data) -> Concurrent.Promise[T]:
+		"""
+		Emits data to client and returns a promise holding the client's response
+		:param eid: The event id to emit on
+		:param data: The data to send
+		:raises InvalidArgumentException: If eid is not a string
+		:return: A promise holding the client's response. Response will be a tuple of all client event handler return values
+		"""
+
+		def __callback__(*response) -> None:
+			self.off(eid, __callback__)
+			promise.resolve(response)
+
+		Misc.raise_ifn(isinstance(eid, str), Exceptions.InvalidArgumentException(SocketioClient.emit_await_response, 'eid', type(eid), (str,)))
+		eid = f'roundtrip.{eid}.{uuid.uuid4()}'
+		promise: Concurrent.Promise[T] = Concurrent.Promise()
+		self.on(eid, __callback__)
+		self.emit(eid, *data)
+		return promise
 
 	@property
 	def connected(self) -> bool:
@@ -644,9 +724,16 @@ class SocketioClient:
 		def error():
 			self.__exec__('error')
 
+		@self.__socket__.on('*', namespace=self.__space__)
+		def catchall(event: str, *data) -> None:
+			if event.startswith('roundtrip.'):
+				eid: str = event.split('.')[1]
+				response: typing.Optional[tuple[typing.Any, ...]] = self.__exec__(eid, *data)
+				self.__socket__.emit(event, *response, namespace=self.__space__)
+
 		self.__socket__.connect(self.__host__, namespaces=self.__space__)
 
-	def __exec__(self, eid: str, *args, **kwargs) -> None:
+	def __exec__(self, eid: str, *args, **kwargs) -> typing.Optional[tuple[typing.Any, ...]]:
 		"""
 		INTERNAL METHOD
 		Executes all callbacks for a given event id
@@ -656,11 +743,40 @@ class SocketioClient:
 		"""
 
 		if eid in self.__events__:
+			responses: list[typing.Any] = []
+
 			for callback in self.__events__[eid]:
-				if asyncio.iscoroutinefunction(self.__events__[eid]):
-					asyncio.run(callback(*args, **kwargs))
+				response: typing.Any
+
+				if asyncio.iscoroutinefunction(callback):
+					response = asyncio.run(callback(*args, **kwargs))
 				else:
-					callback(*args, **kwargs)
+					response = callback(*args, **kwargs)
+
+				responses.append(response)
+
+			return tuple(responses)
+
+	def __bind_callback__(self, eid: str, callback: typing.Callable) -> None:
+		"""
+		INTERNAL METHOD
+		Binds a new callback for the specified event id
+		:param eid: The event id to bind to
+		:param callback: The callback to bind
+		:raises AssertionError: If 'eid' is not a string or 'callback' is not callable
+		"""
+
+		assert isinstance(eid, str) and callable(callback)
+
+		if eid not in self.__events__:
+			self.__events__[eid] = [callback]
+
+			@self.__socket__.on(eid, namespace=self.__space__)
+			def handler(*args, **kwargs):
+				self.__exec__(eid, *args, **kwargs)
+
+		else:
+			self.__events__[eid].append(callback)
 
 	def on(self, eid: str, func: typing.Callable = None) -> None | typing.Callable:
 		"""
@@ -678,39 +794,34 @@ class SocketioClient:
 		if func is None:
 			def bind_event(callback: typing.Callable):
 				if callable(callback):
-					if eid not in self.__events__:
-						self.__events__[eid] = [callback]
-
-						@self.__socket__.on(eid, namespace=self.__space__)
-						def handler(*args, **kwargs):
-							self.__exec__(eid, *args, **kwargs)
-					else:
-						self.__events__[eid].append(callback)
+					self.__bind_callback__(eid, callback)
 				else:
 					raise Exceptions.InvalidArgumentException(SocketioClient.on, 'func', type(callback))
 			return bind_event
 		elif callable(func):
-			if eid not in self.__events__:
-				self.__events__[eid] = [func]
-
-				@self.__socket__.on(eid, namespace=self.__space__)
-				def handler(*args, **kwargs):
-					self.__exec__(eid, *args, **kwargs)
-			else:
-				self.__events__[eid].append(func)
+			self.__bind_callback__(eid, func)
 		else:
 			raise Exceptions.InvalidArgumentException(SocketioClient.on, 'func', type(func))
 
-	def off(self, eid: str) -> None:
+	def off(self, eid: str, func: typing.Callable = None) -> None:
 		"""
-		Unbinds all listeners from an event
+		Unbinds a specific listener from an event or all listeners if not specified
 		:param eid: The event id to ignore
+		:param func: The callback to remove or None for all callbacks
 		:raises InvalidArgumentException: If eid is not a string
 		"""
 
 		Misc.raise_ifn(isinstance(eid, str), Exceptions.InvalidArgumentException(SocketioClient.emit, 'eid', type(eid), (str,)))
+		contained: bool = (eid := str(eid)) in self.__events__
 
-		if (eid := str(eid)) in self.__events__:
+		if contained and func is not None and func in self.__events__[eid]:
+			self.__events__[eid].remove(func)
+
+			if len(self.__events__[eid]) == 0:
+				del self.__socket__.handlers[self.__space__][eid]
+				del self.__events__[eid]
+
+		elif contained and func is None:
 			del self.__socket__.handlers[self.__space__][eid]
 			del self.__events__[eid]
 
@@ -751,6 +862,26 @@ class SocketioClient:
 
 		self.__is_disconnector__ = True
 		self.__socket__.disconnect()
+
+	def emit_await_response[T](self, eid: str, *data) -> Concurrent.Promise[T]:
+		"""
+		Emits data to server and returns a promise holding the server's response
+		:param eid: The event id to emit on
+		:param data: The data to send
+		:raises InvalidArgumentException: If eid is not a string
+		:return: A promise holding the server's response. Response will be a tuple of all server event handler return values
+		"""
+
+		def __callback__(*response) -> None:
+			self.off(eid, __callback__)
+			promise.resolve(response)
+
+		Misc.raise_ifn(isinstance(eid, str), Exceptions.InvalidArgumentException(SocketioClient.emit_await_response, 'eid', type(eid), (str,)))
+		eid = f'roundtrip.{eid}.{uuid.uuid4()}'
+		promise: Concurrent.Promise[T] = Concurrent.Promise()
+		self.on(eid, __callback__)
+		self.emit(eid, *data)
+		return promise
 
 	@property
 	def connected(self) -> bool:

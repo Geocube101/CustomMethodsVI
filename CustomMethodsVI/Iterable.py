@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import time
-import typing
 import collections.abc
+import re
 import sys
+import time
 import threading
+import typing
 import warnings
 
 from . import Exceptions
@@ -1196,7 +1197,7 @@ class ReverseSortedList[T](SortableIterable):
 		return ReverseSortedList(self)
 
 
-class String(Iterable[int]):
+class OldString(Iterable[int]):
 	"""
 	A class providing extended string functionality
 	"""
@@ -1548,6 +1549,87 @@ class String(Iterable[int]):
 		return String(self.__buffer__.copy())
 
 
+class String(str):
+	def __init__(self, string: typing.Optional[typing.Any] = None):
+		self.__chars__: list[str] = [] if string is ... or string is None else list(str(string))
+
+	def __contains__(self, substr: str | String) -> bool:
+		return isinstance(substr, (str, String)) and self.index(substr) >= 0
+
+	def __len__(self) -> int:
+		return len(self.__chars__)
+
+	def __str__(self) -> str:
+		return ''.join(self.__chars__)
+
+	def __add__(self, other: str | String) -> String:
+		if not isinstance(other, (str, String)):
+			return NotImplemented
+
+		clone: String = self.copy()
+		clone.__chars__.extend(other)
+		return clone
+
+	def __iadd__(self, other: str | String) -> String:
+		if not isinstance(other, (str, String)):
+			return NotImplemented
+
+		self.__chars__.extend(other)
+		return self
+
+	def __mul__(self, other: int) -> String:
+		return String(super().__mul__(other))
+
+	def __rmul__(self, other: int) -> String:
+		return String(super().__rmul__(other))
+
+	def __lshift__(self, other: str | String) -> String:
+		return self + other
+
+	def __rshift__(self, other: String) -> String:
+		if not isinstance(other, String):
+			return NotImplemented
+
+		other.__chars__.append(self.__chars__.pop())
+		return other
+
+	def is_integer2(self) -> bool:
+		return all(x == '0' or x == '1' for x in self.__chars__)
+
+	def is_integer8(self) -> bool:
+		chars: tuple[str, ...] = tuple(map(str, range(8)))
+		return all(x in chars for x in self.__chars__)
+
+	def is_integer10(self) -> bool:
+		return self.isnumeric()
+
+	def is_integer16(self) -> bool:
+		chars: tuple[str, ...] = tuple('abcdefABCDEF')
+		return all(x.isnumeric() or x in chars for x in self.__chars__)
+
+	def is_float(self) -> bool:
+		return re.fullmatch(r'\d+(\.\d*(e|E\d)?)?', self) is not None
+
+	def is_extended_float(self) -> bool:
+		return re.fullmatch(r'\d+(\.\d*(e|E\d*(\.\d*)?)?)?', self) is not None
+
+	def is_complex(self) -> bool:
+		return re.fullmatch(r'\(?\d*(\.\d*)?(e|E\d*)?(\+\d*(\.\d*)?(e|E\d*)?j)?\)?', self) is not None
+
+	def to_extended_float(self) -> float:
+		Misc.raise_ifn(self.is_extended_float(), ValueError(f'could not convert string to extended float: \'{self}\''))
+		sections: list[String] = self.multisplit('eE')
+		left: float = float(sections[0])
+		right: float = float(sections[1]) if len(sections) > 0 else 1
+		return left * 10 ** right
+
+	def copy(self) -> String:
+		return String(self)
+
+	def multisplit(self, sep: typing.Optional[typing.Iterable[str]] = ..., maxsplit: int = -1) -> list[String]:
+		return [String(s) for s in re.split('|'.join(re.escape(delimiter) for delimiter in sep), self, 0 if maxsplit <= 0 else maxsplit)]
+
+
 class FixedArray[T](SortableIterable):
 	"""
 	Class representing an array of a fixed size
@@ -1835,6 +1917,7 @@ def frange(start: float, stop: float = None, step: float = 1, precision: int = N
 	while a < _stop:
 		yield a
 		a = round(a + _step, precision)
+
 
 def minmax(arg: typing.Iterable, *args) -> tuple[typing.Any, typing.Any]:
 	"""
