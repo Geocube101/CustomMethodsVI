@@ -10,7 +10,6 @@ import warnings
 
 from . import Exceptions
 from . import Misc
-from .Decorators import Overload
 from . import Stream
 
 
@@ -132,11 +131,11 @@ class Iterable[T](collections.abc.Sequence, collections.abc.Sized, typing.Iterab
 		:raises TypeError: If indices are not integers, slices, or a collection of indices
 		"""
 
-		if type(key) is tuple:
+		if isinstance(key, tuple):
 			for item in key:
 				del self[item]
 
-		elif type(key) is slice:
+		elif isinstance(key, slice):
 			start: int = 0 if key.start is None else int(key.start)
 			stop: int = len(self) if key.stop is None else int(key.stop)
 			step: int = 1 if key.step is None else int(key.step)
@@ -144,7 +143,7 @@ class Iterable[T](collections.abc.Sequence, collections.abc.Sized, typing.Iterab
 			for i in range(start, stop, step):
 				self.__buffer__[i] = None
 
-		elif type(key) is int:
+		elif isinstance(key, int):
 			self.__buffer__[key] = None
 
 		else:
@@ -160,14 +159,14 @@ class Iterable[T](collections.abc.Sequence, collections.abc.Sized, typing.Iterab
 		:raises TypeError: If indices are not integers, slices, or a collection of indices
 		"""
 
-		if type(key) is int:
+		if isinstance(key, int):
 			self.__buffer__[key] = value
 
-		elif type(key) is tuple:
+		elif isinstance(key, tuple):
 			for k in key:
-				self.__buffer__[k] = value
+				self[k] = value
 
-		elif type(key) is slice:
+		elif isinstance(key, slice):
 			start: int = 0 if key.start is None else int(key.start)
 			stop: int = len(self) if key.stop is None else int(key.stop)
 			step: int = 1 if key.step is None else int(key.step)
@@ -186,10 +185,10 @@ class Iterable[T](collections.abc.Sequence, collections.abc.Sized, typing.Iterab
 		:raises TypeError: If indices are not integers, slices, or a collection of indices
 		"""
 
-		if type(item) is int:
+		if isinstance(item, int):
 			return self.__buffer__[item]
 
-		elif type(item) is tuple:
+		elif isinstance(item, tuple):
 			items: list = []
 
 			for key in item:
@@ -202,7 +201,7 @@ class Iterable[T](collections.abc.Sequence, collections.abc.Sized, typing.Iterab
 
 			return Iterable(items)
 
-		elif type(item) is slice:
+		elif isinstance(item, slice):
 			start: int = 0 if item.start is None else int(item.start)
 			stop: int = len(self) if item.stop is None else int(item.stop)
 			step: int = 1 if item.step is None else int(item.step)
@@ -284,6 +283,113 @@ class Iterable[T](collections.abc.Sequence, collections.abc.Sized, typing.Iterab
 		"""
 
 		return Iterable(self.__buffer__.copy())
+
+	def stream(self) -> Stream.LinqStream[T]:
+		"""
+		:return: A new LinqStream for queries on this iterable
+		"""
+
+		return Stream.LinqStream(self)
+
+
+class ListIterable[T](Iterable[T]):
+	"""
+	Iterable class allowing modifications
+	"""
+
+	def __add__(self, other: typing.Iterable[T]) -> ListIterable[T]:
+		return type(self)([*self, *other]) if isinstance(other, typing.Iterable) else NotImplemented
+
+	def __iadd__(self, other: typing.Iterable[T]) -> ListIterable[T]:
+		if not isinstance(other, typing.Iterable):
+			return NotImplemented
+
+		self.__buffer__.extend(other)
+		return self
+
+	def __radd__(self, other: typing.Iterable[T]) -> ListIterable[T]:
+		return type(self)([*other, *self]) if isinstance(other, typing.Iterable) else NotImplemented
+
+	def __mul__(self, other: int) -> ListIterable[T]:
+		return type(self)(self.__buffer__ * int(other)) if isinstance(other, int) else NotImplemented
+
+	def __imul__(self, other: int) -> ListIterable[T]:
+		self.__buffer__ *= int(other)
+		return self
+
+	def __rmul__(self, other: int) -> ListIterable[T]:
+		return type(self)(self.__buffer__ * int(other)) if isinstance(other, int) else NotImplemented
+
+	def remove(self, element: T, count: int = -1) -> int:
+		"""
+		Removes the specified element from this list
+		:param element: The element to remove
+		:param count: The number of occurrences to remove or all if less than 0
+		:return: The number of occurrences removed
+		"""
+
+		matches: int = 0
+
+		for i in range(len(self)):
+			if i < len(self) and self.__buffer__[i] == element:
+				del self.__buffer__[i]
+				matches += 1
+
+			if 0 <= count <= matches:
+				break
+
+		return matches
+
+	def pop(self, index: int = -1) -> T:
+		"""
+		Removes and returns the element at the specified index
+		:param index: The index or last element if not specified
+		:return: The removed element
+		"""
+
+		return self.__buffer__.pop(index)
+
+	def get(self, index: int = -1, default: typing.Optional[T] = None) -> typing.Optional[T]:
+		"""
+		Gets an element at the specified index or 'default' if out of bounds
+		:param index: The index to retrieve
+		:param default: The default value to return
+		:return: The element at the specified index or 'default' if index is out of bounds
+		"""
+
+		index = index if (index := int(index)) >= 0 else len(self) + index
+		return self.__buffer__[index] if index < len(self) else default
+
+	def append(self, element: T) -> ListIterable[T]:
+		"""
+		Appends an item at the end of the list
+		:param element: The element to append
+		:return: This list
+		"""
+
+		self.__buffer__.append(element)
+		return self
+
+	def extend(self, iterable: T) -> ListIterable[T]:
+		"""
+		Appends all elements from an iterable to the end of this list
+		:param iterable: The iterable whose elements to insert
+		:return: This list
+		"""
+
+		self.__buffer__.extend(iterable)
+		return self
+
+	def insert(self, index: int, element: T) -> ListIterable[T]:
+		"""
+		Inserts an element into the list at the specified index
+		:param index: The index to insert to
+		:param element: The element to insert
+		:return: This list
+		"""
+
+		self.__buffer__.insert(index, element)
+		return self
 
 
 class LinqIterable[T](Iterable, Stream.LinqStream):
@@ -1197,426 +1303,229 @@ class ReverseSortedList[T](SortableIterable):
 		return ReverseSortedList(self)
 
 
-class OldString(Iterable[int]):
+class String(ListIterable[str], str):
 	"""
-	A class providing extended string functionality
+	An extension adding additional string functionality
 	"""
 
-	@Overload
-	def __init__(self, string: str | bytes | bytearray | typing.Iterable[int | str] = ''):
-		"""
-		A class providing extended string functionality
-		- Constructor -
-		Depending on the specified value, iteration will yield a str, bytes-like, or int
-		:param string: The string to use; either a string, bytes object, bytearray, or iterable of characters or integers
-		:raises TypeError: If 'string' is not a string, bytes, bytearray, or an iterable characters or integers
-		"""
+	class __Stringify__:
+		def __init__(self, callback: typing.Callable):
+			self.__callback__: typing.Callable = callback
 
-		if isinstance(string, str):
-			super().__init__([ord(c) for c in string])
-			self.__cls__ = str
-		elif isinstance(string, (bytes, bytearray)):
-			super().__init__(string)
-			self.__cls__ = bytes
-		elif hasattr(string, '__iter__') and (string := tuple(string)) is not None and all(isinstance(x, int) or (isinstance(x, str) and len(x) == 1) for x in string):
-			super().__init__(int(x) for x in string)
-			self.__cls__ = int
-		else:
-			raise TypeError('String is not a string, bytes object, bytearray, or iterable of characters or integers')
+		def __call__(self, *args, **kwargs) -> typing.Any:
+			result: typing.Any = self.__callback__(*args, **kwargs)
+			return String(result) if isinstance(result, Iterable) and all(isinstance(x, str) for x in result) else result
 
-		self.__buffer__: list[int]
-
-	def __contains__(self, item: str | String | bytes | bytearray | int) -> bool:
-		"""
-		:param item: The substring or character code to check
-		:return: Whether a substring or character is within this string
-		:raises TypeError: If 'item' is not a string, bytes object, bytearray, or integer
-		"""
-
-		char: tuple[int, ...] = (item,) if isinstance(item, int) else tuple(ord(c) for c in item) if isinstance(item, str) else tuple(item) if isinstance(item, (bytes, bytearray)) else None
-		this_length: int = len(self)
-		length: int = len(char)
-
-		if char is None:
-			raise TypeError(f'\'item\' must be one of: str, bytes, bytearray, int - got \'{type(item)}\'')
-
-		for i in range(this_length - length + 1):
-			if tuple(self.__buffer__[i:i + length]) == char:
-				return True
-
-		return False
-
-	def __int__(self, base: int = 10) -> int:
-		"""
-		:param base: The base to convert to
-		:return: The integer value of this string
-		"""
-		return int(str(self), base)
-
-	def __float__(self) -> float:
-		"""
-		:return: The floating-point value of this string
-		"""
-		return float(str(self))
-
-	def __bytes__(self) -> bytes:
-		"""
-		:return: This string as a bytes-like instance
-		"""
-
-		return bytes(self.__buffer__)
-
-	def __iter__(self) -> typing.Generator[str]:
-		for x in self.__buffer__:
-			yield chr(x) if self.__cls__ is str else x.to_bytes(1, sys.byteorder, signed=False) if self.__cls__ is bytes else x
-
-	def __str__(self) -> str:
-		return ''.join(chr(x) for x in self.__buffer__)
-
-	def __repr__(self) -> str:
-		quotes: str = '"""' if '\'' in self and '"' in self else '\'' if '"' in self else '"'
-		return f'{quotes}{str(self)}{quotes}'
-
-	def __add__(self, other: str | bytes | bytearray | String) -> String:
-		"""
-		Adds a string, bytes-like or String instance to this String
-		:param other: The string to add
-		:return: The concatenated string
-		"""
-
-		cls = type(self)
-
-		if isinstance(other, (str, bytes, bytearray)):
-			copy: String = cls()
-			copy.__buffer__ = self.__buffer__ + ([ord(c) for c in other] if isinstance(other, str) else list(other))
-			return copy
-		elif isinstance(other, cls):
-			copy: String = cls()
-			copy.__buffer__ = self.__buffer__ + other.__buffer__
-			return copy
-		else:
-			return NotImplemented
-
-	def __iadd__(self, other: str | bytes | bytearray | String) -> String:
-		"""
-		Adds a string, bytes-like or String instance to this String in-place
-		:param other: The string to add
-		:return: This instance
-		"""
-
-		cls = type(self)
-
-		if isinstance(other, (str, bytes, bytearray)):
-			self.__buffer__ += ([ord(c) for c in other] if isinstance(other, str) else list(other))
-			return self
-		elif isinstance(other, cls):
-			self.__buffer__ += other.__buffer__
-			return self
-		else:
-			return NotImplemented
-
-	def __radd__(self, other: str | bytes | bytearray | String) -> str | bytes | bytearray | String:
-		"""
-		Adds this String to another string, bytes-like, or String instance
-		:param other: The buffer to add this String to
-		:return: A new, updated buffer whose type matches the specified argument
-		"""
-
-		cls = type(self)
-
-		if isinstance(other, str):
-			return other + str(self)
-		elif isinstance(other, (bytes, bytearray)):
-			return other + bytes(self)
-		elif isinstance(other, cls):
-			copy: String = cls()
-			copy.__buffer__ = other.__buffer__ + self.__buffer__
-			return copy
-		else:
-			return NotImplemented
-
-	def __mul__(self, n: int) -> String:
-		"""
-		Multiplies the string 'n' times
-		:param n: The number of times to multiply
-		:return: The multiplied String instance
-		"""
-
-		if not isinstance(n, int):
-			return NotImplemented
-
-		copy: String = type(self)()
-		copy.__buffer__ = self.__buffer__ * n
-		return copy
-
-	def __imul__(self, n: int) -> String:
-		"""
-		Multiplies the string 'n' times in-place
-		:param n: The number of times to multiply
-		:return: This instance
-		"""
-
-		if not isinstance(n, int):
-			return NotImplemented
-
-		self.__buffer__ *= n
-		return self
-
-	def __rmul__(self, n: int) -> String:
-		"""
-		Multiplies the string 'n' times
-		:param n: The number of times to multiply
-		:return: The multiplied String instance
-		"""
-
-		if not isinstance(n, int):
-			return NotImplemented
-
-		copy: String = type(self)()
-		copy.__buffer__ = self.__buffer__ * n
-		return copy
-
-	def __getitem__(self, item: int) -> str | bytes | bytearray | int | String:
-		"""
-		Gets one or more characters in this string
-		:param item: The index or indices to get
-		:return: If a single element, only that item, otherwise a substring
-		"""
-
-		if isinstance(item, int):
-			x: int = self.__buffer__[item]
-			return chr(x) if self.__cls__ is str else x.to_bytes(1, sys.byteorder, signed=False) if self.__cls__ is bytes else x
-		else:
-			return super().__getitem__(item)
-
-	def __setitem__(self, key: int, value: str | bytes | bytearray | int | String):
-		"""
-		Sets one or more characters in this string
-		:param key: The index or indices to modify
-		:param value: The value to set
-		"""
-
-		raise NotImplementedError()
-
-	def can_be_int(self) -> bool:
-		"""
-		:return: Whether this value can be converted to a base-10 integer
-		"""
-
-		return all(chr(c).isdigit() for c in self.__buffer__)
-
-	def can_be_float(self) -> bool:
-		"""
-		:return: Whether this value can be converted to a base-10 decimal
-		"""
-
-		try:
-			float(str(self))
-			return True
-		except ValueError:
-			return False
-
-	def starts_with(self, prefix: str | bytes | bytearray | String) -> bool:
-		"""
-		:param prefix: The prefix to check
-		:return: Whether this string starts with 'prefix'
-		:raises InvalidArgumentException: If 'prefix' is not a string, bytes object, bytearray, or String instance
-		"""
-
-		Misc.raise_ifn(isinstance(prefix, (str, bytes, bytearray, String)), Exceptions.InvalidArgumentException(String.starts_with, 'prefix', type(prefix), (str, bytes, bytearray, String)))
-
-		if len(prefix) > len(self):
-			return False
-
-		for i, char in enumerate(self):
-			prefix_char: str = prefix[i] if isinstance(prefix, (str, String)) else chr(prefix[i])
-
-			if prefix_char != char:
-				return False
-
-		return True
-
-	def ends_with(self, postfix: str | String) -> bool:
-		"""
-		:param postfix: The postfix to check
-		:return: Whether this string ends with 'postfix'
-		:raises InvalidArgumentException: If 'postfix' is not a string, bytes object, bytearray, or String instance
-		"""
-
-		Misc.raise_ifn(isinstance(postfix, (str, bytes, bytearray, String)), Exceptions.InvalidArgumentException(String.ends_with, 'postfix', type(postfix), (str, bytes, bytearray, String)))
-
-		if len(postfix) > len(self):
-			return False
-
-		for i in range(len(self) - 1, len(self) - len(postfix), -1):
-			postfix_char: str = postfix[i] if isinstance(postfix, (str, String)) else chr(postfix[i])
-
-			if postfix_char != self[i]:
-				return False
-
-		return True
-
-	def left_pad(self, length: int, pad_char: str | bytes | bytearray | int | String = ' ') -> String:
-		"""
-		Left pads this string with the specified character until equal to the specified length
-		:param length: The length to match
-		:param pad_char: The character to pad with (defaults to space)
-		:return: The padded String
-		:raises ValueError: If the pad character's length is greater than 1
-		:raises TypeError: If 'pad_char' is not a string, bytes object, bytearray, String instance, or integer
-		"""
-
-		if not isinstance(pad_char, (str, bytes, bytearray, int, String)):
-			raise Exceptions.InvalidArgumentException(String.left_pad, 'pad_char', type(pad_char), (str, bytes, bytearray, int, String))
-		elif isinstance(pad_char, (str, bytes, bytearray, String)) and len(pad_char) > 1:
-			raise ValueError(f'Character must be of length 1 - got length {len(pad_char)}')
-		elif isinstance(pad_char, (str, bytes, bytearray, String)) and len(pad_char) == 0:
-			return self.copy()
-
-		char: int = pad_char if isinstance(pad_char, int) else ord(pad_char) if isinstance(pad_char, str) else pad_char[0]
-		copy: String = self.copy()
-
-		while len(self) < length:
-			copy.__buffer__.append(char)
-
-		return copy
-
-	def right_pad(self, length: int, pad_char: str | bytes | bytearray | int = ' ') -> String:
-		"""
-		Right pads this string with the specified character until equal to the specified length
-		:param length: The length to match
-		:param pad_char: The character to pad with (defaults to space)
-		:return: The padded String
-		:raises ValueError: If the pad character's length is greater than 1
-		:raises TypeError: If 'pad_char' is not a string, bytes object, bytearray, String instance, or integer
-		"""
-
-		if not isinstance(pad_char, (str, bytes, bytearray, int, String)):
-			raise Exceptions.InvalidArgumentException(String.left_pad, 'pad_char', type(pad_char), (str, bytes, bytearray, int, String))
-		elif isinstance(pad_char, (str, bytes, bytearray, String)) and len(pad_char) > 1:
-			raise ValueError(f'Character must be of length 1 - got length {len(pad_char)}')
-		elif isinstance(pad_char, (str, bytes, bytearray, String)) and len(pad_char) == 0:
-			return self.copy()
-
-		char: int = pad_char if isinstance(pad_char, int) else ord(pad_char) if isinstance(pad_char, str) else pad_char[0]
-		copy: String = self.copy()
-
-		while len(self) < length:
-			copy.__buffer__.insert(0, char)
-
-		return copy
-
-	def to_upper(self) -> String:
-		"""
-		:return: The uppercase string
-		"""
-
-		return String(ord(chr(c).upper()) for c in self.__buffer__)
-
-	def to_lower(self) -> String:
-		"""
-		:return: The lowercase string
-		"""
-
-		return String(ord(chr(c).lower()) for c in self.__buffer__)
-
-	def capitalized(self) -> String:
-		"""
-		:return: The capitalized string
-		"""
-
-		if len(self) == 0:
-			return self.copy()
-
-		copy: String = self.copy()
-		copy.__buffer__[0] = ord(chr(copy.__buffer__[0]).upper())
-		return copy
-
-	def substring(self, start: int, length: typing.Optional[int] = ...) -> String:
-		"""
-		:param start: The start index
-		:param length: The substring length
-		:return: A substring 'length' characters long starting from 'start'
-		"""
-
-		return self[start:start + length]
-
-	def copy(self) -> String:
-		"""
-		:return: A copy of this String instance
-		"""
-
-		return String(self.__buffer__.copy())
-
-
-class String(str):
 	def __init__(self, string: typing.Optional[typing.Any] = None):
-		self.__chars__: list[str] = [] if string is ... or string is None else list(str(string))
+		"""
+		An extension adding additional string functionality
+		- Constructor -
+		:param string: The input value to convert to a string
+		"""
+
+		super().__init__([] if string is ... or string is None else list(str(string)))
 
 	def __contains__(self, substr: str | String) -> bool:
 		return isinstance(substr, (str, String)) and self.index(substr) >= 0
 
-	def __len__(self) -> int:
-		return len(self.__chars__)
+	def __eq__(self, other: str | String) -> bool:
+		return isinstance(other, (str, String)) and str(other) == str(self)
+
+	def __float__(self) -> float:
+		return float(str(self))
+
+	def __complex__(self) -> complex:
+		return complex(str(self))
+
+	def __int__(self) -> int:
+		return int(str(self))
 
 	def __str__(self) -> str:
-		return ''.join(self.__chars__)
+		return ''.join(self)
 
-	def __add__(self, other: str | String) -> String:
-		if not isinstance(other, (str, String)):
-			return NotImplemented
-
-		clone: String = self.copy()
-		clone.__chars__.extend(other)
-		return clone
+	def __repr__(self) -> str:
+		return repr(str(self))
 
 	def __iadd__(self, other: str | String) -> String:
 		if not isinstance(other, (str, String)):
 			return NotImplemented
 
-		self.__chars__.extend(other)
+		super().__iadd__(other)
 		return self
 
-	def __mul__(self, other: int) -> String:
-		return String(super().__mul__(other))
-
-	def __rmul__(self, other: int) -> String:
-		return String(super().__rmul__(other))
+	def __imul__(self, other: int) -> String:
+		super().__imul__(other)
+		return self
 
 	def __lshift__(self, other: str | String) -> String:
-		return self + other
+		if isinstance(other, String):
+			self.append(other.pop())
+		elif isinstance(other, str):
+			return String(self + other)
+		else:
+			return NotImplemented
 
 	def __rshift__(self, other: String) -> String:
 		if not isinstance(other, String):
 			return NotImplemented
 
-		other.__chars__.append(self.__chars__.pop())
+		other.append(self.pop())
 		return other
 
+	def __setitem__(self, key: int | tuple[int, ...] | slice, value: str | String) -> None:
+		"""
+		Sets one or more items in this collection
+		:param key: The index or indices to modify
+		:param value: The value to set
+		:raises TypeError: If indices are not integers, slices, or a collection of indices
+		"""
+
+		Misc.raise_ifn(isinstance(value, (bytes, bytearray, ByteString)) or (isinstance(value, int) and 0 <= (value := int(value)) <= 255), ValueError('String set item value must be either a string or String instance'))
+
+		if isinstance(key, int) and len(value) == 1:
+			self.__buffer__[key] = str(value)
+		elif isinstance(key, int):
+			key = int(key)
+
+			for i, char in enumerate(value):
+				self.__buffer__.insert(key + i, char)
+
+		elif isinstance(key, tuple):
+			for k in key:
+				self[k] = value
+
+		elif isinstance(key, slice):
+			start: int = 0 if key.start is None else int(key.start)
+			stop: int = len(self) if key.stop is None else int(key.stop)
+			step: int = 1 if key.step is None else int(key.step)
+			index: int = 0
+
+			for i in range(start, stop, step):
+				element: str = value[index % len(value)]
+				self.__buffer__[i] = element
+				index += 1
+
+		else:
+			raise TypeError(f'TypeError: list indices must be integers or slices, not {type(key).__name__}')
+
+	def __getitem__(self, item: int | slice | tuple[int, ...]) -> str | Iterable[str] | String:
+		"""
+		Gets one or more items in this collection
+		:param item: The index or indices to get
+		:return: If a single element, only that character; if multiple non-continuous elements, an iterable of characters; otherwise a substring
+		:raises TypeError: If indices are not integers, slices, or a collection of indices
+		"""
+
+		if isinstance(item, int):
+			return self.__buffer__[item]
+
+		elif isinstance(item, tuple):
+			items: list = []
+
+			for key in item:
+				result = self[key]
+
+				if isinstance(key, (tuple, slice)):
+					items.extend(result)
+				else:
+					items.append(result)
+
+			return Iterable(items)
+
+		elif isinstance(item, slice):
+			start: int = 0 if item.start is None else int(item.start)
+			stop: int = len(self) if item.stop is None else int(item.stop)
+			step: int = 1 if item.step is None else int(item.step)
+			items: list = []
+
+			for i in range(start, stop, step):
+				items.append(self.__buffer__[i])
+
+			return String(items)
+
+		else:
+			raise TypeError(f'TypeError: list indices must be integers or slices, not {type(item).__name__}')
+
+	def __getattribute__(self, name: str) -> typing.Any:
+		attribute: typing.Any = super().__getattribute__(name)
+		is_this: bool = name in vars(type(self))
+		super_str_attr: typing.Any = getattr(str, name) if hasattr(str, name) else None
+		super_iterable_attr: typing.Any = getattr(ListIterable, name) if hasattr(ListIterable, name) else None
+
+		if is_this or not callable(attribute):
+			return attribute
+		elif super_iterable_attr is not None:
+			return String.__Stringify__(attribute) if callable(super_iterable_attr) else attribute
+		elif super_str_attr is not None:
+			return String.__Stringify__(getattr(str(self), name)) if callable(super_str_attr) else attribute
+		else:
+			return attribute
+
 	def is_integer2(self) -> bool:
-		return all(x == '0' or x == '1' for x in self.__chars__)
+		"""
+		Checks if the string is a binary integer
+		:return: Whether all characters are 0 or 1
+		"""
+
+		return all(x == '0' or x == '1' for x in self)
 
 	def is_integer8(self) -> bool:
+		"""
+		Checks if the string is an octal integer
+		:return: Whether all characters are in the range 0-7
+		"""
+
 		chars: tuple[str, ...] = tuple(map(str, range(8)))
-		return all(x in chars for x in self.__chars__)
+		return all(x in chars for x in self)
 
 	def is_integer10(self) -> bool:
+		"""
+		Checks if the string is a decimal integer
+		:return: Whether all characters are in the range 0-9
+		"""
+
 		return self.isnumeric()
 
 	def is_integer16(self) -> bool:
+		"""
+		Checks if the string is a hexadecimal integer
+		:return: Whether all characters are in the range 0-9 or A-F
+		"""
+
 		chars: tuple[str, ...] = tuple('abcdefABCDEF')
-		return all(x.isnumeric() or x in chars for x in self.__chars__)
+		return all(x.isnumeric() or x in chars for x in self)
 
 	def is_float(self) -> bool:
-		return re.fullmatch(r'\d+(\.\d*(e|E\d)?)?', self) is not None
+		"""
+		:return: Whether the string is a valid float representation
+		"""
+
+		return re.fullmatch(r'\d+(\.\d*(([eE])\d*)?)?', self) is not None
 
 	def is_extended_float(self) -> bool:
-		return re.fullmatch(r'\d+(\.\d*(e|E\d*(\.\d*)?)?)?', self) is not None
+		"""
+		Allows for a single decimal in the exponent as well: "1.2e3.4"
+
+		Use "String.to_extended_float" to convert the value to a float
+		:return: Whether the string is a valid float representation
+		"""
+
+		return re.fullmatch(r'\d+(\.\d*(([e|E])\d*(\.\d*)?)?)?', self) is not None
 
 	def is_complex(self) -> bool:
+		"""
+		:return: Whether the string is a valid complex number representation
+		"""
+
 		return re.fullmatch(r'\(?\d*(\.\d*)?(e|E\d*)?(\+\d*(\.\d*)?(e|E\d*)?j)?\)?', self) is not None
 
 	def to_extended_float(self) -> float:
+		"""
+		Converts the string to a float using the extended float format described in "String.is_extended_float"
+		:return: The converted value
+		:raises ValueError: If the string is not an extended float
+		"""
+
 		Misc.raise_ifn(self.is_extended_float(), ValueError(f'could not convert string to extended float: \'{self}\''))
 		sections: list[String] = self.multisplit('eE')
 		left: float = float(sections[0])
@@ -1624,10 +1533,400 @@ class String(str):
 		return left * 10 ** right
 
 	def copy(self) -> String:
+		"""
+		:return: A copy of this string
+		"""
+
 		return String(self)
 
+	def append(self, element: str | String) -> String:
+		"""
+		Adds the specified substring to the end of this string
+		:param element: The substring to add
+		:return: This string
+		"""
+
+		if isinstance(element, str):
+			self.__buffer__.extend(str(element))
+		elif isinstance(element, String):
+			self.__buffer__.extend(element.__buffer__)
+		else:
+			raise TypeError('String elements must be a string or String instance')
+
+		return self
+
+	def extend(self, iterable: typing.Iterable[bytes, bytearray, ByteString, int]) -> String:
+		"""
+		Adds all strings or bytes from the specified iterable to the end of this string
+		:param iterable: The collection of substrings or bytes to add
+		:return: This string
+		"""
+
+		for item in iterable:
+			self.append(item)
+
+		return self
+
+	def insert(self, index: int, element: bytes | bytearray | ByteString | int) -> String:
+		if isinstance(element, (str, String)):
+			index = int(index)
+
+			for i, char in enumerate(element):
+				self.__buffer__.insert(index + i, char)
+		else:
+			raise TypeError('String elements must be a string or String instance')
+
+		return self
+
 	def multisplit(self, sep: typing.Optional[typing.Iterable[str]] = ..., maxsplit: int = -1) -> list[String]:
+		"""
+		Splits the string around multiple delimiters
+		:param sep: The delimiters to split around
+		:param maxsplit: The maximum number of splits to perform (negative or zero values are infinite)
+		:return: A list of the split string
+		"""
+
 		return [String(s) for s in re.split('|'.join(re.escape(delimiter) for delimiter in sep), self, 0 if maxsplit <= 0 else maxsplit)]
+
+
+class ByteString(ListIterable[int], bytearray):
+	"""
+	An extension adding additional bytes functionality
+	"""
+
+	class __Byteify__:
+		def __init__(self, callback: typing.Callable):
+			self.__callback__: typing.Callable = callback
+
+		def __call__(self, *args, **kwargs) -> typing.Any:
+			result: typing.Any = self.__callback__(*args, **kwargs)
+			return ByteString(result) if isinstance(result, Iterable) and all(isinstance(x, int) for x in result) else result
+
+	def __init__(self, string: typing.Optional[typing.Any] = None, encoding: str = 'utf-8', errors: typing.Literal['strict', 'ignore', 'replace', 'xmlcharrefreplace', 'backslashreplace', 'namereplace', 'surrogateescape'] = 'strict'):
+		"""
+		An extension adding additional string functionality
+		- Constructor -
+		:param string: The input value to convert to a string
+		"""
+
+		super().__init__([] if string is ... or string is None else list(bytes(string, encoding, errors)) if isinstance(string, str) else list(bytes(string)))
+
+	def __contains__(self, substr: bytes | bytearray | ByteString) -> bool:
+		return isinstance(substr, (bytes, bytearray, ByteString)) and self.index(substr) >= 0
+
+	def __eq__(self, other: bytes | bytearray | ByteString) -> bool:
+		return isinstance(other, (bytes, bytearray, ByteString)) and bytes(other) == bytes(self)
+
+	def __float__(self) -> float:
+		return float(bytes(self))
+
+	def __int__(self) -> int:
+		return int(bytes(self))
+
+	def __bytes__(self) -> bytes:
+		return bytes(self.__buffer__)
+
+	def __str__(self) -> str:
+		return str(bytes(self.__buffer__))
+
+	def __repr__(self) -> str:
+		return repr(bytes(self.__buffer__))
+
+	def __iadd__(self, other: bytes | bytearray | ByteString) -> ByteString:
+		if not isinstance(other, (bytes, bytearray, ByteString)):
+			return NotImplemented
+
+		super().__iadd__(other)
+		return self
+
+	def __imul__(self, other: int) -> ByteString:
+		super().__imul__(other)
+		return self
+
+	def __lshift__(self, other: bytes | bytearray | ByteString) -> ByteString:
+		if isinstance(other, ByteString):
+			self.append(other.pop())
+		elif isinstance(other, (bytes, bytearray)):
+			return ByteString(self + other)
+		else:
+			return NotImplemented
+
+	def __rshift__(self, other: ByteString) -> ByteString:
+		if not isinstance(other, ByteString):
+			return NotImplemented
+
+		other.append(self.pop())
+		return other
+
+	def __setitem__(self, key: int | tuple[int, ...] | slice, value: bytes | bytearray | ByteString | int) -> None:
+		"""
+		Sets one or more items in this collection
+		:param key: The index or indices to modify
+		:param value: The value to set
+		:raises TypeError: If indices are not integers, slices, or a collection of indices
+		"""
+
+		Misc.raise_ifn(isinstance(value, (bytes, bytearray, ByteString)) or (isinstance(value, int) and 0 <= (value := int(value)) <= 255), ValueError('ByteString set item value must be either a bytes, bytearray, ByteString, or integer in the range 0-255'))
+
+		if isinstance(key, int) and isinstance(value, int):
+			self.__buffer__[key] = int(value)
+		elif isinstance(key, int):
+			key = int(key)
+
+			for i, byte in enumerate(value):
+				self.__buffer__.insert(key + i, byte)
+
+		elif isinstance(key, tuple):
+			for k in key:
+				self[k] = value
+
+		elif isinstance(key, slice):
+			start: int = 0 if key.start is None else int(key.start)
+			stop: int = len(self) if key.stop is None else int(key.stop)
+			step: int = 1 if key.step is None else int(key.step)
+			index: int = 0
+
+			for i in range(start, stop, step):
+				element: int = int(value) if isinstance(value, int) else value[index % len(value)]
+				Misc.raise_ifn(0 <= element <= 255, ValueError('ByteString set item value must be either a bytes, bytearray, ByteString, or integer in the range 0-255'))
+				self.__buffer__[i] = element
+				index += 1
+
+		else:
+			raise TypeError(f'TypeError: list indices must be integers or slices, not {type(key).__name__}')
+
+	def __getitem__(self, item: int | slice | tuple[int, ...]) -> int | Iterable[int] | ByteString:
+		"""
+		Gets one or more items in this collection
+		:param item: The index or indices to get
+		:return: If a single element, only that byte; if multiple non-continuous elements, an iterable of integers; otherwise a substring
+		:raises TypeError: If indices are not integers, slices, or a collection of indices
+		"""
+
+		if isinstance(item, int):
+			return self.__buffer__[item]
+
+		elif isinstance(item, tuple):
+			items: list = []
+
+			for key in item:
+				result = self[key]
+
+				if isinstance(key, (tuple, slice)):
+					items.extend(result)
+				else:
+					items.append(result)
+
+			return Iterable(items)
+
+		elif isinstance(item, slice):
+			start: int = 0 if item.start is None else int(item.start)
+			stop: int = len(self) if item.stop is None else int(item.stop)
+			step: int = 1 if item.step is None else int(item.step)
+			items: list = []
+
+			for i in range(start, stop, step):
+				items.append(self.__buffer__[i])
+
+			return ByteString(items)
+
+		else:
+			raise TypeError(f'TypeError: list indices must be integers or slices, not {type(item).__name__}')
+
+	def __getattribute__(self, name: str) -> typing.Any:
+		attribute: typing.Any = super().__getattribute__(name)
+		is_this: bool = name in vars(type(self))
+		super_bytes_attr: typing.Any = getattr(bytearray, name) if hasattr(bytearray, name) else None
+		super_iterable_attr: typing.Any = getattr(ListIterable, name) if hasattr(ListIterable, name) else None
+
+		if is_this or not callable(attribute):
+			return attribute
+		elif super_iterable_attr is not None:
+			return ByteString.__Byteify__(attribute) if callable(super_iterable_attr) else attribute
+		elif super_bytes_attr is not None:
+			return ByteString.__Byteify__(getattr(bytes(self), name)) if callable(super_bytes_attr) else attribute
+		else:
+			return attribute
+
+	def is_integer2(self) -> bool:
+		"""
+		Checks if the string is a binary integer
+		:return: Whether all characters are 0 or 1
+		"""
+
+		zero: int = ord('0')
+		one: int = ord('1')
+		return all(x == zero or x == one for x in self)
+
+	def is_integer8(self) -> bool:
+		"""
+		Checks if the string is an octal integer
+		:return: Whether all characters are in the range 0-7
+		"""
+
+		chars: tuple[int, ...] = tuple(ord('0') + x for x in range(8))
+		return all(x in chars for x in self)
+
+	def is_integer10(self) -> bool:
+		"""
+		Checks if the string is a decimal integer
+		:return: Whether all characters are in the range 0-9
+		"""
+
+		chars: tuple[int, ...] = tuple(ord('0') + x for x in range(10))
+		return all(x in chars for x in self)
+
+	def is_integer16(self) -> bool:
+		"""
+		Checks if the string is a hexadecimal integer
+		:return: Whether all characters are in the range 0-9 or A-F
+		"""
+
+		chars: tuple[int, ...] = (*[ord('0') + x for x in range(10)], *[ord(x) for x in 'abcdefABCDEF'])
+		return all(x in chars for x in self)
+
+	def is_float(self) -> bool:
+		"""
+		:return: Whether the string is a valid float representation
+		"""
+
+		return re.fullmatch(rb'\d+(\.\d*(([e|E])\d*)?)?', bytes(self)) is not None
+
+	def is_extended_float(self) -> bool:
+		"""
+		Allows for a single decimal in the exponent as well: "1.2e3.4"
+
+		Use "String.to_extended_float" to convert the value to a float
+		:return: Whether the string is a valid float representation
+		"""
+
+		return re.fullmatch(rb'\d+(\.\d*(([e|E])\d*(\.\d*)?)?)?', bytes(self)) is not None
+
+	def to_extended_float(self) -> float:
+		"""
+		Converts the string to a float using the extended float format described in "String.is_extended_float"
+		:return: The converted value
+		:raises ValueError: If the string is not an extended float
+		"""
+
+		Misc.raise_ifn(self.is_extended_float(), ValueError(f'could not convert string to extended float: \'{self}\''))
+		sections: list[ByteString] = self.multisplit(b'eE')
+		left: float = float(sections[0])
+		right: float = float(sections[1]) if len(sections) > 0 else 1
+		return left * 10 ** right
+
+	def index(self, item: int | bytes | bytearray | ByteString, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
+		"""
+		Returns the index of the specified byte or substring
+		:param item: The substring or byte to check for
+		:param start: Index to begin check or beginning of string if not supplied
+		:param stop: Index to end check or end of string if not supplied
+		:return: The substring or byte index or -1 if not found
+		"""
+
+		if isinstance(item, int):
+			return super().index(item, start, stop) if 0x00 <= (item := int(item)) <= 0xFF else -1
+
+		target: bytes = bytes(item)
+		start: int = 0 if start is ... or start is None else int(start)
+		stop: int = (len(self) - len(target) + 1) if stop is ... or stop is None else int(stop)
+
+		for i in range(start, stop):
+			if bytes(self[i:i + len(item)]) == target:
+				return i
+
+		return -1
+
+	def copy(self) -> ByteString:
+		"""
+		:return: A copy of this string
+		"""
+
+		return ByteString(self)
+
+	def append(self, element: bytes | bytearray | ByteString | int) -> ByteString:
+		"""
+		Adds the specified byte or substring to the end of this string
+		:param element: The substring or byte to add
+		:return: This string
+		"""
+
+		if isinstance(element, (bytes, bytearray)):
+			self.__buffer__.extend(bytes(element))
+		elif isinstance(element, int) and 0 <= (element := int(element)) <= 255:
+			self.__buffer__.append(element)
+		elif isinstance(element, ByteString):
+			self.__buffer__.extend(element.__buffer__)
+		else:
+			raise TypeError('Bytestring elements must be a bytes object, bytearray object, ByteString instance, or integer in the range 0-255')
+
+		return self
+
+	def extend(self, iterable: typing.Iterable[bytes, bytearray, ByteString, int]) -> ByteString:
+		"""
+		Adds all strings or bytes from the specified iterable to the end of this string
+		:param iterable: The collection of substrings or bytes to add
+		:return: This string
+		"""
+
+		for item in iterable:
+			self.append(item)
+
+		return self
+
+	def insert(self, index: int, element: bytes | bytearray | ByteString | int) -> ByteString:
+		if isinstance(element, int) and 0 <= (element := int(element)) < 255:
+			self.__buffer__.insert(int(index), element)
+		elif isinstance(element, (bytes, bytearray, ByteString)):
+			index = int(index)
+
+			for i, byte in enumerate(element):
+				self.__buffer__.insert(index + i, byte)
+		else:
+			raise TypeError('Bytestring elements must be a bytes object, bytearray object, ByteString instance, or integer in the range 0-255')
+
+		return self
+
+	def multisplit(self, sep: typing.Optional[typing.Iterable[int | bytes | bytearray | ByteString]] = ..., maxsplit: int = -1) -> list[ByteString]:
+		"""
+		Splits the string around multiple delimiters
+		:param sep: The delimiters to split around
+		:param maxsplit: The maximum number of splits to perform (negative or zero values are infinite)
+		:return: A list of the split string
+		"""
+
+		segments: list[ByteString] = []
+		segment: ByteString = ByteString()
+		matches: int = 0
+
+		for i, byte in enumerate(self):
+			matched: bool = False
+
+			if maxsplit <= 0 or matches < maxsplit:
+				for delimiter in sep:
+					if not isinstance(delimiter, (int, bytes, bytearray, ByteString)) or (isinstance(delimiter, int) and not (0 <= (delimiter := int(delimiter)) <= 255)):
+						raise TypeError('ByteString delimiter must be an integer in the range 0-255')
+					elif (isinstance(delimiter, int) and delimiter == self[i]) or self[i:i + len(delimiter)] == delimiter:
+						matches += 1
+						segments.append(segment)
+						matched = True
+						segment = ByteString()
+						break
+
+			if not matched:
+				segment.append(byte)
+
+		segments.append(segment)
+		return [ByteString(seg) for seg in segments]
+
+	@property
+	def bytes(self) -> typing.Iterator[bytes]:
+		"""
+		:return: Each byte as a bytes object instead of an integer
+		"""
+
+		for byte in self:
+			yield byte.to_bytes(1, sys.byteorder)
 
 
 class FixedArray[T](SortableIterable):
