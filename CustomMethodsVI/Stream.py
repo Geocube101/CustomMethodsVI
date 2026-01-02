@@ -1970,7 +1970,7 @@ class LinqStream[T](typing.Reversible):
 				matched.add(_key)
 				yield elem
 
-		Misc.raise_ifn(callable(key), Exceptions.InvalidArgumentException(LinqStream.distinct, 'key', type(key)))
+		Misc.raise_ifn(key is None or key is ... or callable(key), Exceptions.InvalidArgumentException(LinqStream.distinct, 'key', type(key)))
 		return LinqStream(_distinct(self))
 
 	def set_difference(self, iterable: typing.Iterable[T], key: typing.Optional[typing.Callable[[T], typing.Hashable]] = ...) -> LinqStream[T]:
