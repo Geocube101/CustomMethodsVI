@@ -1482,6 +1482,19 @@ class LinqStream[T](typing.Reversible):
 
 		return next(iter(self))
 
+	def cast[Q](self, cls: type[Q]) -> LinqStream[Q]:
+		"""
+		Casts all elements in this query to the specified type
+		:param cls: The type to cast to
+		:return: The modified query
+		"""
+
+		def __cast(stream: LinqStream[T]) -> typing.Generator[Q]:
+			for elem in stream:
+				yield cls(elem)
+
+		return LinqStream(__cast(self))
+
 	def for_each(self, callback: typing.Callable[[T], typing.Any]) -> None:
 		"""
 		*Evaluates the query*
@@ -2055,52 +2068,50 @@ class LinqStream[T](typing.Reversible):
 		primary: set[typing.Hashable] = set()
 		return LinqStream(_union(self))
 
-	def to_lookup[K, V](self, key_converter: typing.Optional[typing.Callable[[T], K]] = ..., value_converter: typing.Optional[typing.Callable[[T], V]] = ...) -> dict[K, tuple[V, ...]]:
+	def to_lookup[K, V](self, converter: typing.Optional[typing.Callable[[T], tuple[K, V]]] = ...) -> dict[K, tuple[V, ...]]:
 		"""
 		*Evaluates this query*
-		:param key_converter: The function to convert elements to keys
-		:param value_converter: The function to convert elements to values
+		:param converter: The function to convert elements to key-value pairs
 		:return: A dict mapping a key with multiple values
 		:raises InvalidArgumentException: If 'key_converter' is not callable
 		:raises InvalidArgumentException: If 'value_converter' is not callable
 		"""
 
-		Misc.raise_ifn(key_converter is ... or key_converter is None or callable(key_converter), Exceptions.InvalidArgumentException(LinqStream.to_lookup, 'key_converter', type(key_converter)))
-		Misc.raise_ifn(value_converter is ... or value_converter is None or callable(value_converter), Exceptions.InvalidArgumentException(LinqStream.to_lookup, 'value_converter', type(value_converter)))
+		Misc.raise_ifn(converter is ... or converter is None or callable(converter), Exceptions.InvalidArgumentException(LinqStream.to_lookup, 'converter', type(converter)))
 		mapping: dict[K, list[V]] = {}
 
 		for elem in self:
-			key: K = key_converter(elem) if callable(key_converter) else elem[0]
-			value: V = value_converter(elem) if callable(value_converter) else elem[1]
+			elem: tuple[K, V] = converter(converter) if callable(elem) else elem
+			Misc.raise_ifn(isinstance(elem, typing.Iterable) and len(elem := tuple(elem)) < 2, ValueError(f'Cannot convert value to lookup pair - must be an iterable with at least 2 elements; got \'{type(elem)}\''))
+			key, *values = elem
 
 			if key in mapping:
-				mapping[key].append(value)
+				mapping[key].extend(values)
 			else:
-				mapping[key] = [value]
+				mapping[key] = list(values)
 
 		return {k: tuple(v) for k, v in mapping.items()}
 
-	def to_dictionary[K, V](self, key_converter: typing.Optional[typing.Callable[[T], K]] = ..., value_converter: typing.Optional[typing.Callable[[T], V]] = ...) -> dict[K, V]:
+	def to_dictionary[K, V](self, converter: typing.Optional[typing.Callable[[T], tuple[K, V]]] = ...) -> dict[K, V]:
 		"""
 		*Evaluates this query*
-		:param key_converter: The function to convert elements to keys
-		:param value_converter: The function to convert elements to values
+		:param converter: The function to convert elements to key-value pairs
 		:return: A dict mapping each key with a single value
 		:raises InvalidArgumentException: If 'key_converter' is not callable
 		:raises InvalidArgumentException: If 'value_converter' is not callable
 		:raises KeyError: If a duplicate key is found
 		"""
 
-		Misc.raise_ifn(key_converter is ... or key_converter is None or callable(key_converter), Exceptions.InvalidArgumentException(LinqStream.to_dictionary, 'key_converter', type(key_converter)))
-		Misc.raise_ifn(value_converter is ... or value_converter is None or callable(value_converter), Exceptions.InvalidArgumentException(LinqStream.to_dictionary, 'value_converter', type(value_converter)))
+		Misc.raise_ifn(converter is ... or converter is None or callable(converter), Exceptions.InvalidArgumentException(LinqStream.to_dictionary, 'converter', type(converter)))
 		mapping: dict[K, V] = {}
 
 		for elem in self:
-			key: K = key_converter(elem) if callable(key_converter) else elem[0]
-			value: V = value_converter(elem) if callable(value_converter) else elem[1]
+			elem: tuple[K, V] = converter(elem) if callable(converter) else elem
+			Misc.raise_ifn(isinstance(elem, typing.Iterable) and len(elem := tuple(elem)) == 2, ValueError(f'Cannot convert value to dictionary pair - must be an iterable with at least 2 elements; got \'{type(elem)}\''))
+			key, value = elem
 
 			if key in mapping:
-				raise KeyError('Duplicate key during LinqStream evaluation')
+				raise KeyError(f'Duplicate key \'{key}\' in dictionary conversion')
 			else:
 				mapping[key] = value
 
@@ -2211,17 +2222,89 @@ class LinqStream[T](typing.Reversible):
 		"""
 
 		def _insert(stream: LinqStream[T]) -> typing.Generator[T]:
-			count: int = 0
-
-			for elem in stream:
-				if count == index:
-					yield element
-					count += 1
-					continue
-
+			for i, elem in enumerate(stream):
 				yield elem
-				count += 1
+
+				if i == index:
+					yield element
 
 		Misc.raise_ifn(isinstance(index, int), Exceptions.InvalidArgumentException(LinqStream.insert, 'index', type(index), (int,)))
 		Misc.raise_ifn((index := int(index)) >= 0, ValueError('Index cannot be negative'))
 		return LinqStream(_insert(self))
+
+	def serialize(self, serializer: typing.Literal['dill', 'pickle'] = 'pickle', *, on_error: typing.Literal['ignore', 'replace', 'pass', 'throw'] = 'replace', **kwargs) -> LinqStream[bytes | T | None]:
+		"""
+		Serializes all elements in this query into bytes
+		:param serializer: The serializer to use: either 'dill' or 'pickle'
+		:param on_error: How to handle serialization errors
+		:param kwargs: Extra arguments to pass to serializers
+		:return: The modified query
+		:raises InvalidArgumentException: If 'serializer' or 'on_error' is not a valid literal
+
+		*Serialization Errors*\n
+		- ignore: Erroneous element is removed from the resulting query\n
+		- replace: Erroneous element is replaced with 'None'\n
+		- pass: Erroneous element is passed as is without serialization\n
+		- throw: Error is raised
+		"""
+
+		Misc.raise_ifn(serializer == 'dill' or serializer == 'pickle', ValueError('Serializer must be either \'dill\' or \'pickle\''))
+		Misc.raise_ifn(on_error == 'ignore' or on_error == 'replace' or on_error == 'pass' or on_error == 'throw', ValueError('On Error must be either \'ignore\', \'replace\', \'pass\' or \'throw\''))
+
+		def __serialize(stream: LinqStream[T]) -> typing.Generator[bytes | T | None]:
+			for elem in stream:
+				try:
+					if serializer == 'dill':
+						yield dill.dumps(elem, **kwargs)
+					elif serializer == 'pickle':
+						yield pickle.dumps(elem, **kwargs)
+				except Exception as err:
+					if on_error == 'ignore':
+						continue
+					elif on_error == 'replace':
+						yield None
+					elif on_error == 'pass':
+						yield elem
+					elif on_error == 'throw':
+						raise err from None
+
+		return LinqStream(__serialize(self))
+
+	def deserialize[T](self, serializer: typing.Literal['dill', 'pickle'] = 'pickle', *, on_error: typing.Literal['ignore', 'replace', 'pass', 'throw'] = 'replace', **kwargs) -> LinqStream[T | bytes | None]:
+		"""
+		Deserializes all elements in this query into bytes
+		:param serializer: The serializer to use: either 'dill' or 'pickle'
+		:param on_error: How to handle serialization errors
+		:param kwargs: Extra arguments to pass to serializers
+		:return: The modified query
+		:raises InvalidArgumentException: If 'serializer' or 'on_error' is not a valid literal
+		:raises TypeError: If the specified element is not a bytes or bytearray object
+
+		*Deserialization Errors*\n
+		- ignore: Erroneous element is removed from the resulting query\n
+		- replace: Erroneous element is replaced with 'None'\n
+		- pass: Erroneous element is passed as is without deserialization\n
+		- throw: Error is raised
+		"""
+
+		Misc.raise_ifn(serializer == 'dill' or serializer == 'pickle', ValueError('Serializer must be either \'dill\' or \'pickle\''))
+		Misc.raise_ifn(on_error == 'ignore' or on_error == 'replace' or on_error == 'pass' or on_error == 'throw', ValueError('On Error must be either \'ignore\', \'replace\', \'pass\' or \'throw\''))
+
+		def __deserialize(stream: LinqStream[T]) -> typing.Generator[bytes]:
+			for elem in stream:
+				try:
+					if serializer == 'dill':
+						yield dill.loads(elem, **kwargs)
+					elif serializer == 'pickle':
+						yield pickle.loads(elem, **kwargs)
+				except Exception as err:
+					if on_error == 'ignore':
+						continue
+					elif on_error == 'replace':
+						yield None
+					elif on_error == 'pass':
+						yield elem
+					elif on_error == 'throw':
+						raise err from None
+
+		return LinqStream(__deserialize(self))

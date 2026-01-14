@@ -107,7 +107,7 @@ class Promise[T]:
 
 		return self.response(throw_err) if done else ...
 
-	def then(self, callback: typing.Callable[[Promise[T]], None]) -> None:
+	def then(self, callback: typing.Callable[[Promise[T]], ...]) -> None:
 		"""
 		Binds a callback to execute once this promise is fulfilled
 		Callback should be a callable accepting this promise as the first argument
@@ -552,6 +552,7 @@ class ConcurrentFunction:
 		if self.__thread__.is_alive():
 			self.__thread__.join(timeout)
 
+	@property
 	def is_running(self) -> bool:
 		"""
 		:return: Whether the function process is still running
@@ -610,6 +611,10 @@ class ThreadPool:
 		if self.__synchronous_start__:
 			for worker in self.__processes__:
 				psutil.Process(worker.pid).resume()
+
+	def __await__(self) -> typing.Iterator[None]:
+		while any(p.is_alive() for p in self.__processes__):
+			yield
 
 	def wait(self, timeout: float = None) -> None:
 		"""
@@ -726,17 +731,13 @@ class ThreadPool:
 
 		return any(x.is_alive() for x in self.__processes__)
 
+	@property
 	def active_count(self) -> int:
 		"""
 		:return: The number of workers currently running
 		"""
 
-		count: int = 0
-
-		for worker in self.__processes__:
-			count += int(worker.is_alive())
-
-		return count
+		return len([worker for worker in self.__processes__ if worker.is_alive()])
 
 	@property
 	def pids(self) -> tuple[int, ...]:
@@ -784,6 +785,10 @@ class Thread:
 		self.__proc__: typing.Optional[multiprocessing.Process] = None
 		Misc.raise_ifn(all(isinstance(x, int) and int(x) > 0 for x in self.__cores__), ValueError('One or more affinity cores is not a positive integer'))
 
+	def __await__(self) -> typing.Iterator[None]:
+		while self.__proc__.is_alive():
+			yield
+
 	def signal(self, sig: int) -> None:
 		"""
 		Sends a signal to the function process
@@ -812,6 +817,7 @@ class Thread:
 		psutil.Process(self.__proc__.pid).cpu_affinity(list(self.__cores__))
 		return self.__proc__.pid
 
+	@property
 	def is_alive(self) -> bool:
 		"""
 		:return: Whether the function process is alive
@@ -819,6 +825,7 @@ class Thread:
 
 		return self.__proc__.is_alive()
 
+	@property
 	def core(self) -> tuple[int, ...]:
 		"""
 		:return: The current core this thread runs on

@@ -633,7 +633,9 @@ class KVP:
 			formatter = value.formatter
 			value = value.value
 
-			if formatter == 'B':
+			if value is None:
+				return ''
+			elif formatter == 'B':
 				return f'{"true" if value else "false"}&B'
 			elif formatter == 'L':
 				return f'{value:X}&L'
