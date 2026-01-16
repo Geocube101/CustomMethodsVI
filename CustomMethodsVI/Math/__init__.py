@@ -1,2 +1,2 @@
-from . import Algebra, Based, Functions, Tensor, Plotter, Vector
-__all__ = ['Algebra', 'Based', 'Functions', 'Tensor', 'Plotter', 'Vector']
+from . import Algebra, Based, Functions, Plotter, Tensor, Vector
+__all__ = ['Algebra', 'Based', 'Functions', 'Plotter', 'Tensor', 'Vector']
