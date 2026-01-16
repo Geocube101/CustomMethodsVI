@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import flask
 import flask_socketio
+import ipaddress
 import json
 import os
 import socketio
 import sys
 import threading
 import time
+import traceback
 import typing
 import uuid
 
@@ -926,7 +928,7 @@ class FlaskServerAPI:
 		Class holding API session information
 		"""
 
-		def __init__(self, ip: str, token: uuid.UUID, start_time: float | datetime.datetime):
+		def __init__(self, ip: str | ipaddress.IPv4Address | ipaddress.IPv6Address, token: uuid.UUID, start_time: float | datetime.datetime):
 			"""
 			Class holding API session information
 			- Constructor -
@@ -935,7 +937,7 @@ class FlaskServerAPI:
 			:param start_time: The session start time
 			"""
 
-			self.__ip__: str = str(ip)
+			self.__ip__: ipaddress.IPv4Address | ipaddress.IPv6Address = ip if isinstance(ip, (ipaddress.IPv4Address, ipaddress.IPv6Address)) else ipaddress.ip_address(str(ip))
 			self.__token__: uuid.UUID = token
 			self.__start__: datetime.datetime = datetime.datetime.fromtimestamp(start_time, datetime.timezone.utc) if isinstance(start_time, float) else start_time
 			self.__state__: bool = True
@@ -984,7 +986,7 @@ class FlaskServerAPI:
 				raise ValueError('Specified duration is invalid')
 
 		@property
-		def ip(self) -> str:
+		def ip(self) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
 			"""
 			:return: This session's IP
 			"""
@@ -1008,6 +1010,13 @@ class FlaskServerAPI:
 			return self.__start__
 
 	__RESTRICTED_EIDS: tuple[str, ...] = ('connect', 'disconnect')
+
+	@staticmethod
+	def __parse_auth_token__(token: str) -> typing.Optional[uuid.UUID]:
+		try:
+			return uuid.UUID(int=int(token, 10)) if isinstance(token, str) and len(token := str(token)) > 0 else None
+		except (ValueError, TypeError):
+			return None
 	
 	def __init__(self, app: flask.Flask, route: str = '/api', *, requires_auth: bool = False):
 		"""
@@ -1030,11 +1039,11 @@ class FlaskServerAPI:
 		super().__init__()
 		self.__app__: flask.Flask = app
 		self.__route__: str = f'/{route}'
-		self.__sessions__: dict[str, FlaskServerAPI.APISessionInfo] = {}
-		self.__callbacks__: dict[str, tuple[typing.Callable[[dict[str, typing.Any]], dict[str, typing.Any]], bool]] = {}
+		self.__sessions__: dict[uuid.UUID, FlaskServerAPI.APISessionInfo] = {}
+		self.__callbacks__: dict[str, tuple[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], dict[str, typing.Any]], bool]] = {}
 		self.__auth__: bool = bool(requires_auth)
 		self.__connector__: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], bool | int | dict[str, typing.Any] | None] | tuple[bool | int, dict[str, typing.Any]]] = None
-		self.__disconnector__: typing.Optional[typing.Callable[[dict[str, typing.Any]], dict[str, typing.Any] | None]] = None
+		self.__disconnector__: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], dict[str, typing.Any] | None]] = None
 		self.__setup_auth_channels__()
 		self.__app__.add_url_rule(f'{self.__route__}/<path:route>', view_func=self.__flask_route__, provide_automatic_options=False, methods=('POST',))
 			
@@ -1052,14 +1061,17 @@ class FlaskServerAPI:
 		def connect():
 			if flask.request.content_type != 'application/json':
 				return flask.Response(response={'error': 'invalid-content-type'}, status=415, content_type='application/json')
-			elif flask.request.remote_addr in self.__sessions__ and not self.__sessions__[flask.request.remote_addr].closed:
-				return flask.Response(json.dumps({'auth': str(self.__sessions__[flask.request.remote_addr].token.int)}), content_type='application/json')
 			elif self.__connector__ is None:
-				return flask.Response(json.dumps({'auth': None}), content_type='application/json')
+				return flask.Response(json.dumps({'auth': 0}), content_type='application/json')
 
 			token: uuid.UUID = self.__next_token__()
 			session: FlaskServerAPI.APISessionInfo = FlaskServerAPI.APISessionInfo(flask.request.remote_addr, token, datetime.datetime.now(datetime.timezone.utc))
-			response: dict[str, typing.Any] | bool | int | None | tuple[bool | int, dict[str, typing.Any]] = self.__connector__(session, flask.request.json)
+			response: dict[str, typing.Any] | bool | int | None | tuple[bool | int, dict[str, typing.Any]] = None
+
+			try:
+				response = self.__connector__(session, flask.request.json)
+			except Exception as e:
+				sys.stderr.write(''.join(traceback.format_exception(e)))
 			
 			if isinstance(response, (bool, int, tuple, dict)):
 				ok: bool | int
@@ -1076,7 +1088,7 @@ class FlaskServerAPI:
 					res = response
 
 				if (isinstance(ok, bool) and bool(ok)) or (isinstance(ok, int) and 200 <= int(ok) < 300):
-					self.__sessions__[flask.request.remote_addr] = session
+					self.__sessions__[token] = session
 					content: dict[str, typing.Any] = {'auth': str(token.int)}
 
 					if isinstance(res, dict):
@@ -1084,19 +1096,26 @@ class FlaskServerAPI:
 
 					return flask.Response(json.dumps(content), content_type='application/json')
 				else:
-					return flask.Response(json.dumps({'auth': None}), content_type='application/json')
+					return flask.Response(json.dumps({'auth': None}), status=401, content_type='application/json')
 			elif response is not None:
 				raise TypeError('Unexpected response type from connector callback - Expected either a boolean, integer, JSON dictionary, or None')
 			else:
-				return flask.Response(json.dumps({'auth': None}), content_type='application/json')
+				return flask.Response(json.dumps({'auth': None}), status=401, content_type='application/json')
 		
 		@self.__app__.route(f'{self.__route__}/disconnect', methods=('POST',))
 		def disconnect():
 			if flask.request.content_type != 'application/json':
-				return flask.Response(response={'error': 'invalid-content-type'}, status=415, content_type='application/json')
-			elif flask.request.remote_addr in self.__sessions__ and not self.__sessions__[flask.request.remote_addr].closed:
-				response: dict[typing.Any] | None = None if self.__disconnector__ is None else self.__disconnector__(flask.request.json)
-				del self.__sessions__[flask.request.remote_addr]
+				return flask.Response(response=json.dumps({'error': 'invalid-content-type'}), status=415, content_type='application/json')
+			elif (session := self.__sessions__.get(auth := FlaskServerAPI.__parse_auth_token__(flask.request.json.get('auth')))) is not None and not session.closed:
+				del self.__sessions__[auth]
+				response: dict[typing.Any] | None = None
+
+				if self.__disconnector__ is not None:
+					try:
+						response = self.__disconnector__(session, flask.request.json)
+					except Exception as e:
+						sys.stderr.write(''.join(traceback.format_exception(e)))
+
 				content: dict[str, typing.Any] = {} if response is None else response
 
 				if not isinstance(content, dict):
@@ -1104,7 +1123,7 @@ class FlaskServerAPI:
 
 				return flask.Response(json.dumps(content), content_type='application/json')
 			else:
-				return flask.Response(response={'error': 'not-authenticated'}, status=401, content_type='application/json')
+				return flask.Response(response=json.dumps({'error': 'not-authenticated'}), status=401, content_type='application/json')
 
 	def __flask_route__(self, route: str) -> flask.Response:
 		"""
@@ -1115,16 +1134,25 @@ class FlaskServerAPI:
 		"""
 
 		if route not in self.__callbacks__:
-			return flask.Response(response={'error': 'no-api-endpoint'}, status=404, content_type='application/json')
+			return flask.Response(response=json.dumps({'error': 'no-api-endpoint'}), status=404, content_type='application/json')
 		elif flask.request.content_type != 'application/json':
-			return flask.Response(response={'error': 'invalid-content-type'}, status=415, content_type='application/json')
+			return flask.Response(response=json.dumps({'error': 'invalid-content-type'}), status=415, content_type='application/json')
+		elif (auth := FlaskServerAPI.__parse_auth_token__(flask.request.json.get('auth'))) is None and self.__auth__:
+			return flask.Response(response=json.dumps({'error': 'not-authenticated'}), status=401, content_type='application/json')
 		else:
 			callback, requires_auth = self.__callbacks__[route]
+			session: typing.Optional[FlaskServerAPI.APISessionInfo] = self.__sessions__.get(auth)
 
-			if self.__auth__ and requires_auth and (flask.request.remote_addr not in self.__sessions__ or not self.__sessions__[flask.request.remote_addr].closed):
-				return flask.Response(response={'error': 'not-authenticated'}, status=401, content_type='application/json')
+			if self.__auth__ and requires_auth and (session is None or session.closed):
+				return flask.Response(response=json.dumps({'error': 'not-authenticated'}), status=401, content_type='application/json')
 
-			response: dict[str, typing.Any] | None = callback(flask.request.json)
+			response: dict[str, typing.Any] | None = None
+
+			try:
+				response = callback(session, flask.request.json)
+			except Exception as e:
+				sys.stderr.write(''.join(traceback.format_exception(e)))
+
 			content: dict[str, typing.Any] = {} if response is None else response
 
 			if not isinstance(content, dict):
@@ -1151,61 +1179,61 @@ class FlaskServerAPI:
 		:param session: The unclosed session to add
 		:raises InvalidArgumentException: If 'session' is not an APISessionInfo instance
 		:raises RuntimeError: If 'session' is closed
-		:raises ValueError: If the length of the session's IP is 0
 		:raises RuntimeError: If this API doesn't support authentication
 		:raises RuntimeError: If the session's token already exists
 		"""
 
 		Misc.raise_ifn(isinstance(session, FlaskServerAPI.APISessionInfo), Exceptions.InvalidArgumentException(FlaskServerAPI.add_session, 'session', type(session), (FlaskServerAPI.APISessionInfo,)))
 		Misc.raise_if(session.closed, RuntimeError('Specified session is already closed'))
-		Misc.raise_if(len(session.ip) == 0, ValueError('Invalid session IP'))
 		Misc.raise_ifn(self.__auth__, RuntimeError('This API does not support authentication'))
 		Misc.raise_if(session.token in [s.token for s in self.__sessions__.values() if not s.closed], RuntimeError('Session token already exists'))
-		self.__sessions__[session.ip] = session
+		self.__sessions__[session.token] = session
 
-	def close_session(self, ip: str) -> None:
+	def close_session(self, token: uuid.UUID) -> None:
 		"""
-		Closes a session by IP
-		:param ip: The session's IP address
-		:raises InvalidArgumentException: If 'ip' is not a string
+		Closes a session by uuid
+		:param token: The session's UUID
+		:raises InvalidArgumentException: If 'token' is not a UUID
 		"""
 
-		Misc.raise_ifn(isinstance(ip, str), Exceptions.InvalidArgumentException(FlaskServerAPI.close_session, 'ip', type(ip), (str,)))
+		Misc.raise_ifn(isinstance(token, uuid.UUID), Exceptions.InvalidArgumentException(FlaskServerAPI.close_session, 'token', type(token), (uuid.UUID,)))
 
-		if (ip := str(ip)) in self.__sessions__:
-			self.__sessions__[ip].close()
-			del self.__sessions__[ip]
+		if (session := self.__sessions__.pop(token, None)) is not None:
+			session.close()
 
-	def open_session(self, ip: str, start_time: typing.Optional[float | datetime.datetime] = ...) -> uuid.UUID:
+	def open_session(self, ip: str | ipaddress.IPv4Address | ipaddress.IPv6Address, start_time: typing.Optional[float | datetime.datetime] = ...) -> FlaskServerAPI.APISessionInfo:
 		"""
-		Opens a new client API session
+		Opens a new client API session\n
+		Sessions may only be explicitly opened if this API requires authentication
 		:param ip: The session's IP
 		:param start_time: The session's start time or current if unset
 		:return: The new session's token
-		:raises InvalidArgumentException: If 'ip' is not a string
+		:raises InvalidArgumentException: If 'ip' is not a string or ip address
 		:raises InvalidArgumentException: If 'start_time' is not a float or datetime instance
-		:raises ValueError: If the length of 'ip' is 0
+		:raises ValueError: If 'ip' is a string and the length of 'ip' is 0
 		:raises RuntimeError: If this API doesn't support authentication
 		"""
 
-		Misc.raise_ifn(isinstance(ip, str), Exceptions.InvalidArgumentException(FlaskServerAPI.open_session, 'ip', type(ip), (str,)))
+		Misc.raise_ifn(isinstance(ip, (str, ipaddress.IPv4Address, ipaddress.IPv6Address)), Exceptions.InvalidArgumentException(FlaskServerAPI.open_session, 'ip', type(ip), (str, ipaddress.IPv4Address, ipaddress.IPv6Address)))
 		Misc.raise_ifn(isinstance(start_time, (float, datetime.datetime)), Exceptions.InvalidArgumentException(FlaskServerAPI.open_session, 'start_time', type(start_time), (float, datetime.datetime, int)))
-		Misc.raise_if(len(ip := str(ip)) == 0, ValueError('Invalid session IP'))
+		Misc.raise_if(isinstance(ip, str) and len(ip := str(ip)) == 0, ValueError('Invalid session IP'))
 		Misc.raise_ifn(self.__auth__, RuntimeError('This API does not support authentication'))
 		token: uuid.UUID = self.__next_token__()
-		self.__sessions__[ip] = FlaskServerAPI.APISessionInfo(ip, token, start_time)
-		return token
+		session: FlaskServerAPI.APISessionInfo = FlaskServerAPI.APISessionInfo(ip, token, start_time)
+		self.__sessions__[token] = session
+		return session
 
-	def get_session_by_ip(self, ip: str) -> typing.Optional[FlaskServerAPI.APISessionInfo]:
+	def get_sessions_by_ip(self, ip: str | ipaddress.IPv4Address | ipaddress.IPv6Address) -> list[FlaskServerAPI.APISessionInfo]:
 		"""
-		Gets a session by IP
+		Gets all sessions with the specified IP
 		:param ip: The target IP address
-		:return: The client session or None if not found
-		:raises InvalidArgumentException: If 'ip' is not a string
+		:return: A list of matching client sessions
+		:raises InvalidArgumentException: If 'ip' is not a string or ip address
 		"""
 
-		Misc.raise_ifn(isinstance(ip, str), Exceptions.InvalidArgumentException(FlaskServerAPI.get_session_by_ip, 'ip', type(ip), (str,)))
-		return self.__sessions__.get(str(ip))
+		Misc.raise_ifn(isinstance(ip, (str, ipaddress.IPv4Address, ipaddress.IPv6Address)), Exceptions.InvalidArgumentException(FlaskServerAPI.get_sessions_by_ip, 'ip', type(ip), (str, ipaddress.IPv4Address, ipaddress.IPv6Address)))
+		ip: ipaddress.IPv4Address | ipaddress.IPv6Address = ipaddress.ip_address(ip)
+		return [session for session in self.__sessions__.values() if session.ip == ip]
 
 	def get_session_by_token(self, token: uuid.UUID | int | str) -> typing.Optional[FlaskServerAPI.APISessionInfo]:
 		"""
@@ -1220,7 +1248,7 @@ class FlaskServerAPI:
 		matches: tuple[FlaskServerAPI.APISessionInfo, ...] = tuple(session for session in self.__sessions__.values() if session.token == true_token)
 		return matches[0] if len(matches) == 1 else None
 
-	def endpoint(self, route: str, callback: typing.Optional[typing.Callable[[dict[str, typing.Any]], dict[str, typing.Any]]] = ..., *, requires_auth: bool = True) -> typing.Optional[typing.Callable[[typing.Callable[[dict[str, typing.Any]], dict[str, typing.Any]]], None]]:
+	def endpoint(self, route: str, callback: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], dict[str, typing.Any]]] = ..., *, requires_auth: bool = True) -> typing.Optional[typing.Callable[[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], dict[str, typing.Any]]], None]]:
 		"""
 		Binds a callback to the specified API endpoint
 		:param route: The API endpoint
@@ -1229,8 +1257,7 @@ class FlaskServerAPI:
 		:return: None or a binder if used as a decorator
 		:raises InvalidArgumentException: If 'route' is not a string
 		:raises InvalidArgumentException: If 'requires_auth' is not a boolean
-		:raises ValueError: If 'route' is empty or contains invalid characters
-		:raises TypeError: If any method in 'methods' is not a string
+		:raises ValueError: If 'route' is empty, already bound, contains invalid characters, or is a restricted event ID
 		"""
 
 		Misc.raise_ifn(isinstance(route, str), Exceptions.InvalidArgumentException(FlaskServerAPI.endpoint, 'route', type(route), (str,)))
@@ -1242,7 +1269,7 @@ class FlaskServerAPI:
 			raise ValueError(f'Specified event ID \'{route}\' is restricted')
 
 		if callback is None or callback is ...:
-			def binder(func: typing.Callable[[dict[str, typing.Any]], dict[str, typing.Any]]) -> None:
+			def binder(func: typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], dict[str, typing.Any]]) -> None:
 				self.endpoint(route, func, requires_auth=requires_auth)
 
 			return binder
@@ -1283,7 +1310,7 @@ class FlaskServerAPI:
 		else:
 			self.__connector__ = callback
 
-	def disconnector(self, callback: typing.Optional[typing.Callable[[dict[str, typing.Any]], bool | int | dict[str, typing.Any] | None] | tuple[bool | int, dict[str, typing.Any]]] = None) -> typing.Optional[typing.Callable[[typing.Callable[[dict[str, typing.Any]], bool | int | dict[str, typing.Any] | None] | tuple[bool | int, dict[str, typing.Any]]], None]]:
+	def disconnector(self, callback: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], bool | int | dict[str, typing.Any] | None] | tuple[bool | int, dict[str, typing.Any]]] = None) -> typing.Optional[typing.Callable[[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], bool | int | dict[str, typing.Any] | None] | tuple[bool | int, dict[str, typing.Any]]], None]]:
 		"""
 		Binds a callback to the disconnection event
 		The callback may return JSON to send to client on disconnect
@@ -1295,7 +1322,7 @@ class FlaskServerAPI:
 		"""
 
 		if callback is None:
-			def binder(func: typing.Callable[[dict[str, typing.Any]], bool | int | dict[str, typing.Any] | None]) -> None:
+			def binder(func: typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], bool | int | dict[str, typing.Any] | None]) -> None:
 				self.disconnector(func)
 
 			return binder
