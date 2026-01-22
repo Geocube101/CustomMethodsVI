@@ -329,8 +329,7 @@ class KVP:
 						else:
 							token.append(char)
 
-					if len(token) > 0:
-						values.append(_decode_value(line_number, line, ''.join(token)))
+					values.append(_decode_value(line_number, line, ''.join(token)))
 
 					if isstring:
 						raise KVPDecodeError(f'Unclosed string: \'{"".join(token)}\' - LINE.{line_number + 1} {line}')

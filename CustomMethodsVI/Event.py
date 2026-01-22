@@ -5,11 +5,12 @@ import multiprocessing.queues
 import threading
 import typing
 
-from . import Exceptions
 from . import Misc
 
+HCB: typing.TypeVarTuple = typing.TypeVarTuple('HCB')
 
-class EventHandler:
+
+class EventHandler[*HCB]:
 	"""
 	Class for holding a list of callbacks to trigger
 	"""
@@ -47,7 +48,7 @@ class EventHandler:
 		except Exception as err:
 			queue.put((index, err))
 
-	def __init__(self, *callbacks: typing.Callable):
+	def __init__(self, *callbacks: typing.Callable[[*HCB], ...]):
 		"""
 		Class for holding a list of callbacks to trigger
 		- Constructor -
@@ -55,9 +56,9 @@ class EventHandler:
 		"""
 
 		Misc.raise_ifn(all(callable(x) for x in callbacks), ValueError('One or more callbacks is not callable'))
-		self.__callbacks__: list[typing.Callable] = list(callbacks)
+		self.__callbacks__: list[typing.Callable[[*HCB], ...]] = list(callbacks)
 
-	def __iadd__(self, callback: typing.Callable) -> EventHandler:
+	def __iadd__(self, callback: typing.Callable[[*HCB], ...]) -> EventHandler[*HCB]:
 		"""
 		Registers a new callback to this event handler
 		:param callback: The callback to bind
@@ -70,7 +71,7 @@ class EventHandler:
 		self.__callbacks__.append(callback)
 		return self
 
-	def __isub__(self, callback: typing.Callable) -> EventHandler:
+	def __isub__(self, callback: typing.Callable[[*HCB], ...]) -> EventHandler[*HCB]:
 		"""
 		Unregisters a callback to this event handler
 		:param callback: The callback to bind
@@ -85,7 +86,7 @@ class EventHandler:
 
 		return self
 
-	def __contains__(self, callback: typing.Callable) -> bool:
+	def __contains__(self, callback: typing.Callable[[*HCB], ...]) -> bool:
 		"""
 		:param callback: The callback to check
 		:return: Whether the specified callback is registered in this event handler
@@ -110,7 +111,7 @@ class EventHandler:
 		:param kwargs: The keyword arguments to supply to each callback
 		"""
 
-		exception: typing.Optional[tuple[typing.Callable, Exception]] = None
+		exception: typing.Optional[tuple[typing.Callable[[*HCB], ...], Exception]] = None
 
 		for cb in self.__callbacks__:
 			try:
@@ -135,17 +136,17 @@ class EventHandler:
 		:param kwargs: The keyword arguments to supply to each callback
 		"""
 
-		threads: list[list[threading.Thread | typing.Callable | typing.Optional[Exception]]] = []
+		threads: list[list[threading.Thread | typing.Callable[[*HCB], ...] | typing.Optional[Exception]]] = []
 
 		for i, cb in enumerate(self.__callbacks__):
 			thread: threading.Thread = threading.Thread(target=EventHandler.__thread_callback_wrapper__, args=(cb, threads, i, args, kwargs))
 			threads.append([thread, cb, None])
 
-		for thread in threads:
-			thread[0].start()
+		for thr in threads:
+			thr[0].start()
 
-		for thread in threads:
-			thread[0].join()
+		for thr in threads:
+			thr[0].join()
 
 		if not ignore_exceptions__:
 			for (thread, cb, err) in threads:
@@ -162,18 +163,18 @@ class EventHandler:
 		:param kwargs: The keyword arguments to supply to each callback
 		"""
 
-		threads: list[list[multiprocessing.Process | typing.Callable]] = []
+		threads: list[list[multiprocessing.Process | typing.Callable[[*HCB], ...]]] = []
 		queue: multiprocessing.Queue = multiprocessing.Queue()
 
 		for i, cb in enumerate(self.__callbacks__):
 			thread: multiprocessing.Process = multiprocessing.Process(target=EventHandler.__process_callback_wrapper__, args=(cb, i, queue, args, kwargs))
 			threads.append([thread, cb])
 
-		for thread in threads:
-			thread[0].start()
+		for thr in threads:
+			thr[0].start()
 
-		for thread in threads:
-			thread[0].join()
+		for thr in threads:
+			thr[0].join()
 
 		if not ignore_exceptions__:
 			exceptions: list[tuple[int, Exception]] = []
@@ -189,7 +190,7 @@ class EventHandler:
 					raise RuntimeError(f'An exception occurred during the following callback:\n\t...\n{threads[i][1]}') from err
 
 
-class MultiEventHandler:
+class MultiEventHandler[*HCB]:
 	"""
 	Class for holding multiple lists of callbacks to trigger
 	"""
@@ -204,7 +205,7 @@ class MultiEventHandler:
 		Misc.raise_ifn(all(isinstance(x, str) for x in event_ids), TypeError('One or more event IDs is not a string'))
 		self.__handlers__: dict[str, EventHandler] = {str(eid): EventHandler() for eid in event_ids}
 
-	def __contains__(self, eid_cb: str | typing.Callable) -> bool:
+	def __contains__(self, eid_cb: str | typing.Callable[[*HCB], ...]) -> bool:
 		"""
 		:param eid_cb: The event ID or callback
 		:return: Whether an event ID or callback is held within this event handler
@@ -217,7 +218,7 @@ class MultiEventHandler:
 		else:
 			return False
 
-	def __setitem__(self, eid: str, handler: EventHandler | typing.Iterable[typing.Callable] | typing.Callable) -> None:
+	def __setitem__(self, eid: str, handler: EventHandler[*HCB] | typing.Iterable[typing.Callable[[*HCB], ...]] | typing.Callable[[*HCB], ...]) -> None:
 		"""
 		Overrides or adds a new event handler for the specified event ID
 		:param eid: The event ID
@@ -246,7 +247,7 @@ class MultiEventHandler:
 		if eid in self.__handlers__:
 			del self.__handlers__[eid]
 
-	def __getitem__(self, eid: str) -> EventHandler:
+	def __getitem__(self, eid: str) -> EventHandler[*HCB]:
 		"""
 		Gets the event handler for a specific event ID
 		:param eid: The event ID
@@ -269,7 +270,7 @@ class MultiEventHandler:
 
 		self.__handlers__.clear()
 
-	def on(self, eid: str, callback: typing.Optional[typing.Callable] = ...) -> typing.Optional[typing.Callable]:
+	def on(self, eid: str, callback: typing.Optional[typing.Callable[[*HCB], ...]] = ...) -> typing.Optional[typing.Callable[[*HCB], ...]]:
 		"""
 		Registers a callback for the specified event ID
 		:param eid: The event ID
@@ -279,13 +280,13 @@ class MultiEventHandler:
 		"""
 
 		if callback is None or callback is ...:
-			def binder(func: typing.Callable) -> None:
+			def binder(func: typing.Callable[[*HCB], ...]) -> None:
 				if not callable(func):
 					raise ValueError('Specified callback is not callable')
 				elif eid in self.__handlers__:
 					self.__handlers__[eid] += func
 				else:
-					handler_: EventHandler = EventHandler()
+					handler_: EventHandler[*HCB] = EventHandler()
 					handler_ += func
 					self.__handlers__[eid] = handler_
 
@@ -295,11 +296,11 @@ class MultiEventHandler:
 		elif eid in self.__handlers__:
 			self.__handlers__[eid] += callback
 		else:
-			handler: EventHandler = EventHandler()
+			handler: EventHandler[*HCB] = EventHandler()
 			handler += callback
 			self.__handlers__[eid] = handler
 
-	def off(self, eid: str, callback: typing.Optional[typing.Callable] = ...) -> None:
+	def off(self, eid: str, callback: typing.Optional[typing.Callable[[*HCB], ...]] = ...) -> None:
 		"""
 		Unregisters a callback for the specified event ID or all callbacks for the specified event ID if callback is not supplied
 		:param eid: The event ID

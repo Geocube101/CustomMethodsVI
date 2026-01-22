@@ -1045,7 +1045,7 @@ class FlaskServerAPI:
 		self.__connector__: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], bool | int | dict[str, typing.Any] | None] | tuple[bool | int, dict[str, typing.Any]]] = None
 		self.__disconnector__: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], dict[str, typing.Any] | None]] = None
 		self.__setup_auth_channels__()
-		self.__app__.add_url_rule(f'{self.__route__}/<path:route>', view_func=self.__flask_route__, provide_automatic_options=False, methods=('POST',))
+		self.__app__.add_url_rule(f'{self.__route__}/<path:route>', view_func=self.__flask_route__, provide_automatic_options=False, methods=('POST',), endpoint=f'{self.__route__.replace('/', '_')}_flaskroute')
 			
 	def __setup_auth_channels__(self) -> None:
 		"""
@@ -1057,7 +1057,7 @@ class FlaskServerAPI:
 		if not self.__auth__:
 			return
 		
-		@self.__app__.route(f'{self.__route__}/connect', methods=('POST',))
+		@self.__app__.route(f'{self.__route__}/connect', methods=('POST',), endpoint=f'{self.__route__.replace('/', '_')}_connect')
 		def connect():
 			if flask.request.content_type != 'application/json':
 				return flask.Response(response={'error': 'invalid-content-type'}, status=415, content_type='application/json')
@@ -1096,13 +1096,13 @@ class FlaskServerAPI:
 
 					return flask.Response(json.dumps(content), content_type='application/json')
 				else:
-					return flask.Response(json.dumps({'auth': None}), status=401, content_type='application/json')
+					return flask.Response(json.dumps({'auth': None}), status=200 if isinstance(ok, bool) and ok else int(ok), content_type='application/json')
 			elif response is not None:
 				raise TypeError('Unexpected response type from connector callback - Expected either a boolean, integer, JSON dictionary, or None')
 			else:
 				return flask.Response(json.dumps({'auth': None}), status=401, content_type='application/json')
 		
-		@self.__app__.route(f'{self.__route__}/disconnect', methods=('POST',))
+		@self.__app__.route(f'{self.__route__}/disconnect', methods=('POST',), endpoint=f'{self.__route__.replace('/', '_')}_disconnect')
 		def disconnect():
 			if flask.request.content_type != 'application/json':
 				return flask.Response(response=json.dumps({'error': 'invalid-content-type'}), status=415, content_type='application/json')
@@ -1146,19 +1146,24 @@ class FlaskServerAPI:
 			if self.__auth__ and requires_auth and (session is None or session.closed):
 				return flask.Response(response=json.dumps({'error': 'not-authenticated'}), status=401, content_type='application/json')
 
-			response: dict[str, typing.Any] | None = None
-
 			try:
-				response = callback(session, flask.request.json)
+
+				response: dict = callback(session, flask.request.json)
+
+				if response is None or response is ...:
+					response = {}
+				elif response is NotImplemented:
+					return flask.Response(json.dumps({'error': 'NotImplemented'}), status=501, content_type='application/json')
+				elif isinstance(response, int):
+					return flask.Response(json.dumps({'error': 'NotImplemented'}), status=int(response), content_type='application/json')
+				elif isinstance(response, dict):
+					return flask.Response(json.dumps(response), status=200, content_type='application/json')
+				else:
+					raise TypeError(f'Unexpected response type from API callback \'{route}\' - Expected either a JSON dictionary or None')
+
 			except Exception as e:
 				sys.stderr.write(''.join(traceback.format_exception(e)))
-
-			content: dict[str, typing.Any] = {} if response is None else response
-
-			if not isinstance(content, dict):
-				raise TypeError(f'Unexpected response type from API callback \'{route}\' - Expected either a JSON dictionary or None')
-
-			return flask.Response(json.dumps(content), content_type='application/json')
+				return flask.Response(json.dumps({'error': 'An internal error has occurred'}), status=500, content_type='application/json')
 
 	def __next_token__(self) -> uuid.UUID:
 		"""

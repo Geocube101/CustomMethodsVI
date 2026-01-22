@@ -392,7 +392,7 @@ class ListIterable[T](Iterable[T]):
 		return self
 
 
-class LinqIterable[T](Iterable, Stream.LinqStream):
+class LinqIterable[T](Iterable[T], Stream.LinqStream[T]):
 	"""
 	An iterable with properties of 'Iterable' and 'LinqStream'
 	Supports all LINQ queries that 'LinqStream' supports
@@ -413,7 +413,7 @@ class LinqIterable[T](Iterable, Stream.LinqStream):
 		return LinqIterable(self)
 
 
-class SortableIterable[T](LinqIterable):
+class SortableIterable[T](LinqIterable[T]):
 	"""
 	Class representing an iterable containing sorting functions
 	"""
@@ -441,7 +441,7 @@ class SortableIterable[T](LinqIterable):
 		return SortableIterable(self)
 
 
-class SortedList[T](SortableIterable):
+class SortedList[T](SortableIterable[T]):
 	"""
 	A list using binary search to maintain a sorted list of elements
 	"""
@@ -871,7 +871,7 @@ class SortedList[T](SortableIterable):
 		return SortedList(self)
 
 
-class ReverseSortedList[T](SortableIterable):
+class ReverseSortedList[T](SortableIterable[T]):
 	"""
 	A list using binary search to maintain a reverse sorted list of elements
 	"""
@@ -1929,7 +1929,7 @@ class ByteString(ListIterable[int], bytearray):
 			yield byte.to_bytes(1, sys.byteorder)
 
 
-class FixedArray[T](SortableIterable):
+class FixedArray[T](SortableIterable[T]):
 	"""
 	Class representing an array of a fixed size
 	"""
@@ -1979,7 +1979,7 @@ class FixedArray[T](SortableIterable):
 		return FixedArray(self)
 
 
-class SpinQueue[T](SortableIterable):
+class SpinQueue[T](SortableIterable[T]):
 	"""
 	Class representing a queue-like array of a maximum size
 	"""

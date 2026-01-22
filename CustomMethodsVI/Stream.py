@@ -1482,16 +1482,34 @@ class LinqStream[T](typing.Reversible):
 
 		return next(iter(self))
 
-	def cast[Q](self, cls: type[Q]) -> LinqStream[Q]:
+	def cast[Q](self, cls: type[Q], *, on_error: typing.Literal['ignore', 'replace', 'pass', 'throw'] = 'replace') -> LinqStream[Q]:
 		"""
 		Casts all elements in this query to the specified type
 		:param cls: The type to cast to
+		:param on_error: How to handle serialization errors
 		:return: The modified query
+		:raises TypeError: If 'on_error' is throw and a cast error occurs
+
+		*Casting Errors*\n
+		- ignore: Erroneous element is removed from the resulting query\n
+		- replace: Erroneous element is replaced with 'None'\n
+		- pass: Erroneous element is passed as is without serialization\n
+		- throw: Error is raised
 		"""
 
 		def __cast(stream: LinqStream[T]) -> typing.Generator[Q]:
 			for elem in stream:
-				yield cls(elem)
+				try:
+					yield cls(elem)
+				except Exception as err:
+					if on_error == 'ignore':
+						continue
+					elif on_error == 'replace':
+						yield None
+					elif on_error == 'pass':
+						yield elem
+					elif on_error == 'throw':
+						raise TypeError(f'Failed to cast element: \'{elem}\'') from err
 
 		return LinqStream(__cast(self))
 
@@ -2240,6 +2258,7 @@ class LinqStream[T](typing.Reversible):
 		:param kwargs: Extra arguments to pass to serializers
 		:return: The modified query
 		:raises InvalidArgumentException: If 'serializer' or 'on_error' is not a valid literal
+		:raises TypeError: If 'on_error' is throw and a serialization error occurs
 
 		*Serialization Errors*\n
 		- ignore: Erroneous element is removed from the resulting query\n
@@ -2266,7 +2285,7 @@ class LinqStream[T](typing.Reversible):
 					elif on_error == 'pass':
 						yield elem
 					elif on_error == 'throw':
-						raise err from None
+						raise TypeError(f'Failed to serialize element: \'{elem}\'') from err
 
 		return LinqStream(__serialize(self))
 
@@ -2278,7 +2297,7 @@ class LinqStream[T](typing.Reversible):
 		:param kwargs: Extra arguments to pass to serializers
 		:return: The modified query
 		:raises InvalidArgumentException: If 'serializer' or 'on_error' is not a valid literal
-		:raises TypeError: If the specified element is not a bytes or bytearray object
+		:raises TypeError: If the specified element is not a bytes or bytearray object or 'on_error' is throw and a serialization error occurs
 
 		*Deserialization Errors*\n
 		- ignore: Erroneous element is removed from the resulting query\n
@@ -2305,6 +2324,6 @@ class LinqStream[T](typing.Reversible):
 					elif on_error == 'pass':
 						yield elem
 					elif on_error == 'throw':
-						raise err from None
+						raise TypeError(f'Failed to deserialize element: \'{elem}\'') from err
 
 		return LinqStream(__deserialize(self))
