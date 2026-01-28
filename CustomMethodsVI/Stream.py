@@ -567,7 +567,7 @@ class FileStream(Stream[str | bytes]):
 		return self.__filepath__
 
 
-class ListStream[T](Stream[T]):
+class ListStream[T](Stream[T], typing.Iterable[T]):
 	"""
 	Basic FIFO stream using a list for its internal buffer
 	"""
@@ -1515,7 +1515,7 @@ class LinqStream[T](typing.Reversible):
 
 	def for_each(self, callback: typing.Callable[[T], typing.Any]) -> None:
 		"""
-		*Evaluates the query*
+		*Evaluates the query*\n
 		Executes a callback for every element in this query
 		:param callback: The callback
 		:raises InvalidArgumentException: If the callback is not callable
@@ -1525,6 +1525,41 @@ class LinqStream[T](typing.Reversible):
 
 		for elem in self:
 			callback(elem)
+
+	def apply(self, collection: typing.Iterable[T], collector: typing.Optional[typing.Callable[[typing.Iterable[T], T], ...]] = None, *, clear: bool = True, clearer: typing.Optional[typing.Callable[[typing.Iterable[T]], ...]] = None) -> None:
+		"""
+		*Evaluates the query*\n
+		Collects all elements in this query into an existing collection or Stream; modifies the specified iterable in-place
+		:param collection: The iterable to modify
+		:param collector: Writer function describing how elements should be appended to the collection
+		:param clear: Whether the collection should be cleared before writing
+		:param clearer: Function describing how the collection should be cleared
+		:raises InvalidArgumentException: If the iterable is not mutable
+		"""
+
+		query: tuple[T, ...] = tuple(self)
+		Misc.raise_if(collector is not None and collector is not ... and not callable(collector), Exceptions.InvalidArgumentException(LinqStream.apply, 'collector', type(collector), (typing.Callable,)))
+		Misc.raise_if(clearer is not None and clearer is not ... and not callable(clearer), Exceptions.InvalidArgumentException(LinqStream.apply, 'clearer', type(clearer), (typing.Callable,)))
+
+		if clear and callable(clearer):
+			clearer(collection)
+		elif clear and isinstance(collection, typing.MutableSequence):
+			collection.clear()
+		elif clear and isinstance(collection, Stream):
+			collection.flush()
+		elif clear:
+			raise TypeError(f'Collection of type \'{type(collection).__name__}\' has no default clearer')
+
+		if callable(collector):
+			for element in query:
+				collector(collection, element)
+		elif isinstance(collection, typing.MutableSequence):
+			collection.extend(query)
+		elif isinstance(collection, Stream):
+			for element in query:
+				collection.write(element)
+		else:
+			raise TypeError(f'Collection of type \'{type(collection).__name__}\' has no default collector')
 
 	def any(self) -> bool:
 		"""
@@ -1751,32 +1786,32 @@ class LinqStream[T](typing.Reversible):
 
 		return total / count
 
-	def collect[C: typing.Iterable](self, collector: Stream[T] | type[C] = tuple, *args, **kwargs) -> Stream[T] | C:
+	def collect[C: typing.Iterable](self, collection: Stream[T] | type[C] = tuple, *args, **kwargs) -> Stream[T] | C:
 		"""
 		*Evaluates the query*
-		Collects all elements in this query into the specified collection or Stream
-		:param collector: The type of collection to collect into or a Stream instance
+		Collects all elements in this query into a new collection or Stream
+		:param collection: The type of collection to collect into or a Stream instance
 		:param args: Extra positional arguments to apply to the collector's constructor
 		:param kwargs: Extra keyword arguments to apply to the collector's constructor
 		:return: The populated collection or Stream
 		:raises InvalidArgumentException: If 'collector' is not an iterable type, Stream, or Stream type
 		"""
 
-		if isinstance(collector, type) and issubclass(collector, Stream):
-			stream: Stream = collector(*args, **kwargs)
+		if isinstance(collection, type) and issubclass(collection, Stream):
+			stream: Stream = collection(*args, **kwargs)
 
 			for elem in self:
 				stream.write(elem)
 
 			return stream
-		elif isinstance(collector, type) and issubclass(collector, (typing.Iterable, collections.abc.Sequence, collections.abc.Iterable)):
-			return collector(self, *args, **kwargs)
-		elif isinstance(collector, Stream):
+		elif isinstance(collection, type) and issubclass(collection, (typing.Iterable, collections.abc.Sequence, collections.abc.Iterable)):
+			return collection(self, *args, **kwargs)
+		elif isinstance(collection, Stream):
 			for elem in self:
-				collector.write(elem)
-			return collector
+				collection.write(elem)
+			return collection
 		else:
-			raise Exceptions.InvalidArgumentException(LinqStream.collect, 'collector', type(collector), (type, Stream))
+			raise Exceptions.InvalidArgumentException(LinqStream.collect, 'collector', type(collection), (type, Stream))
 
 	def transform[K](self, mapper: typing.Callable[[T], K]) -> LinqStream[K]:
 		"""
@@ -1818,6 +1853,26 @@ class LinqStream[T](typing.Reversible):
 
 		Misc.raise_ifn(callable(filter_), Exceptions.InvalidArgumentException(LinqStream.filter, 'filter_', type(filter_)))
 		return LinqStream(x for x in self if filter_(x))
+
+	def assert_if(self, filter_: typing.Callable[[T], bool], exception: Exception = AssertionError('Assertion failed')):
+		"""
+		Raises an exception if any element passes the check
+		:param filter_: The filter function (return True to throw error and True to allow)
+		:param exception: The exception to raise
+		:return: The modified query
+		:raises InvalidArgumentException: If 'filter_' is not callable or 'exception' is not an exception
+		"""
+
+		Misc.raise_ifn(callable(filter_), Exceptions.InvalidArgumentException(LinqStream.filter, 'filter_', type(filter_)))
+		Misc.raise_ifn(isinstance(exception, BaseException), Exceptions.InvalidArgumentException(LinqStream.filter, 'exception', type(exception)))
+
+		def __assert__(stream: LinqStream[T]) -> typing.Iterator[T]:
+			for elem in stream:
+				if filter_(elem):
+					raise exception
+				yield elem
+
+		return LinqStream(__assert__(self))
 
 	def instance_of[I](self, cls: type[I]) -> LinqStream[I]:
 		"""

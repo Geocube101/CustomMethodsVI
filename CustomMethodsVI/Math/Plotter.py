@@ -311,8 +311,8 @@ class AxisPlot2D(object):
 			tick1_pos2: Vector.Vector = round(impos1 - (tick_dir * pixel_height))
 			tick2_pos1: Vector.Vector = round(impos2 + (tick_dir * pixel_height))
 			tick2_pos2: Vector.Vector = round(impos2 - (tick_dir * pixel_height))
-			drawer.line((*tick1_pos1.components(), *tick1_pos2.components()), (r, g, b, a), 1)
-			drawer.line((*tick2_pos1.components(), *tick2_pos2.components()), (r, g, b, a), 1)
+			drawer.line((*tick1_pos1.components, *tick1_pos2.components), (r, g, b, a), 1)
+			drawer.line((*tick2_pos1.components, *tick2_pos2.components), (r, g, b, a), 1)
 			x += axis.minor_spacing
 			tick_index += 1
 
@@ -359,7 +359,7 @@ class AxisPlot2D(object):
 			pos: Vector.Vector = Vector.Vector(tx, ty) + image_center
 			pos1: Vector.Vector = pos + tick_dir
 			pos2: Vector.Vector = pos - tick_dir
-			drawer.line((*pos1.components(), *pos2.components()), (r, g, b, a), 1)
+			drawer.line((*pos1.components, *pos2.components), (r, g, b, a), 1)
 			theta += delta
 
 		return self

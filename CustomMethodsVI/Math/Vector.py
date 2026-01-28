@@ -7,7 +7,7 @@ import typing
 from .. import Exceptions
 from .. import Math
 from .. import Misc
-from ..Decorators import Overload
+from .. import Stream
 
 
 class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], collections.abc.Hashable, typing.Iterable[float]):
@@ -87,55 +87,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		u2: Vector = w2.normalized()
 		return u1, u2
 
-	@Overload(strict=True)
-	def __init__(self, vector: Vector):
-		"""
-		Class representing an N-dimensional immutable vector
-		- Constructor -
-		Copy constructor
-		:param vector: Another vector
-		"""
-
-		self.__components__: tuple[typing.Optional[float], ...] = tuple(vector.__components__)
-
-	@Overload(strict=True)
-	def __init__(self, iterable: typing.Iterable[float | typing.Sized | None]):
-		"""
-		Class representing an N-dimensional immutable vector
-		- Constructor -
-		:param iterable: An iterable of ints or floats
-		:raises ValueError: If the vector's dimension is less than 1
-		:raises TypeError: If any value is not a float or integer
-		"""
-
-		components: list[typing.Optional[float]] = []
-
-		for i, value in enumerate(iterable):
-			if value is None:
-				components.append(None)
-			elif hasattr(value, '__float__') or isinstance(value, (int, float)):
-				components.append(float(value))
-			elif hasattr(value, '__int__'):
-				components.append(float(int(value)))
-			elif hasattr(value, '__bool__'):
-				components.append(float(bool(value)))
-			elif hasattr(value, '__index__'):
-				components.append(float(value.__index__()))
-			elif hasattr(value, '__len__'):
-				components.append(float(len(value)))
-			else:
-				try:
-					components.append(float(value))
-				except Exception as _:
-					raise TypeError(f'Component at {i} is not a float or int: {value} ({type(value)})') from None
-
-		self.__components__: tuple[typing.Optional[float], ...] = tuple(components)
-
-		if len(self.__components__) < 1:
-			raise ValueError(f'Vector dimension \'{len(self.__components__)}\' is less than 2')
-
-	@Overload(strict=True)
-	def __init__(self, *components: typing.Optional[float]):
+	def __init__(self, component: typing.Optional[float] | typing.Iterable[typing.Optional[float]] | Vector, *components: typing.Optional[float]):
 		"""
 		Class representing an N-dimensional immutable vector
 		- Constructor -
@@ -144,31 +96,21 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:raises TypeError: If any value is not a float or integer
 		"""
 
-		_components: list[typing.Optional[float]] = []
+		components: tuple[typing.Optional[float], ...]
 
-		for i, value in enumerate(components):
-			if value is None:
-				_components.append(None)
-			elif hasattr(value, '__float__') or type(value) is int or type(value) is float:
-				_components.append(float(value))
-			elif hasattr(value, '__int__'):
-				_components.append(float(int(value)))
-			elif hasattr(value, '__bool__'):
-				_components.append(float(bool(value)))
-			elif hasattr(value, '__index__'):
-				_components.append(float(value.__index__()))
-			elif hasattr(value, '__len__'):
-				_components.append(float(value.__len__()))
-			else:
-				try:
-					_components.append(float(value))
-				except Exception as _:
-					raise TypeError(f'Component at {i} is not a float or int: {value} ({type(value)})') from None
+		if isinstance(component, Vector):
+			assert len(components) == 0, 'Expected either an iterable of floats, vector or a variadic list of floats'
+			components = component.components
+		elif isinstance(component, typing.Iterable):
+			assert len(components) == 0, 'Expected either an iterable of floats, vector or a variadic list of floats'
+			components = tuple(component)
+		else:
+			components = (component, *components)
 
-		self.__components__: tuple[typing.Optional[float], ...] = tuple(_components)
+		if len(components) < 1:
+			raise ValueError(f'Vector dimension is \'{len(components)}\' is less than 1')
 
-		if len(self.__components__) < 1:
-			raise ValueError(f'Vector dimension is \'{len(self.__components__)}\' is less than 2')
+		self.__components__: tuple[typing.Optional[float], ...] = Stream.LinqStream(components).assert_if(lambda value: value is not None and not isinstance(value, (int, float)), TypeError(f'One or more components is not a float')).collect(tuple)
 
 	def __iter__(self) -> typing.Iterator[typing.Optional[float]]:
 		return iter(self.__components__)
@@ -568,7 +510,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		:return: Returns this vector rounded to 'n' places
 		"""
 
-		return Vector(None if x is None else round(x, n) for x in self.__components__)
+		return Vector(None if x is None else float(round(x, n)) for x in self.__components__)
 
 	def __trunc__(self) -> Vector:
 		"""
@@ -611,7 +553,6 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		return float('nan') if None in self.__components__ else sum(pow(a, 2) for a in self.__components__)
 
-	@Overload
 	def dot(self, other: Vector) -> float:
 		"""
 		Applies inner dot-product between two vectors
@@ -625,7 +566,6 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 		return float('nan') if None in self.__components__ or None in other.__components__ else sum(a * b for a, b in zip(self.__components__, other.__components__))
 
-	@Overload
 	def distance(self, other: Vector) -> float:
 		"""
 		Calculates distance between two vectors
@@ -639,7 +579,6 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 		return float('nan') if None in self.__components__ or None in other.__components__ else (other - self).length()
 
-	@Overload
 	def distance_squared(self, other: Vector) -> float:
 		"""
 		Calculates square distance between two vectors
@@ -653,7 +592,6 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 		return float('nan') if None in self.__components__ or None in other.__components__ else (other - self).length_squared()
 
-	@Overload
 	def angle(self, other: Vector) -> float:
 		"""
 		Calculates the angle between two vectors
@@ -675,7 +613,6 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		length: float = self.length()
 		return self / length
 
-	@Overload
 	def hodge_star(self, *others: Vector) -> Vector:
 		"""
 		Calculates hodge product between this vector and n-2 vectors
@@ -701,7 +638,6 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		return Vector(components)
 
-	@Overload
 	def cross(self, other: Vector) -> Vector:
 		"""
 		Calculates cross product between vectors
@@ -722,13 +658,6 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		c3: typing.Optional[float] = None if a1 is None or b2 is None else (a1 * b2 - a2 * b1)
 		return Vector(c1, c2, c3)
 
-	def components(self) -> tuple[typing.Optional[float], ...]:
-		"""
-		:return: Returns the individual components of this vector
-		"""
-
-		return self.__components__
-
 	def to_matrix(self) -> Math.Tensor.Tensor:
 		"""
 		:return: This vector as a matrix
@@ -736,7 +665,6 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		return Math.Tensor.Tensor(self)
 
-	@Overload
 	def relative_coord_matrix(self, *orthonormal_basis: Vector) -> Math.Tensor.Tensor:
 		"""
 		Calculates the coordinate matrix of the specified coordinate relative to the orthonormal basis vectors
@@ -752,7 +680,6 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		result: tuple[float, ...] = tuple(self.dot(vector) for vector in orthonormal_basis)
 		return Math.Tensor.Tensor.shaped(result, self.dimension, 1)
 
-	@Overload
 	def project(self, subspace: typing.Iterable[Vector]) -> Vector:
 		"""
 		Projects this vector onto a subspace
@@ -781,3 +708,11 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		"""
 
 		return len(self.__components__)
+
+	@property
+	def components(self) -> tuple[typing.Optional[float], ...]:
+		"""
+		:return: Returns the individual components of this vector
+		"""
+
+		return self.__components__

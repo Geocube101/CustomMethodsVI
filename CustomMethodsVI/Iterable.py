@@ -13,12 +13,12 @@ from . import Misc
 from . import Stream
 
 
-class Iterable[T](collections.abc.Sequence, collections.abc.Sized, typing.Iterable):
+class Iterable[T](collections.abc.Sequence[T], collections.abc.Sized, typing.Iterable[T]):
 	"""
 	Base iterable class for CM-VI iterables
 	"""
 
-	def __init__(self, collection: typing.Sized[T] | typing.Iterable[T]):
+	def __init__(self, collection: collections.abc.Sized[T] | typing.Iterable[T]):
 		"""
 		Base iterable class for CM-VI iterables
 		- Constructor -
@@ -277,12 +277,12 @@ class Iterable[T](collections.abc.Sequence, collections.abc.Sized, typing.Iterab
 
 		return -1
 
-	def copy(self) -> Iterable[T]:
+	def copy[I: Iterable](self: I) -> I:
 		"""
 		:return: A copy of this collection
 		"""
 
-		return Iterable(self.__buffer__.copy())
+		return type(self)(self.__buffer__.copy())
 
 	def stream(self) -> Stream.LinqStream[T]:
 		"""
@@ -292,7 +292,7 @@ class Iterable[T](collections.abc.Sequence, collections.abc.Sized, typing.Iterab
 		return Stream.LinqStream(self)
 
 
-class ListIterable[T](Iterable[T]):
+class ListIterable[T](Iterable[T], typing.MutableSequence[T]):
 	"""
 	Iterable class allowing modifications
 	"""
@@ -377,7 +377,9 @@ class ListIterable[T](Iterable[T]):
 		:return: This list
 		"""
 
-		self.__buffer__.extend(iterable)
+		for element in iterable:
+			self.append(element)
+
 		return self
 
 	def insert(self, index: int, element: T) -> ListIterable[T]:
@@ -392,40 +394,10 @@ class ListIterable[T](Iterable[T]):
 		return self
 
 
-class LinqIterable[T](Iterable[T], Stream.LinqStream[T]):
-	"""
-	An iterable with properties of 'Iterable' and 'LinqStream'
-	Supports all LINQ queries that 'LinqStream' supports
-	"""
-
-	def __init__(self, collection: typing.Sized | typing.Iterable[T]):
-		"""
-		An iterable with properties of 'Iterable' and 'LinqStream'
-		Supports all LINQ queries that 'LinqStream' supports
-		- Constructor -
-		:param collection: The initial collection
-		"""
-
-		Stream.LinqStream.__init__(self, self)
-		Iterable.__init__(self, collection)
-
-	def copy(self) -> LinqIterable[T]:
-		return LinqIterable(self)
-
-
-class SortableIterable[T](LinqIterable[T]):
+class SortableIterable[T](ListIterable[T]):
 	"""
 	Class representing an iterable containing sorting functions
 	"""
-
-	def __init__(self, collection: typing.Sized | typing.Iterable[T]):
-		"""
-		Class representing an iterable containing sorting functions
-		- Constructor -
-		:param collection: The initial collection
-		"""
-
-		LinqIterable.__init__(self, collection)
 
 	def sort(self, *, key: typing.Optional[typing.Callable] = ..., reverse: typing.Optional[bool] = False) -> None:
 		"""
@@ -436,9 +408,6 @@ class SortableIterable[T](LinqIterable[T]):
 		"""
 
 		self.__buffer__.sort(key=key, reverse=reverse)
-
-	def copy(self) -> SortableIterable[T]:
-		return SortableIterable(self)
 
 
 class SortedList[T](SortableIterable[T]):
@@ -643,35 +612,6 @@ class SortedList[T](SortableIterable[T]):
 		except TypeError:
 			raise TypeError(f'Incomparable object of type \'{type(item)}\' is not storable')
 
-	def extend(self, iterable: typing.Iterable[T]) -> None:
-		"""
-		Appends a collection of items to this collection in-place
-		:param iterable: The collection to append
-		:raises TypeError: If the item cannot be compared
-		:raises ValueError: If an error occurred during binary search
-		"""
-
-		for e in iterable:
-			self.append(e)
-
-	def remove(self, item: T) -> None:
-		"""
-		Removes the first occurrence item from the collection
-		:param item: The item to remove
-		"""
-
-		if item in self:
-			self.__buffer__.remove(item)
-
-	def remove_all(self, item: T) -> None:
-		"""
-		Removes all occurrences item from the collection
-		:param item: The item to remove
-		"""
-
-		while item in self:
-			self.__buffer__.remove(item)
-
 	def resort(self, *iterables: typing.Iterable[T]) -> None:
 		"""
 		Resorts the entire collection, appending the supplied values from '*iterables' if provided
@@ -844,31 +784,12 @@ class SortedList[T](SortableIterable[T]):
 		copied.extend(iterable)
 		return copied
 
-	def removed_duplicates(self) -> SortedList[T]:
-		"""
-		:return: A copy  of this collection with all duplicates removed
-		"""
-
-		return SortedList(set(self.__buffer__))
-
 	def reversed(self) -> ReverseSortedList[T]:
 		"""
 		:return: A reversed sorted collection
 		"""
 
 		return ReverseSortedList(self)
-
-	def pop(self, index: typing.Optional[int] = ...) -> T:
-		"""
-		Deletes and returns a single item from this collection
-		:param index: The index to remove or the last element if not supplied
-		:return: The element at that position
-		"""
-
-		return self.__buffer__.pop(-1 if index is ... or index is None else int(index))
-
-	def copy(self) -> SortedList[T]:
-		return SortedList(self)
 
 
 class ReverseSortedList[T](SortableIterable[T]):
@@ -1075,35 +996,6 @@ class ReverseSortedList[T](SortableIterable[T]):
 		except TypeError:
 			raise TypeError(f'Incomparable object of type \'{type(item)}\' is not storable')
 
-	def extend(self, iterable: typing.Iterable[T]) -> None:
-		"""
-		Appends a collection of items to this collection in-place
-		:param iterable: The collection to append
-		:raises TypeError: If the item cannot be compared
-		:raises ValueError: If an error occurred during binary search
-		"""
-
-		for e in iterable:
-			self.append(e)
-
-	def remove(self, item: T) -> None:
-		"""
-		Removes the first occurrence item from the collection
-		:param item: The item to remove
-		"""
-
-		if item in self:
-			self.__buffer__.remove(item)
-
-	def remove_all(self, item: T) -> None:
-		"""
-		Removes all occurrences item from the collection
-		:param item: The item to remove
-		"""
-
-		while item in self:
-			self.__buffer__.remove(item)
-
 	def resort(self, *iterables: typing.Iterable[T]) -> None:
 		"""
 		Resorts the entire collection, appending the supplied values from '*iterables' if provided
@@ -1276,31 +1168,12 @@ class ReverseSortedList[T](SortableIterable[T]):
 		copied.extend(iterable)
 		return copied
 
-	def removed_duplicates(self) -> ReverseSortedList[T]:
-		"""
-		:return: A copy  of this list with all duplicates removed
-		"""
-
-		return ReverseSortedList(set(self.__buffer__))
-
 	def reversed(self) -> SortedList[T]:
 		"""
 		:return: A normally sorted collection
 		"""
 
 		return SortedList(self)
-
-	def pop(self, index: typing.Optional[int] = ...) -> T:
-		"""
-		Deletes and returns a single item from this collection
-		:param index: The index to remove or the last element if not supplied
-		:return: The element at that position
-		"""
-
-		return self.__buffer__.pop(-1 if index is ... or index is None else int(index))
-
-	def copy(self) -> ReverseSortedList[T]:
-		return ReverseSortedList(self)
 
 
 class String(ListIterable[str], str):
@@ -1997,10 +1870,10 @@ class SpinQueue[T](SortableIterable[T]):
 			self.__max_size__: int = iterable_or_size
 			self.__count__: int = 0
 			self.__offset__: int = 0
-		elif hasattr(iterable_or_size, '__iter__'):
+		elif isinstance(iterable_or_size, typing.Iterable):
 			super().__init__(iterable_or_size)
 			self.__max_size__: int = len(self.__buffer__)
-			self.__count__: int = 0
+			self.__count__: int = self.__max_size__
 			self.__offset__: int = 0
 		else:
 			raise TypeError('Iterable or size must be an iterable or positive integer')
@@ -2085,9 +1958,10 @@ class SpinQueue[T](SortableIterable[T]):
 		for i in range(self.__max_size__):
 			self.__buffer__[i] = None
 
-	def pop(self) -> T:
+	def pop(self, index: int = -1) -> T:
 		"""
 		Pops an item from the queue
+		:param index: The index or last element if not specified
 		:return: The popped item
 		:raises IterableEmptyException: If the collection is empty
 		"""
@@ -2095,11 +1969,38 @@ class SpinQueue[T](SortableIterable[T]):
 		if self.__count__ == 0:
 			raise Exceptions.IterableEmptyException('Pop from empty queue')
 
+		index = index if (index := int(index)) >= 0 else (self.__max_size__ + index)
+		Misc.raise_if(index >= self.__max_size__, IndexError(f'Specified index \'{index}\' is out of bounds for SpinQueue of count \'{self.__count__}\''))
+		elem: T = self.__buffer__[(self.__offset__ + index) % self.__max_size__]
 		self.__count__ -= 1
-		position: int = (self.__offset__ + self.__count__) % self.__max_size__
-		elem: T = self.__buffer__[position]
-		self.__buffer__[position] = None
+
+		for i in range(self.__offset__ + index, self.__offset__ + self.__count__):
+			self.__buffer__[i % self.__max_size__] = self.__buffer__[(i + 1) % self.__max_size__]
+
+		self.__buffer__[(self.__offset__ + self.__count__) % self.__max_size__] = None
 		return elem
+
+	def remove(self, element: T, count: int = -1) -> int:
+		"""
+		Removes the specified element from this list
+		:param element: The element to remove
+		:param count: The number of occurrences to remove or all if less than 0
+		:return: The number of occurrences removed
+		"""
+
+		matches: int = 0
+
+		for i in range(len(self)):
+			index: int = i - matches
+
+			if index < len(self) and self.__buffer__[index] == element:
+				self.pop(index)
+				matches += 1
+
+			if 0 <= count <= matches:
+				break
+
+		return matches
 
 	@property
 	def size(self) -> int:

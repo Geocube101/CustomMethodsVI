@@ -494,7 +494,7 @@ class KVP:
 
 		return self[item]
 
-	def __setitem__(self, key: str, value: list[bool | int | float | str | bytes | None] | bool | int | float | str | bytes | None | KVP | dict) -> None:
+	def __setitem__(self, key: str, value: typing.Iterable[bool | int | float | str | bytes | None] | bool | int | float | str | bytes | None | KVP | dict) -> None:
 		"""
 		Sets the specified mapping key to a value
 		:param key: The mapping key
@@ -507,7 +507,7 @@ class KVP:
 		valid_types: tuple[type, ...] = (bool, int, float, str, type(None), type(self))
 		key = str(key)
 
-		if isinstance(value, dict):
+		if isinstance(value, typing.Mapping):
 			self.__mapping__[key] = KVP(key, value)
 
 		elif not isinstance(value, str) and KVP.__is_iterable(value):
