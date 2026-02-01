@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import datetime
 import flask
 import flask_socketio
 import ipaddress
 import json
 import os
+import pickle
+import re
 import socketio
 import sys
 import threading
@@ -17,6 +21,7 @@ import typing
 import uuid
 
 from . import Concurrent
+from . import Exceptions
 from . import Misc
 
 __PRIVATE_IDS__ = ('connect', 'disconnect', 'error', 'join', 'leave')
@@ -942,6 +947,7 @@ class FlaskServerAPI:
 			self.__start__: datetime.datetime = datetime.datetime.fromtimestamp(start_time, datetime.timezone.utc) if isinstance(start_time, float) else start_time
 			self.__state__: bool = True
 			self.__duration__: float = -1
+			self.__session_data__: dict[typing.Any, typing.Any] = {}
 
 		def close(self) -> None:
 			"""
@@ -1009,6 +1015,14 @@ class FlaskServerAPI:
 
 			return self.__start__
 
+		@property
+		def data(self) -> dict[typing.Any, typing.Any]:
+			"""
+			:return: Session data used to store persistent information
+			"""
+
+			return self.__session_data__
+
 	__RESTRICTED_EIDS: tuple[str, ...] = ('connect', 'disconnect')
 
 	@staticmethod
@@ -1020,7 +1034,7 @@ class FlaskServerAPI:
 	
 	def __init__(self, app: flask.Flask, route: str = '/api', *, requires_auth: bool = False):
 		"""
-		Class wrapping generic functionality for flask API endpoints
+		Class wrapping generic functionality for flask API endpoints\n
 		- Constructor -
 		:param app: The flask app
 		:param route: The base api route
@@ -1040,16 +1054,16 @@ class FlaskServerAPI:
 		self.__app__: flask.Flask = app
 		self.__route__: str = f'/{route}'
 		self.__sessions__: dict[uuid.UUID, FlaskServerAPI.APISessionInfo] = {}
-		self.__callbacks__: dict[str, tuple[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], dict[str, typing.Any]], bool]] = {}
+		self.__callbacks__: dict[str, tuple[typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], typing.Mapping[str, typing.Any] | typing.Sequence[typing.Any]], bool]] = {}
 		self.__auth__: bool = bool(requires_auth)
-		self.__connector__: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], bool | int | dict[str, typing.Any] | None] | tuple[bool | int, dict[str, typing.Any]]] = None
-		self.__disconnector__: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], dict[str, typing.Any] | None]] = None
+		self.__connector__: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], bool | int | typing.Mapping[str, typing.Any] | None] | tuple[bool | int, typing.Mapping[str, typing.Any]]] = None
+		self.__disconnector__: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], typing.Mapping[str, typing.Any] | None]] = None
 		self.__setup_auth_channels__()
 		self.__app__.add_url_rule(f'{self.__route__}/<path:route>', view_func=self.__flask_route__, provide_automatic_options=False, methods=('POST',), endpoint=f'{self.__route__.replace('/', '_')}_flaskroute')
 			
 	def __setup_auth_channels__(self) -> None:
 		"""
-		INTERNAL METHOD
+		INTERNAL METHOD\n
 		Binds the flask routes used for connection and disconnection requests
 		If the API does not have authentication enabled, this method does nothing
 		"""
@@ -1066,21 +1080,21 @@ class FlaskServerAPI:
 
 			token: uuid.UUID = self.__next_token__()
 			session: FlaskServerAPI.APISessionInfo = FlaskServerAPI.APISessionInfo(flask.request.remote_addr, token, datetime.datetime.now(datetime.timezone.utc))
-			response: dict[str, typing.Any] | bool | int | None | tuple[bool | int, dict[str, typing.Any]] = None
+			response: typing.Mapping[str, typing.Any] | bool | int | None | tuple[bool | int, typing.Mapping[str, typing.Any]] = None
 
 			try:
 				response = self.__connector__(session, flask.request.json)
 			except Exception as e:
 				sys.stderr.write(''.join(traceback.format_exception(e)))
 			
-			if isinstance(response, (bool, int, tuple, dict)):
+			if isinstance(response, (bool, int, tuple, typing.Mapping)):
 				ok: bool | int
-				res: bool | int | dict[str, typing.Any]
+				res: bool | int | typing.Mapping[str, typing.Any]
 
 				if isinstance(response, tuple):
 					ok = (response := tuple(response))[0]
 					res = response[1]
-				elif isinstance(response, dict):
+				elif isinstance(response, typing.Mapping):
 					ok = True
 					res = response
 				else:
@@ -1127,7 +1141,7 @@ class FlaskServerAPI:
 
 	def __flask_route__(self, route: str) -> flask.Response:
 		"""
-		INTERNAL METHOD
+		INTERNAL METHOD\n
 		Generic routing callback for flask API endpoints
 		:param route: The base API route
 		:return: The resulting callback response
@@ -1147,16 +1161,15 @@ class FlaskServerAPI:
 				return flask.Response(response=json.dumps({'error': 'not-authenticated'}), status=401, content_type='application/json')
 
 			try:
-
-				response: dict = callback(session, flask.request.json)
+				response: typing.Mapping[str, typing.Any] | typing.Sequence[typing.Any] | int | None = callback(session, flask.request.json)
 
 				if response is None or response is ...:
-					response = {}
+					return flask.Response(json.dumps({}), status=200, content_type='application/json')
 				elif response is NotImplemented:
 					return flask.Response(json.dumps({'error': 'NotImplemented'}), status=501, content_type='application/json')
 				elif isinstance(response, int):
 					return flask.Response(json.dumps({'error': 'NotImplemented'}), status=int(response), content_type='application/json')
-				elif isinstance(response, dict):
+				elif isinstance(response, (typing.Mapping, typing.Sequence)):
 					return flask.Response(json.dumps(response), status=200, content_type='application/json')
 				else:
 					raise TypeError(f'Unexpected response type from API callback \'{route}\' - Expected either a JSON dictionary or None')
@@ -1253,7 +1266,7 @@ class FlaskServerAPI:
 		matches: tuple[FlaskServerAPI.APISessionInfo, ...] = tuple(session for session in self.__sessions__.values() if session.token == true_token)
 		return matches[0] if len(matches) == 1 else None
 
-	def endpoint(self, route: str, callback: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], dict[str, typing.Any]]] = ..., *, requires_auth: bool = True) -> typing.Optional[typing.Callable[[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], dict[str, typing.Any]]], None]]:
+	def endpoint(self, route: str, callback: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], typing.Mapping[str, typing.Any] | typing.Sequence[typing.Any]]] = ..., *, requires_auth: bool = True) -> typing.Optional[typing.Callable[[typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], typing.Mapping[str, typing.Any] | typing.Sequence[typing.Any]]], None]]:
 		"""
 		Binds a callback to the specified API endpoint
 		:param route: The API endpoint
@@ -1268,13 +1281,13 @@ class FlaskServerAPI:
 		Misc.raise_ifn(isinstance(route, str), Exceptions.InvalidArgumentException(FlaskServerAPI.endpoint, 'route', type(route), (str,)))
 		Misc.raise_ifn(isinstance(requires_auth, bool), Exceptions.InvalidArgumentException(FlaskServerAPI.endpoint, 'requires_auth', type(requires_auth), (bool,)))
 		Misc.raise_if(len(route := str(route).strip('/\\')) == 0, ValueError('Route cannot be empty'))
-		Misc.raise_if(not route.isalnum() or any(x in ('\b', '\n', '\t') for x in route), ValueError('Route contains invalid characters'))
-		
+		Misc.raise_if(re.fullmatch(r'^[\w\-_]+$', route) is None, ValueError('Route contains invalid characters'))
+
 		if route in FlaskServerAPI.__RESTRICTED_EIDS:
 			raise ValueError(f'Specified event ID \'{route}\' is restricted')
 
 		if callback is None or callback is ...:
-			def binder(func: typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], dict[str, typing.Any]]) -> None:
+			def binder(func: typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], typing.Mapping[str, typing.Any] | typing.Sequence[typing.Any]]) -> None:
 				self.endpoint(route, func, requires_auth=requires_auth)
 
 			return binder
@@ -1285,14 +1298,14 @@ class FlaskServerAPI:
 		else:
 			raise ValueError('Callback is not callable')
 
-	def connector(self, callback: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], bool | int | dict[str, typing.Any] | None] | tuple[bool | int, dict[str, typing.Any]]] = None) -> typing.Optional[typing.Callable[[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], bool | int | dict[str, typing.Any] | None] | tuple[bool | int, dict[str, typing.Any]]], None]]:
+	def connector(self, callback: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], bool | int | typing.Mapping[str, typing.Any] | None] | tuple[bool | int, typing.Mapping[str, typing.Any]]] = None) -> typing.Optional[typing.Callable[[typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], bool | int | typing.Mapping[str, typing.Any] | None] | tuple[bool | int, typing.Mapping[str, typing.Any]]], None]]:
 		"""
-		Binds a callback to the connection event
-		The callback bound may return the following:
-		 * boolean 	- If true, the calling client will be authenticated until session close
-		 * integer 	- If OK (200 - 299), the calling client will be authenticated until session close
-		 * None		- Connection will be refused
-		 * JSON		- Calling client will be authenticated and the returned JSON sent
+		Binds a callback to the connection event\n
+		The callback bound may return the following:\n
+		 * boolean 	- If true, the calling client will be authenticated until session close\n
+		 * integer 	- If OK (200 - 299), the calling client will be authenticated until session close\n
+		 * None		- Connection will be refused\n
+		 * JSON		- Calling client will be authenticated and the returned JSON sent\n
 		A callback may also return a tuple whose first element is a boolean or integer, and whose second element is the JSON
 		:param callback: The callback to bind accepting the new session instance and the request JSON
 		:return: None or a binder if used as a decorator
@@ -1302,7 +1315,7 @@ class FlaskServerAPI:
 		"""
 
 		if callback is None:
-			def binder(func: typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], bool | int | dict[str, typing.Any] | None]) -> None:
+			def binder(func: typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], bool | int | typing.Mapping[str, typing.Any] | None]) -> None:
 				self.connector(func)
 
 			return binder
@@ -1315,9 +1328,9 @@ class FlaskServerAPI:
 		else:
 			self.__connector__ = callback
 
-	def disconnector(self, callback: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], bool | int | dict[str, typing.Any] | None] | tuple[bool | int, dict[str, typing.Any]]] = None) -> typing.Optional[typing.Callable[[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], bool | int | dict[str, typing.Any] | None] | tuple[bool | int, dict[str, typing.Any]]], None]]:
+	def disconnector(self, callback: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], bool | int | typing.Mapping[str, typing.Any] | None] | tuple[bool | int, typing.Mapping[str, typing.Any]]] = None) -> typing.Optional[typing.Callable[[typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], bool | int | typing.Mapping[str, typing.Any] | None] | tuple[bool | int, typing.Mapping[str, typing.Any]]], None]]:
 		"""
-		Binds a callback to the disconnection event
+		Binds a callback to the disconnection event\n
 		The callback may return JSON to send to client on disconnect
 		:param callback: The callback to bind accepting the request JSON
 		:return: None or a binder if used as a decorator
@@ -1327,7 +1340,7 @@ class FlaskServerAPI:
 		"""
 
 		if callback is None:
-			def binder(func: typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], bool | int | dict[str, typing.Any] | None]) -> None:
+			def binder(func: typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], bool | int | typing.Mapping[str, typing.Any] | None]) -> None:
 				self.disconnector(func)
 
 			return binder
@@ -1349,17 +1362,12 @@ class FlaskServerAPI:
 
 
 if sys.platform == 'win32':
-	import base64
-	import datetime
-	import pickle
 	import pywintypes
 
 	import win32pipe
 	import win32file
 	import win32security
 	import win32api
-
-	from . import Exceptions
 
 	class WinNamedPipe:
 		"""

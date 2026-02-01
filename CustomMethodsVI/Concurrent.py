@@ -563,6 +563,146 @@ class ConcurrentFunction:
 
 class ThreadPool:
 	"""
+	Class for managing a pool of worker threading.Thread threads
+	"""
+
+	@staticmethod
+	def __wrapper__(function: typing.Callable, sync_event: typing.Optional[threading.Event], err_flag: threading.Event, args: tuple[typing.Any, ...], kwargs: dict[str, typing.Any]) -> None:
+		while sync_event is not None and not sync_event.is_set():
+			time.sleep(1e-6)
+
+		err_flag.clear()
+
+		try:
+			function(*args, **kwargs)
+		except (Exception, KeyboardInterrupt, SystemExit):
+			err_flag.set()
+
+	@Decorators.Overload
+	def __init__(self, function: typing.Callable, workers: int, *, synchronous_start: bool = True, daemon: bool = False):
+		"""
+		Class for managing a pool of worker threading.Thread threads
+		- Constructor -
+		:param function: The function to pool
+		:param workers: The number of workers
+		:param synchronous_start: Whether to block all threads until creation is complete
+		:param daemon: Whether to spawn processes as daemon
+		:raises InvalidArgumentException: If 'function' is not callable
+		:raises ValueError: If 'workers' is not an integer > 0
+		"""
+
+		Misc.raise_ifn(callable(function), Exceptions.InvalidArgumentException(ThreadPool.__init__, 'function', type(function)))
+		Misc.raise_ifn(isinstance(workers, int) and (workers := int(workers)) > 0, ValueError('Number of workers must be a positive integer > 0'))
+
+		self.__processes__: list[tuple[threading.Thread, threading.Event]] = []
+		self.__function__: typing.Callable = function
+		self.__workers__: int = int(workers)
+		self.__synchronous_start__: bool = bool(synchronous_start)
+		self.__daemon__: bool = bool(daemon)
+
+	def __call__(self, *args, **kwargs) -> None:
+		"""
+		Starts the pool
+		:param args: Positional arguments to call the function with
+		:param kwargs: Keyword arguments to call the function with
+		:raises ChildProcessError: If the pool is still running
+		"""
+
+		if any(x[0].is_alive() for x in self.__processes__):
+			raise ChildProcessError('Thread pool already active')
+
+		event: threading.Event = threading.Event()
+		event.clear()
+
+		for _ in range(self.__workers__):
+			err_flag: threading.Event = threading.Event()
+			process: threading.Thread = threading.Thread(target=ThreadPool.__wrapper__, args=(self.__function__, event if self.__synchronous_start__ else None, err_flag, args, kwargs), daemon=self.__daemon__)
+			process.start()
+			self.__processes__.append((process, err_flag))
+
+		if self.__synchronous_start__:
+			event.set()
+
+	def __await__(self) -> typing.Iterator[None]:
+		while any(p[0].is_alive() for p in self.__processes__):
+			yield
+
+	def wait(self, timeout: float = None) -> None:
+		"""
+		Blocks the current thread until all workers are complete
+		Waits at most 'timeout' seconds or infinitely if 'timeout' is None
+		:param timeout: The number of seconds to wait or indefinitely if timeout is None
+		"""
+
+		t1 = time.perf_counter_ns()
+
+		while (timeout is None or (time.perf_counter_ns() - t1) * 1e-9 < timeout) and any(p[0].is_alive() for p in self.__processes__):
+			time.sleep(1e-7)
+
+	def restart_closed(self, *args, **kwargs) -> int:
+		"""
+		Restarts all workers not currently running
+		:param args: Positional arguments to call the function with
+		:param kwargs: Keyword arguments to call the function with
+		:return: The number of restarted threads
+		"""
+
+		count: int = 0
+
+		for i, (worker, err_flag) in enumerate(self.__processes__):
+			if not worker.is_alive():
+				process: threading.Thread = threading.Thread(target=ThreadPool.__wrapper__, args=(self.__function__, None, err_flag, args, kwargs), daemon=self.__daemon__)
+				process.start()
+				self.__processes__[i] = (process, err_flag)
+				count += 1
+
+		return count
+
+	def restart_failed(self, *args, **kwargs) -> int:
+		"""
+		Restarts all workers whose exit code is greater than 0; restarting all workers that failed without keyboard interrupt
+		:param args: Positional arguments to call the function with
+		:param kwargs: Keyword arguments to call the function with
+		:return: The number of restarted threads
+		"""
+
+		count: int = 0
+
+		for i, (worker, err_flag) in enumerate(self.__processes__):
+			if not worker.is_alive() and err_flag.is_set():
+				process: threading.Thread = threading.Thread(target=ThreadPool.__wrapper__, args=(self.__function__, None, err_flag, args, kwargs), daemon=self.__daemon__)
+				process.start()
+				self.__processes__[i] = (process, err_flag)
+				count += 1
+
+		return count
+
+	def is_any_alive(self) -> bool:
+		"""
+		:return: Whether any workers are running
+		"""
+
+		return any(x[0].is_alive() for x in self.__processes__)
+
+	@property
+	def active_count(self) -> int:
+		"""
+		:return: The number of workers currently running
+		"""
+
+		return len([worker for worker in self.__processes__ if worker[0].is_alive()])
+
+	@property
+	def tids(self) -> tuple[int, ...]:
+		"""
+		:return: The respective native thread IDs for all worker threads
+		"""
+
+		return tuple(x[0].native_id for x in self.__processes__)
+
+
+class ProcessPool:
+	"""
 	Class for managing a pool of worker multiprocessing.Process processes
 	"""
 
@@ -597,7 +737,7 @@ class ThreadPool:
 		"""
 
 		if any(x.is_alive() for x in self.__processes__):
-			raise ChildProcessError('Thread pool already active')
+			raise ChildProcessError('Process pool already active')
 
 		for _ in range(self.__workers__):
 			process: multiprocessing.Process = multiprocessing.Process(target=self.__function__, args=args, kwargs=kwargs, daemon=self.__daemon__)

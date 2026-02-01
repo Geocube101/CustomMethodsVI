@@ -11,6 +11,7 @@ import warnings
 from . import Exceptions
 from . import Misc
 from . import Stream
+from . import Synchronization
 
 
 class Iterable[T](collections.abc.Sequence[T], collections.abc.Sized, typing.Iterable[T]):
@@ -20,7 +21,7 @@ class Iterable[T](collections.abc.Sequence[T], collections.abc.Sized, typing.Ite
 
 	def __init__(self, collection: collections.abc.Sized[T] | typing.Iterable[T]):
 		"""
-		Base iterable class for CM-VI iterables
+		Base iterable class for CM-VI iterables\n
 		- Constructor -
 		:param collection: The iterable to build from
 		"""
@@ -136,20 +137,28 @@ class Iterable[T](collections.abc.Sequence[T], collections.abc.Sized, typing.Ite
 				del self[item]
 
 		elif isinstance(key, slice):
+			length: int = len(self.__buffer__)
 			start: int = 0 if key.start is None else int(key.start)
 			stop: int = len(self) if key.stop is None else int(key.stop)
 			step: int = 1 if key.step is None else int(key.step)
+			start = (length + start) if start < 0 else start
+			stop = (length + stop) if stop < 0 else stop
+			count: int = 0
 
 			for i in range(start, stop, step):
-				self.__buffer__[i] = None
+				index: int = i - count
+
+				if index >= length - count:
+					break
+
+				del self.__buffer__[index]
+				count += 1
 
 		elif isinstance(key, int):
-			self.__buffer__[key] = None
+			del self.__buffer__[key]
 
 		else:
 			raise TypeError(f'TypeError: list indices must be integers or slices, not {type(key).__name__}')
-
-		self.__buffer__.remove(None)
 
 	def __setitem__(self, key: int | tuple[int, ...] | slice, value: T) -> None:
 		"""
@@ -417,7 +426,7 @@ class SortedList[T](SortableIterable[T]):
 
 	def __init__(self, *args: T | typing.Iterable[T]):
 		"""
-		A list using binary search to search and maintain a sorted list of elements
+		A list using binary search to search and maintain a sorted list of elements\n
 		- Constructor -
 		:param args: Either a variadic list of elements to use, or an iterable whose elements to use
 		:raises AssertionError: If the single supplied argument is not iterable
@@ -799,32 +808,30 @@ class ReverseSortedList[T](SortableIterable[T]):
 
 	def __init__(self, *args: T | typing.Iterable[T]):
 		"""
-		A list using binary search to search and maintain a reverse sorted list of elements
+		A list using binary search to search and maintain a reverse sorted list of elements\n
 		- Constructor -
 		:param args: Either a variadic list of elements to use, or an iterable whose elements to use
 		:raises AssertionError: If the single supplied argument is not iterable
 		:raises TypeError: If the iterable's contents are not comparable
 		"""
 
-		super().__init__([])
-
 		if len(args) == 0:
-			self.__buffer__ = []
+			super().__init__([])
 		elif len(args) == 1 and isinstance(args[0], ReverseSortedList):
-			self.__buffer__ = args[0].__buffer__.copy()
+			super().__init__(args[0].__buffer__.copy())
 		elif len(args) == 1 and isinstance(args[0], SortedList):
 			super().__init__(reversed(args[0].__buffer__))
 		elif len(args) == 1:
 			assert hasattr(args[0], '__iter__'), 'Set argument must be an iterable'
 
 			try:
-				self.__buffer__ = list(sorted(args[0], reverse=True))
+				super().__init__(sorted(args[0], reverse=True))
 			except TypeError as e:
 				raise TypeError(f'One or more objects are incomparable') from e
 
 		else:
 			try:
-				self.__buffer__ = list(sorted(args, reverse=True))
+				super().__init__(sorted(args[0], reverse=True))
 			except TypeError as e:
 				raise TypeError(f'One or more objects are incomparable') from e
 
@@ -1191,7 +1198,7 @@ class String(ListIterable[str], str):
 
 	def __init__(self, string: typing.Optional[typing.Any] = None):
 		"""
-		An extension adding additional string functionality
+		An extension adding additional string functionality\n
 		- Constructor -
 		:param string: The input value to convert to a string
 		"""
@@ -1477,7 +1484,7 @@ class ByteString(ListIterable[int], bytearray):
 
 	def __init__(self, string: typing.Optional[typing.Any] = None, encoding: str = 'utf-8', errors: typing.Literal['strict', 'ignore', 'replace', 'xmlcharrefreplace', 'backslashreplace', 'namereplace', 'surrogateescape'] = 'strict'):
 		"""
-		An extension adding additional string functionality
+		An extension adding additional string functionality\n
 		- Constructor -
 		:param string: The input value to convert to a string
 		"""
@@ -1809,7 +1816,7 @@ class FixedArray[T](SortableIterable[T]):
 
 	def __init__(self, iterable_or_size: typing.Iterable[T] | int):
 		"""
-		Class representing an array of a fixed size
+		Class representing an array of a fixed size\n
 		- Constructor -
 		:param iterable_or_size: The iterable or number of elements this list contains
 		:raises TypeError: If 'iterable_or_size' is not a positive integer or iterable
@@ -1859,7 +1866,7 @@ class SpinQueue[T](SortableIterable[T]):
 
 	def __init__(self, iterable_or_size: typing.Iterable[T] | int):
 		"""
-		Class representing an array of a fixed size
+		Class representing an array of a fixed size\n
 		- Constructor -
 		:param iterable_or_size: The iterable or number of elements this list contains
 		:raises TypeError: If 'iterable_or_size' is not a positive integer or iterable
@@ -2018,7 +2025,7 @@ class ThreadedGenerator[T]:
 
 	def __init__(self, generator: typing.Generator | typing.Iterable[T]):
 		"""
-		Special generator using threading.Thread threads
+		Special generator using threading.Thread threads\n
 		- Constructor -
 		:param generator: The initial generator or iterable to iterate
 		"""
@@ -2089,6 +2096,199 @@ class ThreadedGenerator[T]:
 
 		if self.__exec__ is not None:
 			raise self.__exec__
+
+
+class LockedIterable[T](SortableIterable[T]):
+	"""
+	Thread safe iterable using locks
+	"""
+
+	class LockedIterator[Q](typing.Iterator[Q]):
+		def __init__(self, iterable: LockedIterable[Q]):
+			assert isinstance(iterable, LockedIterable)
+			self.__iterable__: LockedIterable[Q] = iterable
+			self.__int_index__: int = 0
+
+		def __iter__(self) -> typing.Iterator[Q]:
+			return self
+
+		def __next__(self) -> Q:
+			with self.__iterable__.read_lock():
+				if self.__int_index__ >= len(self.__iterable__):
+					raise StopIteration
+				else:
+					value: Q = self.__iterable__[self.__int_index__]
+					self.__int_index__ += 1
+					return value
+
+	class ReversedLockedIterator[Q](typing.Iterator[Q]):
+		def __init__(self, iterable: LockedIterable[Q]):
+			assert isinstance(iterable, LockedIterable)
+			self.__iterable__: LockedIterable[Q] = iterable
+			self.__int_index__: int = 0
+
+		def __iter__(self) -> typing.Iterator[Q]:
+			return self
+
+		def __next__(self) -> Q:
+			with self.__iterable__.read_lock():
+				length: int = len(self.__iterable__)
+
+				if self.__int_index__ >= length:
+					raise StopIteration
+				else:
+					value: Q = self.__iterable__[length - 1 - self.__int_index__]
+					self.__int_index__ += 1
+					return value
+
+	def __init__(self, collection: collections.abc.Sized[T] | typing.Iterable[T], lock: threading.Lock | Synchronization.SpinLock | Synchronization.ReaderWriterLock = Synchronization.SpinLock()):
+		"""
+		Thread safe iterable using locks\n
+		- Constructor -
+		:param collection: The initial collection
+		:param lock: The lock to use for operations
+		"""
+
+		Misc.raise_ifn(isinstance(lock, (threading.Lock, Synchronization.SpinLock, Synchronization.ReaderWriterLock)), Exceptions.InvalidArgumentException(LockedIterable.__init__, 'lock', type(lock), (threading.Lock, Synchronization.SpinLock, Synchronization.ReaderWriterLock)))
+		super().__init__(collection)
+		self.__lock__: threading.Lock | Synchronization.SpinLock | Synchronization.ReaderWriterLock = lock
+
+	def __contains__(self, item: T) -> bool:
+		with self.read_lock():
+			return super().__contains__(item)
+
+	def __eq__(self, other: Iterable[T]) -> bool:
+		with self.read_lock():
+			return super().__eq__(other)
+
+	def __ne__(self, other: Iterable[T]) -> bool:
+		with self.read_lock():
+			return super().__ne__(other)
+
+	def __gt__(self, other: Iterable[T]) -> bool:
+		with self.read_lock():
+			return super().__gt__(other)
+
+	def __lt__(self, other: Iterable[T]) -> bool:
+		with self.read_lock():
+			return super().__lt__(other)
+
+	def __ge__(self, other: Iterable[T]) -> bool:
+		with self.read_lock():
+			return super().__ge__(other)
+
+	def __le__(self, other: Iterable[T]) -> bool:
+		with self.read_lock():
+			return super().__le__(other)
+
+	def __bool__(self) -> bool:
+		with self.read_lock():
+			return super().__bool__()
+
+	def __len__(self) -> int:
+		with self.read_lock():
+			return super().__len__()
+
+	def __repr__(self) -> str:
+		with self.read_lock():
+			return super().__repr__()
+
+	def __str__(self) -> str:
+		with self.read_lock():
+			return super().__str__()
+
+	def __iter__(self) -> LockedIterator[T]:
+		return LockedIterable.LockedIterator(self)
+
+	def __delitem__(self, key: int | tuple[int, ...] | slice) -> None:
+		with self.write_lock():
+			super().__delitem__(key)
+
+	def __setitem__(self, key: int | tuple[int, ...] | slice, value: T) -> None:
+		with self.write_lock():
+			super().__setitem__(key, value)
+
+	def __getitem__(self, item: int | slice | tuple[int, ...]) -> T | Iterable[T]:
+		with self.read_lock():
+			return super().__getitem__(item)
+
+	def __reversed__(self) -> ReversedLockedIterator[T]:
+		return LockedIterable.ReversedLockedIterator(self)
+
+	def clear(self) -> None:
+		with self.write_lock():
+			super().clear()
+
+	def reverse(self) -> None:
+		with self.write_lock():
+			super().reverse()
+
+	def count(self, item: T) -> int:
+		with self.read_lock():
+			return super().count(item)
+
+	def index(self, item: T, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
+		with self.read_lock():
+			return super().index(item, start, stop)
+
+	def find(self, item: T, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
+		with self.read_lock():
+			return super().find(item, start, stop)
+
+	def copy[I: Iterable](self: I) -> I:
+		with self.read_lock():
+			return super().copy()
+
+	def stream(self) -> Stream.LinqStream[T]:
+		"""
+		:return: A new LinqStream for queries on this iterable
+		"""
+
+		return Stream.LinqStream(LockedIterable.LockedIterator(self))
+
+	def acquire_read_lock(self) -> None:
+		"""
+		Acquires the reader lock if an RW lock, otherwise acquires the lock\n
+		Blocks until lock is acquired
+		"""
+
+		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
+			self.__lock__.acquire()
+		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
+			self.__lock__.acquire_reader()
+
+	def acquire_write_lock(self) -> None:
+		"""
+		Acquires the writer lock if an RW lock, otherwise acquires the lock\n
+		Blocks until lock is acquired
+		"""
+
+		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
+			self.__lock__.acquire()
+		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
+			self.__lock__.acquire_writer()
+
+	def read_lock(self) -> threading.Lock | Synchronization.SpinLock | Synchronization.ReaderWriterLock.Lock:
+		"""
+		Returns the reader lock if an RW lock, otherwise the lock
+		:return: The lock object for context management
+		"""
+
+		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
+			return self.__lock__
+		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
+			return self.__lock__.reader()
+
+	def write_lock(self) -> threading.Lock | Synchronization.SpinLock | Synchronization.ReaderWriterLock.Lock:
+		"""
+		Returns the reader lock if an RW lock, otherwise the lock
+		:return: The lock object for context management
+		"""
+
+		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
+			return self.__lock__
+		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
+			return self.__lock__.writer()
 
 
 def frange(start: float, stop: float = None, step: float = 1, precision: int = None) -> typing.Generator[float, None, None]:

@@ -1573,6 +1573,34 @@ class LinqStream[T](typing.Reversible):
 		except StopIteration:
 			return False
 
+	def at_least(self, count: int) -> bool:
+		"""
+		*Evaluates the query*
+		:param count: The minimum number of items
+		:return: Whether this query contains at least 'count' items
+		"""
+
+		try:
+			for _ in range(count):
+				next(self)
+			return True
+		except StopIteration:
+			return False
+
+	def at_most(self, count: int) -> bool:
+		"""
+		*Evaluates the query*
+		:param count: The maximum number of items
+		:return: Whether this query contains at most 'count' items
+		"""
+
+		try:
+			for _ in range(count + 1):
+				next(self)
+			return False
+		except StopIteration:
+			return True
+
 	def contains(self, elem: T) -> bool:
 		"""
 		*Evaluates the query*
@@ -1949,15 +1977,22 @@ class LinqStream[T](typing.Reversible):
 		"""
 
 		def _take(stream: LinqStream[T]) -> typing.Generator[T]:
-			nonlocal index
+			index: int = 0
 
 			for elem in stream:
-				if (index := (index + 1)) <= count:
+				nindex: int = index + 1
+
+				if nindex == count:
 					yield elem
+					break
+				elif index < count:
+					index = nindex
+					yield elem
+				else:
+					break
 
 		Misc.raise_ifn(isinstance(count, int), Exceptions.InvalidArgumentException(LinqStream.take, 'count', type(count), (int,)))
 		Misc.raise_ifn((count := int(count)) >= 0, ValueError('Count cannot be negative'))
-		index: int = 0
 		return LinqStream(_take(self))
 
 	def take_while(self, condition: typing.Callable[[T], bool]) -> LinqStream[T]:

@@ -5,8 +5,9 @@ import multiprocessing.synchronize
 import os
 import struct
 import threading
-import time
+import typing
 
+from . import Misc
 from . import Stream
 
 
@@ -20,130 +21,189 @@ class ReaderWriterLock:
 		INTERNAL CLASS
 		"""
 
-		def __init__(self, initial_thread: int, is_writer: bool):
-			self.__thread_queue__: list[int] = [initial_thread]
+		def __init__(self, is_writer: bool):
+			self.__counter__: int = 1
 			self.__is_writer__: bool = bool(is_writer)
+			self.__event__: threading.Event = threading.Event()
 
-		def __repr__(self) -> str:
-			if self.is_writer:
-				return f'Writer @ {self.__thread_queue__[0]}'
-			else:
-				return f'Reader(s) @ {self.__thread_queue__}'
+		def increment(self) -> int:
+			self.__counter__ += 1
+			return self.__counter__
+
+		def decrement(self) -> int:
+			self.__counter__ -= 1
+			return self.__counter__
 
 		@property
 		def is_writer(self) -> bool:
 			return self.__is_writer__
 
+		@property
+		def counter(self) -> int:
+			return self.__counter__
+
+		@property
+		def signal(self) -> threading.Event:
+			return self.__event__
+
+	class Lock:
+		"""
+		Single reader-writer lock allowing context
+		"""
+
+		def __init__(self, rw_lock: ReaderWriterLock, is_writer: bool):
+			"""
+			Single reader-writer lock allowing context\n
+			- Constructor -
+			:param rw_lock: The parent RW lock
+			:param is_writer: Whether this lock is a writer
+			"""
+
+			assert isinstance(rw_lock, ReaderWriterLock)
+			self.__rw_lock__: ReaderWriterLock = rw_lock
+			self.__writer__: bool = bool(is_writer)
+
+		def __enter__(self) -> ReaderWriterLock.Lock:
+			if self.__writer__:
+				self.__rw_lock__.acquire_writer()
+			else:
+				self.__rw_lock__.acquire_reader()
+
+			return self
+
+		def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+			if self.__writer__:
+				self.__rw_lock__.release_writer()
+			else:
+				self.__rw_lock__.release_reader()
+
 	def __init__(self):
 		"""
-		Class representing a reader writer lock
+		Class representing a reader writer lock\n
 		- Constructor -
 		"""
 
 		self.__queued_threads__: list[ReaderWriterLock.__ThreadInfo__] = []
 		self.__lock__: threading.RLock = threading.RLock()
+		self.__thread_info__: typing.Optional[ReaderWriterLock.__ThreadInfo__] = None
 
-	def __del__(self):
-		self.__lock__.acquire()
-		remaining: int = len(self.__queued_threads__)
-		self.__lock__.release()
+	def __del__(self) -> None:
+		if self.reader_acquired:
+			self.release_reader()
+		elif self.writer_acquired:
+			self.release_writer()
 
-		if remaining > 0:
-			raise IOError('Reader writer lock incomplete')
-
-	def acquire_reader(self) -> None:
+	def acquire_reader(self, timeout: float = None) -> None:
 		"""
-		Acquires the reader lock
+		Acquires the reader lock\n
 		If no writer is in the queue, will return immediately
+		:param timeout: The number of seconds to wait
 		"""
 
-		thread_id: int = threading.current_thread().native_id
-		self.__lock__.acquire()
-		thread_info: ReaderWriterLock.__ThreadInfo__ = Stream.LinqStream(self.__queued_threads__).last_or_default()
-		writer_active: bool = Stream.LinqStream(self.__queued_threads__).filter(lambda info: info.is_writer).any()
+		with self.__lock__:
+			thread_info: ReaderWriterLock.__ThreadInfo__ = Stream.LinqStream(self.__queued_threads__).last_or_default()
+			writer_active: bool = any(info.is_writer for info in self.__queued_threads__)
 
-		if writer_active and (thread_info is None or thread_info.is_writer):
-			self.__queued_threads__.append(ReaderWriterLock.__ThreadInfo__(thread_id, False))
-		elif writer_active:
-			thread_info.__thread_queue__.append(thread_id)
-		elif thread_info is None:
-			self.__queued_threads__.append(ReaderWriterLock.__ThreadInfo__(thread_id, False))
+			if thread_info is None or writer_active:
+				self.__thread_info__ = ReaderWriterLock.__ThreadInfo__(False)
+				self.__queued_threads__.append(self.__thread_info__)
+			else:
+				thread_info.increment()
+				self.__thread_info__ = thread_info
+
+		if thread_info is None:
+			self.__thread_info__.signal.set()
 		else:
-			thread_info.__thread_queue__.append(thread_id)
+			self.__thread_info__.signal.wait(timeout)
 
-		thread_info = Stream.LinqStream(self.__queued_threads__).first_or_default()
-
-		if thread_id in thread_info.__thread_queue__:
-			self.__lock__.release()
-			return
-
-		while True:
-			self.__lock__.release()
-			time.sleep(0.000001)
-			self.__lock__.acquire()
-			thread_info = Stream.LinqStream(self.__queued_threads__).first_or_default()
-
-			if thread_id in thread_info.__thread_queue__:
-				break
-
-		self.__lock__.release()
-
-	def acquire_writer(self) -> None:
+	def acquire_writer(self, timeout: float = None) -> None:
 		"""
-		Acquires the writer lock
-		If no reader or writer is in the queue, will return immediately
+		Acquires the writer lock\n
+		If no writer is in the queue, will return immediately
+		:param timeout: The number of seconds to wait
 		"""
-		thread_id: int = threading.current_thread().native_id
-		self.__lock__.acquire()
-		thread_info: ReaderWriterLock.__ThreadInfo__ = ReaderWriterLock.__ThreadInfo__(thread_id, True)
-		self.__queued_threads__.append(thread_info)
 
-		while True:
-			self.__lock__.release()
-			time.sleep(0.000001)
-			self.__lock__.acquire()
-			thread_info = Stream.LinqStream(self.__queued_threads__).first_or_default()
+		with self.__lock__:
+			thread_info: ReaderWriterLock.__ThreadInfo__ = Stream.LinqStream(self.__queued_threads__).last_or_default()
+			self.__thread_info__ = ReaderWriterLock.__ThreadInfo__(True)
+			self.__queued_threads__.append(self.__thread_info__)
 
-			if thread_id in thread_info.__thread_queue__:
-				break
-
-		self.__lock__.release()
+		if thread_info is None:
+			self.__thread_info__.signal.set()
+		else:
+			self.__thread_info__.signal.wait(timeout)
 
 	def release_reader(self) -> None:
 		"""
 		Releases the reader lock
 		"""
 
-		thread_id: int = threading.current_thread().native_id
-		self.__lock__.acquire()
-		thread_info: ReaderWriterLock.__ThreadInfo__ = Stream.LinqStream(self.__queued_threads__).first_or_default()
+		with self.__lock__:
+			thread_info: ReaderWriterLock.__ThreadInfo__ = Stream.LinqStream(self.__queued_threads__).first_or_default()
+			Misc.raise_ifn(thread_info is not None and thread_info is self.__thread_info__ and not thread_info.is_writer, IOError('The reader is not acquired'))
 
-		if thread_info is None or thread_info.is_writer or thread_id not in thread_info.__thread_queue__:
-			self.__lock__.release()
-			return
+			if thread_info.decrement() == 0:
+				self.__thread_info__.signal.clear()
+				del self.__queued_threads__[0]
 
-		thread_info.__thread_queue__.remove(thread_id)
-
-		if len(thread_info.__thread_queue__) == 0:
-			self.__queued_threads__.pop(0)
-
-		self.__lock__.release()
+			if (thread_info := Stream.LinqStream(self.__queued_threads__).first_or_default()) is not None:
+				thread_info.signal.set()
 
 	def release_writer(self) -> None:
 		"""
 		Releases the writer lock
 		"""
 
-		thread_id: int = threading.current_thread().native_id
-		self.__lock__.acquire()
-		thread_info: ReaderWriterLock.__ThreadInfo__ = Stream.LinqStream(self.__queued_threads__).first_or_default()
+		with self.__lock__:
+			thread_info: ReaderWriterLock.__ThreadInfo__ = Stream.LinqStream(self.__queued_threads__).first_or_default()
+			Misc.raise_ifn(thread_info is not None and thread_info is self.__thread_info__ and thread_info.is_writer, IOError('The writer is not acquired'))
 
-		if thread_info is None or not thread_info.is_writer or thread_id not in thread_info.__thread_queue__:
-			self.__lock__.release()
-			return
+			if thread_info.decrement() == 0:
+				self.__thread_info__.signal.clear()
+				del self.__queued_threads__[0]
 
-		self.__queued_threads__.pop(0)
-		self.__lock__.release()
+			if (thread_info := Stream.LinqStream(self.__queued_threads__).first_or_default()) is not None:
+				thread_info.signal.set()
+
+	def reader(self) -> ReaderWriterLock.Lock:
+		"""
+		Returns a reader lock supporting the context manager protocol
+		:return: The reader lock
+		"""
+
+		return ReaderWriterLock.Lock(self, False)
+
+	def writer(self) -> ReaderWriterLock.Lock:
+		"""
+		Returns a writer lock supporting the context manager protocol
+		:return: The writer lock
+		"""
+
+		return ReaderWriterLock.Lock(self, True)
+
+	@property
+	def reader_acquired(self) -> bool:
+		"""
+		:return: Whether the reader lock is acquired
+		"""
+
+		return self.__thread_info__ is not None and not self.__thread_info__.is_writer and self.__thread_info__.signal.is_set()
+
+	@property
+	def writer_acquired(self) -> bool:
+		"""
+		:return: Whether the writer lock is acquired
+		"""
+
+		return self.__thread_info__ is not None and self.__thread_info__.is_writer and self.__thread_info__.signal.is_set()
+
+	@property
+	def acquired(self) -> bool:
+		"""
+		:return: Whether the reader or writer lock is acquired
+		"""
+
+		return self.__thread_info__ is not None and self.__thread_info__.signal.is_set()
 
 
 class SpinLock:
@@ -163,6 +223,13 @@ class SpinLock:
 	def __del__(self):
 		if self.acquired:
 			self.release()
+
+	def __enter__(self) -> SpinLock:
+		self.acquire()
+		return self
+
+	def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+		self.release()
 
 	def acquire(self) -> None:
 		"""

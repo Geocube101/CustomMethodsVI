@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import datetime
 import io
+import os
+import threading
 import typing
 
 from . import Exceptions
@@ -12,10 +14,19 @@ class Logger:
 	Class representing a log file writer
 	"""
 
-	def __init__(self, stream: io.IOBase, timezone: datetime.timezone = datetime.timezone.utc):
+	def __init__(self, stream: io.IOBase, timezone: datetime.timezone = datetime.timezone.utc, header_format: str = '{%D} {%T} - [ {%TZ} ] [ {%C} ] -> Thread {%TID}: {%M}'):
 		"""
-		Class representing a log file writer
-		- Constructor -
+		Class representing a log file writer\n
+		- Constructor -\n
+		[ Header Format ]\n
+		* %D - Current date\n
+		* %T - Current time\n
+		* %TZ - Current timezone\n
+		* %C - Logger category (DEBUG, INFO, WARN, ERROR, CRITICAL)\n
+		* %PID - Sending process ID\n
+		* %TID - Sending thread ID\n
+		* %TNID - Sending thread native ID\n
+		* %M - Original message
 		:param stream: The stream to write results to
 		:param timezone: The timezone to log with
 		"""
@@ -30,10 +41,24 @@ class Logger:
 		elif not stream.writable():
 			raise IOError('Target stream is not writable')
 
+		self.__header__: str = str(header_format)
 		self.__stream__: io.IOBase = stream
 		self.__timezone__: datetime.timezone = timezone
 		self.__state__: bool = True
 		self.__stream__.write('==========[ Log Opened ]==========\n\n')
+
+	def __get_line__(self, category: str, msg: str) -> str:
+		now: datetime.datetime = datetime.datetime.now(self.__timezone__)
+
+		return self.__header__ \
+			.replace('{%D}', now.strftime('%m/%d/%Y')) \
+			.replace('{%T}', now.strftime('%H:%M:%S.%f')) \
+			.replace('{%TZ}', str(self.__timezone__)) \
+			.replace('{%C}', category) \
+			.replace('{%PID}', str(os.getpid())) \
+			.replace('{%TID}', str(threading.get_ident())) \
+			.replace('{%TNID}', str(threading.get_native_id())) \
+			.replace('{%M}', msg)
 
 	def close(self) -> None:
 		"""
@@ -66,10 +91,12 @@ class Logger:
 		self.__state__ = False
 		self.__stream__ = None
 
-	def debug(self, msg: typing.Any) -> Logger:
+	def debug(self, *data: typing.Any, sep: str = ' ', end: str = '\n') -> Logger:
 		"""
 		Writes a message to the log on DEBUG level
-		:param msg: The message to write
+		:param data: The data to write
+		:param sep: The seperator token
+		:param end: The terminator token
 		:return: This log writer instance
 		:raises IOError: If log is closed
 		"""
@@ -77,13 +104,15 @@ class Logger:
 		if self.__state__ is False:
 			raise IOError('Log is closed')
 
-		self.__stream__.write(f'{datetime.datetime.now(datetime.timezone.utc).strftime("%m/%d/%Y %H:%M:%S.%f")} [ {self.__timezone__} ] [ DEBUG ]: {str(msg).strip()}\n')
+		self.__stream__.write(self.__get_line__('DEBUG', sep.join(map(str, data))) + end)
 		return self
 
-	def info(self, msg: typing.Any) -> Logger:
+	def info(self, *data: typing.Any, sep: str = ' ', end: str = '\n') -> Logger:
 		"""
 		Writes a message to the log on INFO level
-		:param msg: The message to write
+		:param data: The data to write
+		:param sep: The seperator token
+		:param end: The terminator token
 		:return: This log writer instance
 		:raises IOError: If log is closed
 		"""
@@ -91,13 +120,15 @@ class Logger:
 		if self.__state__ is False:
 			raise IOError('Log is closed')
 
-		self.__stream__.write(f'{datetime.datetime.now(datetime.timezone.utc).strftime("%m/%d/%Y %H:%M:%S.%f")} [ {self.__timezone__} ] [ INFO ]: {str(msg).strip()}\n')
+		self.__stream__.write(self.__get_line__('INFO', sep.join(map(str, data))) + end)
 		return self
 
-	def warn(self, msg: typing.Any) -> Logger:
+	def warn(self, *data: typing.Any, sep: str = ' ', end: str = '\n') -> Logger:
 		"""
 		Writes a message to the log on WARN level
-		:param msg: The message to write
+		:param data: The data to write
+		:param sep: The seperator token
+		:param end: The terminator token
 		:return: This log writer instance
 		:raises IOError: If log is closed
 		"""
@@ -105,13 +136,15 @@ class Logger:
 		if self.__state__ is False:
 			raise IOError('Log is closed')
 
-		self.__stream__.write(f'{datetime.datetime.now(datetime.timezone.utc).strftime("%m/%d/%Y %H:%M:%S.%f")} [ {self.__timezone__} ] [ WARN ]: {str(msg).strip()}\n')
+		self.__stream__.write(self.__get_line__('WARN', sep.join(map(str, data))) + end)
 		return self
 
-	def error(self, msg: typing.Any) -> Logger:
+	def error(self, *data: typing.Any, sep: str = ' ', end: str = '\n') -> Logger:
 		"""
 		Writes a message to the log on ERROR level
-		:param msg: The message to write
+		:param data: The data to write
+		:param sep: The seperator token
+		:param end: The terminator token
 		:return: This log writer instance
 		:raises IOError: If log is closed
 		"""
@@ -119,13 +152,15 @@ class Logger:
 		if self.__state__ is False:
 			raise IOError('Log is closed')
 
-		self.__stream__.write(f'{datetime.datetime.now(datetime.timezone.utc).strftime("%m/%d/%Y %H:%M:%S.%f")} [ {self.__timezone__} ] [ ERROR ]: {str(msg).strip()}\n')
+		self.__stream__.write(self.__get_line__('ERROR', sep.join(map(str, data))) + end)
 		return self
 
-	def critical(self, msg: typing.Any) -> Logger:
+	def critical(self, *data: typing.Any, sep: str = ' ', end: str = '\n') -> Logger:
 		"""
 		Writes a message to the log on CRITICAL level
-		:param msg: The message to write
+		:param data: The data to write
+		:param sep: The seperator token
+		:param end: The terminator token
 		:return: This log writer instance
 		:raises IOError: If log is closed
 		"""
@@ -133,5 +168,5 @@ class Logger:
 		if self.__state__ is False:
 			raise IOError('Log is closed')
 
-		self.__stream__.write(f'{datetime.datetime.now(datetime.timezone.utc).strftime("%m/%d/%Y %H:%M:%S.%f")} [ {self.__timezone__} ] [ CRITICAL ]: {str(msg).strip()}\n')
+		self.__stream__.write(self.__get_line__('CRITICAL', sep.join(map(str, data))) + end)
 		return self
