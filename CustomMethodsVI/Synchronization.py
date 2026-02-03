@@ -1,17 +1,24 @@
 from __future__ import annotations
 
 import multiprocessing
-import multiprocessing.synchronize
 import os
 import struct
 import threading
+import time
 import typing
 
+from . import Exceptions
 from . import Misc
 from . import Stream
 
 
-class ReaderWriterLock:
+class SynchronizationPrimitive:
+	"""
+	Base class for Synchronization locks
+	"""
+
+
+class ReaderWriterLock(SynchronizationPrimitive):
 	"""
 	Class representing a reader writer lock
 	"""
@@ -97,7 +104,8 @@ class ReaderWriterLock:
 		"""
 		Acquires the reader lock\n
 		If no writer is in the queue, will return immediately
-		:param timeout: The number of seconds to wait
+		:param timeout: The number of seconds to wait or None to wait indefinitely
+		:raises TimeoutError: If the lock is not acquired withing the specified timeout
 		"""
 
 		with self.__lock__:
@@ -114,13 +122,14 @@ class ReaderWriterLock:
 		if thread_info is None:
 			self.__thread_info__.signal.set()
 		else:
-			self.__thread_info__.signal.wait(timeout)
+			Misc.raise_ifn(self.__thread_info__.signal.wait(timeout), TimeoutError('Lock acquisition timed out'))
 
 	def acquire_writer(self, timeout: float = None) -> None:
 		"""
 		Acquires the writer lock\n
 		If no writer is in the queue, will return immediately
-		:param timeout: The number of seconds to wait
+		:param timeout: The number of seconds to wait or None to wait indefinitely
+		:raises TimeoutError: If the lock is not acquired withing the specified timeout
 		"""
 
 		with self.__lock__:
@@ -131,7 +140,7 @@ class ReaderWriterLock:
 		if thread_info is None:
 			self.__thread_info__.signal.set()
 		else:
-			self.__thread_info__.signal.wait(timeout)
+			Misc.raise_ifn(self.__thread_info__.signal.wait(timeout), TimeoutError('Lock acquisition timed out'))
 
 	def release_reader(self) -> None:
 		"""
@@ -206,7 +215,7 @@ class ReaderWriterLock:
 		return self.__thread_info__ is not None and self.__thread_info__.signal.is_set()
 
 
-class SpinLock:
+class SpinLock(SynchronizationPrimitive):
 	"""
 	Class representing a spin lock
 	"""
@@ -231,13 +240,16 @@ class SpinLock:
 	def __exit__(self, exc_type, exc_val, exc_tb) -> None:
 		self.release()
 
-	def acquire(self) -> None:
+	def acquire(self, timeout: float = None) -> None:
 		"""
-		Acquires the lock
+		Acquires the lock\n
 		Blocks until lock is acquired
+		:param timeout: The number of seconds to wait or None to wait indefinitely
+		:raises TimeoutError: If the lock is not acquired withing the specified timeout
 		"""
 
 		lock_id: int = struct.unpack('=Q', struct.pack('=II', os.getpid(), threading.current_thread().native_id))[0]
+		t1: float = time.perf_counter()
 
 		while True:
 			with self.__source__.get_lock():
@@ -245,6 +257,8 @@ class SpinLock:
 					self.__source__.value = lock_id
 					self.__count__ += 1
 					return
+				elif timeout is not None and timeout is not ... and time.perf_counter() - t1 >= timeout:
+					raise TimeoutError('Lock acquisition timed out')
 
 	def release(self) -> None:
 		"""
@@ -272,3 +286,69 @@ class SpinLock:
 
 		with self.__source__.get_lock():
 			return self.__source__.value == lock_id
+
+
+class Semaphore(SynchronizationPrimitive):
+	"""
+	Class representing an integer semaphore
+	"""
+
+	def __init__(self, max_count: int) -> None:
+		"""
+		Class representing an integer semaphore\n
+		- Constructor -
+		:param max_count: The semaphore maximum count
+		"""
+
+		Misc.raise_ifn(isinstance(max_count, int), Exceptions.InvalidArgumentException(Semaphore.__init__, 'max_count', type(max_count), (int,)))
+		Misc.raise_if(max_count <= 0, ValueError('Semaphore max count must be a positive, non-zero integer'))
+		self.__max_count__: int = int(max_count)
+		self.__count__: int = self.__max_count__
+		self.__acc_lock__: threading.Lock = threading.Lock()
+		self.__rel_lock__: threading.Lock = threading.Lock()
+		self.__event__: threading.Event = threading.Event()
+		self.__event__.set()
+
+	def __enter__(self) -> Semaphore:
+		self.acquire()
+		return self
+
+	def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+		self.release()
+
+	def acquire(self, timeout: float = None) -> None:
+		"""
+		Acquires the lock\n
+		The internal counter is decremented by one
+		:param timeout: The number of seconds to wait or None to wait indefinitely
+		:raises TimeoutError: If the lock is not acquired withing the specified timeout
+		"""
+
+		try:
+			t1: float = time.perf_counter()
+			Misc.raise_ifn(self.__acc_lock__.acquire(timeout=-1 if timeout is None or timeout is ... else timeout), TimeoutError('Lock acquisition timed out'))
+			t2: float = time.perf_counter()
+			Misc.raise_ifn(self.__event__.wait(None if timeout is None or timeout is ... else (timeout - (t2 - t1))), TimeoutError('Lock acquisition timed out'))
+
+			with self.__rel_lock__:
+				self.__count__ -= 1
+
+				if self.__count__ == 0:
+					self.__event__.clear()
+		finally:
+			self.__acc_lock__.release()
+
+	def release(self) -> None:
+		"""
+		Releases the lock\n
+		The internal counter is decremented by one
+		:raises TimeoutError: If the lock is not acquired withing the specified timeout
+		:raises IOError: If the lock's internal counter exceeds the maximum count (released too many times)
+		"""
+
+		with self.__rel_lock__:
+			self.__count__ += 1
+			self.__event__.set()
+
+			if self.__count__ > self.__max_count__:
+				raise IOError('Semaphore count exceeded')

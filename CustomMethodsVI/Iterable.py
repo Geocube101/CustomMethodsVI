@@ -19,14 +19,14 @@ class Iterable[T](collections.abc.Sequence[T], collections.abc.Sized, typing.Ite
 	Base iterable class for CM-VI iterables
 	"""
 
-	def __init__(self, collection: collections.abc.Sized[T] | typing.Iterable[T]):
+	def __init__(self, collection: collections.abc.Sized[T] | typing.Iterable[T] = ...):
 		"""
 		Base iterable class for CM-VI iterables\n
 		- Constructor -
 		:param collection: The iterable to build from
 		"""
 
-		self.__buffer__: list = list(collection)
+		self.__buffer__: list = [] if collection is None or collection is ... else list(collection)
 
 	def __contains__(self, item: T) -> bool:
 		"""
@@ -292,6 +292,18 @@ class Iterable[T](collections.abc.Sequence[T], collections.abc.Sized, typing.Ite
 		"""
 
 		return type(self)(self.__buffer__.copy())
+
+	def get_or_default(self, index: int, default: typing.Optional[T] = None) -> typing.Optional[T]:
+		"""
+		Gets the item at the specified index or 'default' if index out of bounds
+		:param index: The index to retrieve
+		:param default: The default item to return if index out of bounds
+		:return: The item at 'index' or 'default' if out of bounds
+		"""
+
+		length: int = len(self)
+		index = length + index if index < 0 else index
+		return None if index >= length else self[index]
 
 	def stream(self) -> Stream.LinqStream[T]:
 		"""
@@ -2141,7 +2153,7 @@ class LockedIterable[T](SortableIterable[T]):
 					self.__int_index__ += 1
 					return value
 
-	def __init__(self, collection: collections.abc.Sized[T] | typing.Iterable[T], lock: threading.Lock | Synchronization.SpinLock | Synchronization.ReaderWriterLock = Synchronization.SpinLock()):
+	def __init__(self, collection: collections.abc.Sized[T] | typing.Iterable[T] = ..., *, lock: threading.Lock | Synchronization.SynchronizationPrimitive = Synchronization.SpinLock()):
 		"""
 		Thread safe iterable using locks\n
 		- Constructor -
@@ -2149,7 +2161,7 @@ class LockedIterable[T](SortableIterable[T]):
 		:param lock: The lock to use for operations
 		"""
 
-		Misc.raise_ifn(isinstance(lock, (threading.Lock, Synchronization.SpinLock, Synchronization.ReaderWriterLock)), Exceptions.InvalidArgumentException(LockedIterable.__init__, 'lock', type(lock), (threading.Lock, Synchronization.SpinLock, Synchronization.ReaderWriterLock)))
+		Misc.raise_ifn(isinstance(lock, (threading.Lock, Synchronization.SynchronizationPrimitive)), Exceptions.InvalidArgumentException(LockedIterable.__init__, 'lock', type(lock), (threading.Lock, Synchronization.SynchronizationPrimitive)))
 		super().__init__(collection)
 		self.__lock__: threading.Lock | Synchronization.SpinLock | Synchronization.ReaderWriterLock = lock
 
@@ -2268,7 +2280,7 @@ class LockedIterable[T](SortableIterable[T]):
 		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
 			self.__lock__.acquire_writer()
 
-	def read_lock(self) -> threading.Lock | Synchronization.SpinLock | Synchronization.ReaderWriterLock.Lock:
+	def read_lock(self) -> threading.Lock | Synchronization.SynchronizationPrimitive | Synchronization.ReaderWriterLock.Lock:
 		"""
 		Returns the reader lock if an RW lock, otherwise the lock
 		:return: The lock object for context management
@@ -2279,7 +2291,7 @@ class LockedIterable[T](SortableIterable[T]):
 		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
 			return self.__lock__.reader()
 
-	def write_lock(self) -> threading.Lock | Synchronization.SpinLock | Synchronization.ReaderWriterLock.Lock:
+	def write_lock(self) -> threading.Lock | Synchronization.SynchronizationPrimitive | Synchronization.ReaderWriterLock.Lock:
 		"""
 		Returns the reader lock if an RW lock, otherwise the lock
 		:return: The lock object for context management
@@ -2289,6 +2301,33 @@ class LockedIterable[T](SortableIterable[T]):
 			return self.__lock__
 		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
 			return self.__lock__.writer()
+
+	def get_or_wait(self, index: int, timeout: float = None, default: T = ...) -> T:
+		"""
+		Gets the item at the specified index\n
+		If the index does not exist, waits at most 'timeout' seconds until it does
+		:param index: The index to retrieve
+		:param timeout: The maximum amout of seconds to wait or None for infinite
+		:param default: The default value to return if timed out
+		:return: The item or 'default'
+		:raises TimeoutError: If 'default' is not supplied and the operation times out
+		"""
+
+		time_point: float = time.perf_counter()
+
+		while True:
+			with self.read_lock():
+				length: int = super().__len__()
+				index = length + index if index < 0 else index
+
+				if index < length:
+					return super().__getitem__(index)
+				elif (timed_out := (timeout is not None and timeout is not ... and time.perf_counter() - time_point >= timeout)) and default is ...:
+					raise TimeoutError('LockedIterable wait timed out')
+				elif timed_out:
+					return default
+
+				time.sleep(1e-6)
 
 
 def frange(start: float, stop: float = None, step: float = 1, precision: int = None) -> typing.Generator[float, None, None]:
