@@ -14,21 +14,21 @@ from . import Stream
 from . import Synchronization
 
 
-class Iterable[T](collections.abc.Sequence[T], collections.abc.Sized, typing.Iterable[T]):
+class Iterable[IterType, ElemType](collections.abc.Collection[ElemType]):
 	"""
 	Base iterable class for CM-VI iterables
 	"""
 
-	def __init__(self, collection: collections.abc.Sized[T] | typing.Iterable[T] = ...):
+	def __init__(self, collection: IterType):
 		"""
 		Base iterable class for CM-VI iterables\n
 		- Constructor -
 		:param collection: The iterable to build from
 		"""
 
-		self.__buffer__: list = [] if collection is None or collection is ... else list(collection)
+		self.__buffer__: IterType = collection
 
-	def __contains__(self, item: T) -> bool:
+	def __contains__(self, item: ElemType) -> bool:
 		"""
 		:param item: The item to search for
 		:return: If the item exists within this collection
@@ -36,25 +36,25 @@ class Iterable[T](collections.abc.Sequence[T], collections.abc.Sized, typing.Ite
 
 		return item in self.__buffer__
 
-	def __eq__(self, other: Iterable[T]) -> bool:
+	def __eq__(self, other: Iterable[IterType, ElemType]) -> bool:
 		"""
 		Checks if this instance matches another Iterable instance
 		:param other: The callback instance to compare
 		:return: True if both are an Iterable and their contents are equal
 		"""
 
-		return self.__buffer__ == other.__buffer__ if isinstance(other, Iterable) else False
+		return self.__buffer__ == other.__buffer__ if isinstance(other, Sequence) else False
 
-	def __ne__(self, other: Iterable[T]) -> bool:
+	def __ne__(self, other: Iterable[IterType, ElemType]) -> bool:
 		"""
 		Checks if this instance doesn't match another Iterable instance
 		:param other: The callback instance to compare
-		:return: False if both are an Iterable and their contents are equal
+		:return: True if both are an IterableIterable and their contents are equal
 		"""
 
 		return not self == other
 
-	def __gt__(self, other: Iterable[T]) -> bool:
+	def __gt__(self, other: Iterable[IterType, ElemType]) -> bool:
 		"""
 		Compares two Iterable instances based on their length
 		:param other: The callback instance
@@ -63,7 +63,7 @@ class Iterable[T](collections.abc.Sequence[T], collections.abc.Sized, typing.Ite
 
 		return len(self) > len(other) if isinstance(other, Iterable) else NotImplemented
 
-	def __lt__(self, other: Iterable[T]) -> bool:
+	def __lt__(self, other: Iterable[IterType, ElemType]) -> bool:
 		"""
 		Compares two Iterable instances based on their length
 		:param other: The callback instance
@@ -72,7 +72,7 @@ class Iterable[T](collections.abc.Sequence[T], collections.abc.Sized, typing.Ite
 
 		return len(self) < len(other) if isinstance(other, Iterable) else NotImplemented
 
-	def __ge__(self, other: Iterable[T]) -> bool:
+	def __ge__(self, other: Iterable[IterType, ElemType]) -> bool:
 		"""
 		Compares two Iterable instances based on their length
 		:param other: The callback instance
@@ -81,7 +81,7 @@ class Iterable[T](collections.abc.Sequence[T], collections.abc.Sized, typing.Ite
 
 		return len(self) >= len(other) if isinstance(other, Iterable) else NotImplemented
 
-	def __le__(self, other: Iterable[T]) -> bool:
+	def __le__(self, other: Iterable[IterType, ElemType]) -> bool:
 		"""
 		Compares two Iterable instances based on their length
 		:param other: The callback instance
@@ -102,34 +102,168 @@ class Iterable[T](collections.abc.Sequence[T], collections.abc.Sized, typing.Ite
 		"""
 		:return: The length of this iterable
 		"""
+
 		return len(self.__buffer__)
+
+	def __iter__(self) -> typing.Iterator[ElemType]:
+		"""
+		:return: An iterator to iterate over this iterable
+		"""
+
+		return iter(self.__buffer__)
+
+
+class Sequence[T](Iterable[list[T], T], collections.abc.Sequence[T]):
+	"""
+	Base iterable class for CM-VI sequences
+	"""
+
+	def __init__(self, collection: collections.abc.Iterable[T] = ...):
+		"""
+		Base iterable class for CM-VI sequences\n
+		- Constructor -
+		:param collection: The sequence to build from
+		"""
+
+		super().__init__([] if collection is None or collection is ... else list(collection))
 
 	def __repr__(self) -> str:
 		"""
-		:return: The string representation of this list
+		:return: The string representation of this sequence
 		"""
 
 		return repr(self.__buffer__)
 
 	def __str__(self) -> str:
 		"""
-		:return: The string representation of this list
+		:return: The string representation of this sequence
 		"""
 
 		return str(self.__buffer__)
 
-	def __iter__(self) -> typing.Iterator[T]:
+	def __getitem__(self, item: int | slice | tuple[int, ...]) -> T | Sequence[T]:
 		"""
-		:return: The iterator for this iterable
+		Gets one or more items in this sequence
+		:param item: The index or indices to get
+		:return: If a single element, only that item, otherwise a Sequence of items
+		:raises TypeError: If indices are not integers, slices, or a sequence of indices
 		"""
 
-		return iter(self.__buffer__)
+		if isinstance(item, int):
+			return self.__buffer__[item]
+
+		elif isinstance(item, tuple):
+			items: list = []
+
+			for key in item:
+				result = self[key]
+
+				if isinstance(key, (tuple, slice)):
+					items.extend(result)
+				else:
+					items.append(result)
+
+			return Sequence(items)
+
+		elif isinstance(item, slice):
+			start: int = 0 if item.start is None else int(item.start)
+			stop: int = len(self) if item.stop is None else int(item.stop)
+			step: int = 1 if item.step is None else int(item.step)
+			items: list = []
+
+			for i in range(start, stop, step):
+				items.append(self.__buffer__[i])
+
+			return Sequence(items)
+
+		else:
+			raise TypeError(f'TypeError: list indices must be integers or slices, not {type(item).__name__}')
+
+	def __reversed__(self) -> reversed[T]:
+		"""
+		:return: A reverse iterator
+		"""
+
+		return reversed(self.__buffer__)
+
+	def count(self, item: T) -> int:
+		"""
+		:param item: The item to search for
+		:return: The number of times an item occurs in this sequence
+		"""
+
+		return self.__buffer__.count(item)
+
+	def index(self, item: T, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
+		"""
+		Gets the index of an item in the sequence
+		:param item: The item to search for
+		:param start: The index to begin the search
+		:param stop: The index to end the search
+		:return: The index of the element in this sequence
+		:raises ValueError: If the specified value is not in this sequence
+		"""
+
+		return self.__buffer__.index(item, start, stop)
+
+	def find(self, item: T, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
+		"""
+		Gets the index of an item in the sequence
+		:param item: The item to search for
+		:param start: The index to begin the search
+		:param stop: The index to end the search
+		:return: The index of the element in this sequence or -1 if no such element
+		"""
+
+		start: int = 0 if start is ... or start is None else int(start)
+		stop: int = -1 if stop is ... or stop is None else int(stop)
+		start = start if start >= 0 else len(self) + start
+		stop = stop if stop >= 0 else len(self) + stop
+
+		while start < stop:
+			if self.__buffer__[start] == item:
+				return start
+			start += 1
+
+		return -1
+
+	def copy[I: Sequence](self: I) -> I:
+		"""
+		:return: A copy of this sequence
+		"""
+
+		return type(self)(self.__buffer__.copy())
+
+	def get_or_default(self, index: int, default: typing.Optional[T] = None) -> typing.Optional[T]:
+		"""
+		Gets the item at the specified index or 'default' if index out of bounds
+		:param index: The index to retrieve
+		:param default: The default item to return if index out of bounds
+		:return: The item at 'index' or 'default' if out of bounds
+		"""
+
+		length: int = len(self)
+		index = length + index if index < 0 else index
+		return default if index >= length else self[index]
+
+	def stream(self) -> Stream.LinqStream[T]:
+		"""
+		:return: A new LinqStream for queries on this sequence
+		"""
+
+		return Stream.LinqStream(self)
+
+
+class MutableSequence[T](Sequence[T], collections.abc.MutableSequence[T]):
+	"""
+	Sequence class allowing modifications
+	"""
 
 	def __delitem__(self, key: int | tuple[int, ...] | slice) -> None:
 		"""
-		Deletes one or more items in this collection
+		Deletes one or more items in this sequence
 		:param key: The index or indices to modify
-		:raises TypeError: If indices are not integers, slices, or a collection of indices
+		:raises TypeError: If indices are not integers, slices, or a tuple of indices
 		"""
 
 		if isinstance(key, tuple):
@@ -162,10 +296,10 @@ class Iterable[T](collections.abc.Sequence[T], collections.abc.Sized, typing.Ite
 
 	def __setitem__(self, key: int | tuple[int, ...] | slice, value: T) -> None:
 		"""
-		Sets one or more items in this collection
+		Sets one or more items in this sequence
 		:param key: The index or indices to modify
 		:param value: The value to set
-		:raises TypeError: If indices are not integers, slices, or a collection of indices
+		:raises TypeError: If indices are not integers, slices, or a tuple of indices
 		"""
 
 		if isinstance(key, int):
@@ -186,164 +320,82 @@ class Iterable[T](collections.abc.Sequence[T], collections.abc.Sized, typing.Ite
 		else:
 			raise TypeError(f'TypeError: list indices must be integers or slices, not {type(key).__name__}')
 
-	def __getitem__(self, item: int | slice | tuple[int, ...]) -> T | Iterable[T]:
+	def __add__(self, other: typing.Iterable[T]) -> MutableSequence[T]:
 		"""
-		Gets one or more items in this collection
-		:param item: The index or indices to get
-		:return: If a single element, only that item, otherwise an Iterable of items
-		:raises TypeError: If indices are not integers, slices, or a collection of indices
-		"""
-
-		if isinstance(item, int):
-			return self.__buffer__[item]
-
-		elif isinstance(item, tuple):
-			items: list = []
-
-			for key in item:
-				result = self[key]
-
-				if isinstance(key, (tuple, slice)):
-					items.extend(result)
-				else:
-					items.append(result)
-
-			return Iterable(items)
-
-		elif isinstance(item, slice):
-			start: int = 0 if item.start is None else int(item.start)
-			stop: int = len(self) if item.stop is None else int(item.stop)
-			step: int = 1 if item.step is None else int(item.step)
-			items: list = []
-
-			for i in range(start, stop, step):
-				items.append(self.__buffer__[i])
-
-			return Iterable(items)
-
-		else:
-			raise TypeError(f'TypeError: list indices must be integers or slices, not {type(item).__name__}')
-
-	def __reversed__(self) -> reversed[T]:
-		"""
-		:return: A reverse iterator
+		Appends an iterable to the end of this sequence
+		:param other: The other iterable to append
+		:return: The extended sequence
 		"""
 
-		return reversed(self.__buffer__)
-
-	def clear(self) -> None:
-		"""
-		Clears the collection
-		"""
-
-		self.__buffer__.clear()
-
-	def reverse(self) -> None:
-		"""
-		Reverses the array in-place
-		"""
-
-		self.__buffer__.reverse()
-
-	def count(self, item: T) -> int:
-		"""
-		:param item: The item to search for
-		:return: The number of times an item occurs in this list
-		"""
-
-		return self.__buffer__.count(item)
-
-	def index(self, item: T, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
-		"""
-		Gets the index of an item in the list
-		:param item: The item to search for
-		:param start: The index to begin the search
-		:param stop: The index to end the search
-		:return: The index of the element in this list
-		:raises ValueError: If the specified value is not in this list
-		"""
-
-		return self.__buffer__.index(item, start, stop)
-
-	def find(self, item: T, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
-		"""
-		Gets the index of an item in the list
-		:param item: The item to search for
-		:param start: The index to begin the search
-		:param stop: The index to end the search
-		:return: The index of the element in this list or -1 if no such element
-		"""
-
-		start: int = 0 if start is ... or start is None else int(start)
-		stop: int = -1 if stop is ... or stop is None else int(stop)
-		start = start if start >= 0 else len(self) + start
-		stop = stop if stop >= 0 else len(self) + stop
-
-		while start < stop:
-			if self.__buffer__[start] == item:
-				return start
-			start += 1
-
-		return -1
-
-	def copy[I: Iterable](self: I) -> I:
-		"""
-		:return: A copy of this collection
-		"""
-
-		return type(self)(self.__buffer__.copy())
-
-	def get_or_default(self, index: int, default: typing.Optional[T] = None) -> typing.Optional[T]:
-		"""
-		Gets the item at the specified index or 'default' if index out of bounds
-		:param index: The index to retrieve
-		:param default: The default item to return if index out of bounds
-		:return: The item at 'index' or 'default' if out of bounds
-		"""
-
-		length: int = len(self)
-		index = length + index if index < 0 else index
-		return None if index >= length else self[index]
-
-	def stream(self) -> Stream.LinqStream[T]:
-		"""
-		:return: A new LinqStream for queries on this iterable
-		"""
-
-		return Stream.LinqStream(self)
-
-
-class ListIterable[T](Iterable[T], typing.MutableSequence[T]):
-	"""
-	Iterable class allowing modifications
-	"""
-
-	def __add__(self, other: typing.Iterable[T]) -> ListIterable[T]:
 		return type(self)([*self, *other]) if isinstance(other, typing.Iterable) else NotImplemented
 
-	def __iadd__(self, other: typing.Iterable[T]) -> ListIterable[T]:
+	def __iadd__(self, other: typing.Iterable[T]) -> MutableSequence[T]:
+		"""
+		Appends an iterable to the end of this sequence in-place
+		:param other: The other iterable to append
+		:return: This sequence
+		"""
+
 		if not isinstance(other, typing.Iterable):
 			return NotImplemented
 
 		self.__buffer__.extend(other)
 		return self
 
-	def __radd__(self, other: typing.Iterable[T]) -> ListIterable[T]:
+	def __radd__(self, other: typing.Iterable[T]) -> MutableSequence[T]:
+		"""
+		Appends this sequence to the end of an iterable
+		:param other: The other iterable to append to
+		:return: The extended sequence
+		"""
+
 		return type(self)([*other, *self]) if isinstance(other, typing.Iterable) else NotImplemented
 
-	def __mul__(self, other: int) -> ListIterable[T]:
+	def __mul__(self, other: int) -> MutableSequence[T]:
+		"""
+		Multiplies this sequence 'n' times
+		:param other: The amount of times to multiply
+		:return: The multiplied sequence
+		"""
+
 		return type(self)(self.__buffer__ * int(other)) if isinstance(other, int) else NotImplemented
 
-	def __imul__(self, other: int) -> ListIterable[T]:
+	def __imul__(self, other: int) -> MutableSequence[T]:
+		"""
+		Multiplies this sequence 'n' times in-place
+		:param other: The amount of times to multiply
+		:return: This sequence
+		"""
+
 		self.__buffer__ *= int(other)
 		return self
 
-	def __rmul__(self, other: int) -> ListIterable[T]:
+	def __rmul__(self, other: int) -> MutableSequence[T]:
+		"""
+		Multiplies this sequence 'n' times
+		:param other: The amount of times to multiply
+		:return: The multiplied sequence
+		"""
+
 		return type(self)(self.__buffer__ * int(other)) if isinstance(other, int) else NotImplemented
+
+	def clear(self) -> None:
+		"""
+		Clears the sequence
+		"""
+
+		self.__buffer__.clear()
+
+	def reverse(self) -> None:
+		"""
+		Reverses the sequence in-place
+		"""
+
+		self.__buffer__.reverse()
 
 	def remove(self, element: T, count: int = -1) -> int:
 		"""
-		Removes the specified element from this list
+		Removes the specified element from this sequence
 		:param element: The element to remove
 		:param count: The number of occurrences to remove or all if less than 0
 		:return: The number of occurrences removed
@@ -370,32 +422,21 @@ class ListIterable[T](Iterable[T], typing.MutableSequence[T]):
 
 		return self.__buffer__.pop(index)
 
-	def get(self, index: int = -1, default: typing.Optional[T] = None) -> typing.Optional[T]:
+	def append(self, element: T) -> MutableSequence[T]:
 		"""
-		Gets an element at the specified index or 'default' if out of bounds
-		:param index: The index to retrieve
-		:param default: The default value to return
-		:return: The element at the specified index or 'default' if index is out of bounds
-		"""
-
-		index = index if (index := int(index)) >= 0 else len(self) + index
-		return self.__buffer__[index] if index < len(self) else default
-
-	def append(self, element: T) -> ListIterable[T]:
-		"""
-		Appends an item at the end of the list
+		Appends an item at the end of the sequence
 		:param element: The element to append
-		:return: This list
+		:return: This sequence
 		"""
 
 		self.__buffer__.append(element)
 		return self
 
-	def extend(self, iterable: T) -> ListIterable[T]:
+	def extend(self, iterable: T) -> MutableSequence[T]:
 		"""
-		Appends all elements from an iterable to the end of this list
+		Appends all elements from an iterable to the end of this sequence
 		:param iterable: The iterable whose elements to insert
-		:return: This list
+		:return: This sequence
 		"""
 
 		for element in iterable:
@@ -403,35 +444,36 @@ class ListIterable[T](Iterable[T], typing.MutableSequence[T]):
 
 		return self
 
-	def insert(self, index: int, element: T) -> ListIterable[T]:
+	def insert(self, index: int, element: T) -> MutableSequence[T]:
 		"""
-		Inserts an element into the list at the specified index
+		Inserts an element into the sequence at the specified index
 		:param index: The index to insert to
 		:param element: The element to insert
-		:return: This list
+		:return: This sequence
 		"""
 
 		self.__buffer__.insert(index, element)
 		return self
 
 
-class SortableIterable[T](ListIterable[T]):
+class SortableSequence[T](MutableSequence[T]):
 	"""
 	Class representing an iterable containing sorting functions
 	"""
 
-	def sort(self, *, key: typing.Optional[typing.Callable] = ..., reverse: typing.Optional[bool] = False) -> None:
+	def sort(self, *, key: typing.Optional[typing.Callable] = ..., reverse: typing.Optional[bool] = False) -> SortableSequence[T]:
 		"""
-		Sorts the collection in-place
-		:param key: (CALLABLE?) An optional callable specifying how to sort the collection
-		:param reverse: (bool>) An optional bool specifying whether to sort in reversed order
-		:return: (None)
+		Sorts the sequence in-place
+		:param key: An optional callable specifying how to sort the collection
+		:param reverse: An optional bool specifying whether to sort in reversed order
+		:return: This sequence
 		"""
 
 		self.__buffer__.sort(key=key, reverse=reverse)
+		return self
 
 
-class SortedList[T](SortableIterable[T]):
+class SortedList[T](SortableSequence[T]):
 	"""
 	A list using binary search to maintain a sorted list of elements
 	"""
@@ -813,7 +855,7 @@ class SortedList[T](SortableIterable[T]):
 		return ReverseSortedList(self)
 
 
-class ReverseSortedList[T](SortableIterable[T]):
+class ReverseSortedList[T](SortableSequence[T]):
 	"""
 	A list using binary search to maintain a reverse sorted list of elements
 	"""
@@ -1195,7 +1237,7 @@ class ReverseSortedList[T](SortableIterable[T]):
 		return SortedList(self)
 
 
-class String(ListIterable[str], str):
+class String(MutableSequence[str], str):
 	"""
 	An extension adding additional string functionality
 	"""
@@ -1206,7 +1248,7 @@ class String(ListIterable[str], str):
 
 		def __call__(self, *args, **kwargs) -> typing.Any:
 			result: typing.Any = self.__callback__(*args, **kwargs)
-			return String(result) if isinstance(result, Iterable) and all(isinstance(x, str) for x in result) else result
+			return String(result) if isinstance(result, Sequence) and all(isinstance(x, str) for x in result) else result
 
 	def __init__(self, string: typing.Optional[typing.Any] = None):
 		"""
@@ -1300,7 +1342,7 @@ class String(ListIterable[str], str):
 		else:
 			raise TypeError(f'TypeError: list indices must be integers or slices, not {type(key).__name__}')
 
-	def __getitem__(self, item: int | slice | tuple[int, ...]) -> str | Iterable[str] | String:
+	def __getitem__(self, item: int | slice | tuple[int, ...]) -> str | Sequence[str] | String:
 		"""
 		Gets one or more items in this collection
 		:param item: The index or indices to get
@@ -1322,7 +1364,7 @@ class String(ListIterable[str], str):
 				else:
 					items.append(result)
 
-			return Iterable(items)
+			return Sequence(items)
 
 		elif isinstance(item, slice):
 			start: int = 0 if item.start is None else int(item.start)
@@ -1342,7 +1384,7 @@ class String(ListIterable[str], str):
 		attribute: typing.Any = super().__getattribute__(name)
 		is_this: bool = name in vars(type(self))
 		super_str_attr: typing.Any = getattr(str, name) if hasattr(str, name) else None
-		super_iterable_attr: typing.Any = getattr(ListIterable, name) if hasattr(ListIterable, name) else None
+		super_iterable_attr: typing.Any = getattr(MutableSequence, name) if hasattr(MutableSequence, name) else None
 
 		if is_this or not callable(attribute):
 			return attribute
@@ -1481,7 +1523,7 @@ class String(ListIterable[str], str):
 		return [String(s) for s in re.split('|'.join(re.escape(delimiter) for delimiter in sep), self, 0 if maxsplit <= 0 else maxsplit)]
 
 
-class ByteString(ListIterable[int], bytearray):
+class ByteString(MutableSequence[int], bytearray):
 	"""
 	An extension adding additional bytes functionality
 	"""
@@ -1492,7 +1534,7 @@ class ByteString(ListIterable[int], bytearray):
 
 		def __call__(self, *args, **kwargs) -> typing.Any:
 			result: typing.Any = self.__callback__(*args, **kwargs)
-			return ByteString(result) if isinstance(result, Iterable) and all(isinstance(x, int) for x in result) else result
+			return ByteString(result) if isinstance(result, Sequence) and all(isinstance(x, int) for x in result) else result
 
 	def __init__(self, string: typing.Optional[typing.Any] = None, encoding: str = 'utf-8', errors: typing.Literal['strict', 'ignore', 'replace', 'xmlcharrefreplace', 'backslashreplace', 'namereplace', 'surrogateescape'] = 'strict'):
 		"""
@@ -1587,7 +1629,7 @@ class ByteString(ListIterable[int], bytearray):
 		else:
 			raise TypeError(f'TypeError: list indices must be integers or slices, not {type(key).__name__}')
 
-	def __getitem__(self, item: int | slice | tuple[int, ...]) -> int | Iterable[int] | ByteString:
+	def __getitem__(self, item: int | slice | tuple[int, ...]) -> int | Sequence[int] | ByteString:
 		"""
 		Gets one or more items in this collection
 		:param item: The index or indices to get
@@ -1609,7 +1651,7 @@ class ByteString(ListIterable[int], bytearray):
 				else:
 					items.append(result)
 
-			return Iterable(items)
+			return Sequence(items)
 
 		elif isinstance(item, slice):
 			start: int = 0 if item.start is None else int(item.start)
@@ -1629,7 +1671,7 @@ class ByteString(ListIterable[int], bytearray):
 		attribute: typing.Any = super().__getattribute__(name)
 		is_this: bool = name in vars(type(self))
 		super_bytes_attr: typing.Any = getattr(bytearray, name) if hasattr(bytearray, name) else None
-		super_iterable_attr: typing.Any = getattr(ListIterable, name) if hasattr(ListIterable, name) else None
+		super_iterable_attr: typing.Any = getattr(MutableSequence, name) if hasattr(MutableSequence, name) else None
 
 		if is_this or not callable(attribute):
 			return attribute
@@ -1821,7 +1863,7 @@ class ByteString(ListIterable[int], bytearray):
 			yield byte.to_bytes(1, sys.byteorder)
 
 
-class FixedArray[T](SortableIterable[T]):
+class FixedArray[T](SortableSequence[T]):
 	"""
 	Class representing an array of a fixed size
 	"""
@@ -1871,7 +1913,7 @@ class FixedArray[T](SortableIterable[T]):
 		return FixedArray(self)
 
 
-class SpinQueue[T](SortableIterable[T]):
+class SpinQueue[T](SortableSequence[T]):
 	"""
 	Class representing a queue-like array of a maximum size
 	"""
@@ -2110,18 +2152,18 @@ class ThreadedGenerator[T]:
 			raise self.__exec__
 
 
-class LockedIterable[T](SortableIterable[T]):
+class LockedSequence[T](SortableSequence[T]):
 	"""
-	Thread safe iterable using locks
+	Thread safe sequence using locks
 	"""
 
-	class LockedIterator[Q](typing.Iterator[Q]):
-		def __init__(self, iterable: LockedIterable[Q]):
-			assert isinstance(iterable, LockedIterable)
-			self.__iterable__: LockedIterable[Q] = iterable
+	class LockedIterator[Q](collections.abc.Iterator[Q]):
+		def __init__(self, iterable: LockedSequence[Q]):
+			assert isinstance(iterable, LockedSequence)
+			self.__iterable__: LockedSequence[Q] = iterable
 			self.__int_index__: int = 0
 
-		def __iter__(self) -> typing.Iterator[Q]:
+		def __iter__(self) -> collections.abc.Iterator[Q]:
 			return self
 
 		def __next__(self) -> Q:
@@ -2133,13 +2175,13 @@ class LockedIterable[T](SortableIterable[T]):
 					self.__int_index__ += 1
 					return value
 
-	class ReversedLockedIterator[Q](typing.Iterator[Q]):
-		def __init__(self, iterable: LockedIterable[Q]):
-			assert isinstance(iterable, LockedIterable)
-			self.__iterable__: LockedIterable[Q] = iterable
+	class ReversedLockedIterator[Q](collections.abc.Iterator[Q]):
+		def __init__(self, iterable: LockedSequence[Q]):
+			assert isinstance(iterable, LockedSequence)
+			self.__iterable__: LockedSequence[Q] = iterable
 			self.__int_index__: int = 0
 
-		def __iter__(self) -> typing.Iterator[Q]:
+		def __iter__(self) -> collections.abc.Iterator[Q]:
 			return self
 
 		def __next__(self) -> Q:
@@ -2153,43 +2195,43 @@ class LockedIterable[T](SortableIterable[T]):
 					self.__int_index__ += 1
 					return value
 
-	def __init__(self, collection: collections.abc.Sized[T] | typing.Iterable[T] = ..., *, lock: threading.Lock | Synchronization.SynchronizationPrimitive = Synchronization.SpinLock()):
+	def __init__(self, sequence: collections.abc.Iterable[T] = ..., *, lock: threading.Lock | Synchronization.SynchronizationPrimitive = Synchronization.SpinLock()):
 		"""
-		Thread safe iterable using locks\n
+		Thread safe sequence using locks\n
 		- Constructor -
-		:param collection: The initial collection
+		:param sequence: The initial sequence
 		:param lock: The lock to use for operations
 		"""
 
-		Misc.raise_ifn(isinstance(lock, (threading.Lock, Synchronization.SynchronizationPrimitive)), Exceptions.InvalidArgumentException(LockedIterable.__init__, 'lock', type(lock), (threading.Lock, Synchronization.SynchronizationPrimitive)))
-		super().__init__(collection)
+		Misc.raise_ifn(isinstance(lock, (threading.Lock, Synchronization.SynchronizationPrimitive)), Exceptions.InvalidArgumentException(LockedSequence.__init__, 'lock', type(lock), (threading.Lock, Synchronization.SynchronizationPrimitive)))
+		super().__init__(sequence)
 		self.__lock__: threading.Lock | Synchronization.SpinLock | Synchronization.ReaderWriterLock = lock
 
 	def __contains__(self, item: T) -> bool:
 		with self.read_lock():
 			return super().__contains__(item)
 
-	def __eq__(self, other: Iterable[T]) -> bool:
+	def __eq__(self, other: Sequence[T]) -> bool:
 		with self.read_lock():
 			return super().__eq__(other)
 
-	def __ne__(self, other: Iterable[T]) -> bool:
+	def __ne__(self, other: Sequence[T]) -> bool:
 		with self.read_lock():
 			return super().__ne__(other)
 
-	def __gt__(self, other: Iterable[T]) -> bool:
+	def __gt__(self, other: Sequence[T]) -> bool:
 		with self.read_lock():
 			return super().__gt__(other)
 
-	def __lt__(self, other: Iterable[T]) -> bool:
+	def __lt__(self, other: Sequence[T]) -> bool:
 		with self.read_lock():
 			return super().__lt__(other)
 
-	def __ge__(self, other: Iterable[T]) -> bool:
+	def __ge__(self, other: Sequence[T]) -> bool:
 		with self.read_lock():
 			return super().__ge__(other)
 
-	def __le__(self, other: Iterable[T]) -> bool:
+	def __le__(self, other: Sequence[T]) -> bool:
 		with self.read_lock():
 			return super().__le__(other)
 
@@ -2210,7 +2252,7 @@ class LockedIterable[T](SortableIterable[T]):
 			return super().__str__()
 
 	def __iter__(self) -> LockedIterator[T]:
-		return LockedIterable.LockedIterator(self)
+		return LockedSequence.LockedIterator(self)
 
 	def __delitem__(self, key: int | tuple[int, ...] | slice) -> None:
 		with self.write_lock():
@@ -2220,12 +2262,12 @@ class LockedIterable[T](SortableIterable[T]):
 		with self.write_lock():
 			super().__setitem__(key, value)
 
-	def __getitem__(self, item: int | slice | tuple[int, ...]) -> T | Iterable[T]:
+	def __getitem__(self, item: int | slice | tuple[int, ...]) -> T | Sequence[T]:
 		with self.read_lock():
 			return super().__getitem__(item)
 
 	def __reversed__(self) -> ReversedLockedIterator[T]:
-		return LockedIterable.ReversedLockedIterator(self)
+		return LockedSequence.ReversedLockedIterator(self)
 
 	def clear(self) -> None:
 		with self.write_lock():
@@ -2247,7 +2289,7 @@ class LockedIterable[T](SortableIterable[T]):
 		with self.read_lock():
 			return super().find(item, start, stop)
 
-	def copy[I: Iterable](self: I) -> I:
+	def copy[I: Sequence](self: I) -> I:
 		with self.read_lock():
 			return super().copy()
 
@@ -2256,29 +2298,31 @@ class LockedIterable[T](SortableIterable[T]):
 		:return: A new LinqStream for queries on this iterable
 		"""
 
-		return Stream.LinqStream(LockedIterable.LockedIterator(self))
+		return Stream.LinqStream(LockedSequence.LockedIterator(self))
 
-	def acquire_read_lock(self) -> None:
+	def acquire_read_lock(self) -> bool:
 		"""
 		Acquires the reader lock if an RW lock, otherwise acquires the lock\n
 		Blocks until lock is acquired
+		:return: Whether the lock was acquired
 		"""
 
 		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
-			self.__lock__.acquire()
+			return self.__lock__.acquire()
 		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
-			self.__lock__.acquire_reader()
+			return self.__lock__.acquire_reader()
 
-	def acquire_write_lock(self) -> None:
+	def acquire_write_lock(self) -> bool:
 		"""
 		Acquires the writer lock if an RW lock, otherwise acquires the lock\n
 		Blocks until lock is acquired
+		:return: Whether the lock was acquired
 		"""
 
 		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
-			self.__lock__.acquire()
+			return self.__lock__.acquire()
 		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
-			self.__lock__.acquire_writer()
+			return self.__lock__.acquire_writer()
 
 	def read_lock(self) -> threading.Lock | Synchronization.SynchronizationPrimitive | Synchronization.ReaderWriterLock.Lock:
 		"""
@@ -2330,7 +2374,355 @@ class LockedIterable[T](SortableIterable[T]):
 				time.sleep(1e-6)
 
 
-def frange(start: float, stop: float = None, step: float = 1, precision: int = None) -> typing.Generator[float, None, None]:
+class Mapping[K: typing.Hashable, V](Iterable[dict[K, V], tuple[K, V]], collections.abc.Mapping):
+	"""
+	Base iterable class for CM-VI mappings
+	"""
+
+	def __init__(self, collection: collections.abc.Mapping[K, V] = ...):
+		"""
+		Base iterable class for CM-VI mappings\n
+		- Constructor -
+		:param collection: The mapping to build from
+		"""
+
+		super().__init__({} if collection is None or collection is ... else dict(collection))
+
+	def __contains__(self, item: K) -> bool:
+		"""
+		:param item: The key to search for
+		:return: If the key exists within this collection
+		"""
+
+		return item in self.__buffer__
+
+	def __repr__(self) -> str:
+		"""
+		:return: The string representation of this mapping
+		"""
+
+		return repr(self.__buffer__)
+
+	def __str__(self) -> str:
+		"""
+		:return: The string representation of this mapping
+		"""
+
+		return str(self.__buffer__)
+
+	def __iter__(self) -> collections.abc.Iterator[tuple[K, V]]:
+		"""
+		:return: The iterator for this iterable
+		"""
+
+		return iter(self.__buffer__.items())
+
+	def __getitem__(self, key: K) -> V:
+		"""
+		Gets a key's associated value from this mapping
+		:param key: The key to get
+		:return: The associated element
+		:raises KeyError: If the specified key does not exist
+		"""
+
+		return self.__buffer__[key]
+
+	def __or__(self, other: collections.abc.Mapping[K, V]) -> Mapping[K, V]:
+		"""
+		Merges this mapping and another mapping
+		:param other: The other mapping
+		:return: The merged mapping
+		"""
+
+		return type(self)(self.__buffer__ | dict(other))
+
+	def copy[I: Mapping](self: I) -> I:
+		"""
+		:return: A copy of this mapping
+		"""
+
+		return type(self)(self.__buffer__.copy())
+
+	def get_or_default(self, key: K, default: typing.Optional[V] = None) -> typing.Optional[V]:
+		"""
+		Gets the item at the specified key or 'default' if key does not exist
+		:param key: The key to retrieve
+		:param default: The default item to return if key does not exist
+		:return: The item at 'key' or 'default' if does not exist
+		"""
+
+		return self.__buffer__.get(key, default)
+
+	def stream(self) -> Stream.LinqStream[tuple[K, V]]:
+		"""
+		:return: A new LinqStream for queries on this iterable
+		"""
+
+		return Stream.LinqStream(self)
+
+	def keys(self) -> collections.abc.KeysView[K]:
+		"""
+		:return: A view of all keys in this mapping
+		"""
+
+		return self.__buffer__.keys()
+
+	def values(self) -> collections.abc.ValuesView[V]:
+		"""
+		:return: A view of all values in this mapping
+		"""
+
+		return self.__buffer__.values()
+
+
+class MutableMapping[K, V](Mapping[K, V], collections.abc.MutableMapping):
+	"""
+	Mapping allowing modifications
+	"""
+
+	def __delitem__(self, key: K) -> None:
+		"""
+		Deletes a key from this mapping
+		:param key: The key or keys to delete
+		:raises KeyError: If the specified key does not exist
+		"""
+
+		del self.__buffer__[key]
+
+	def __setitem__(self, key: K | tuple[K, ...], value: V) -> None:
+		"""
+		Sets a key in this mapping
+		:param key: The key or keys to modify
+		:param value: The value to set
+		"""
+
+		self.__buffer__[key] = value
+
+	def __ior__(self, other: typing.Mapping[K, V]) -> MutableMapping[K, V]:
+		"""
+		Merges this mapping and another mapping
+		:param other: The other mapping
+		:return: This mapping
+		"""
+
+		self.update(other)
+		return self
+
+	def clear(self) -> None:
+		"""
+		Clears the mapping
+		"""
+
+		self.__buffer__.clear()
+
+	def get_or_insert(self, key: K, default: typing.Optional[V] = None) -> V:
+		"""
+		Gets the item at the specified key or inserts and returns 'default' if key does not exist
+		:param key: The key to retrieve
+		:param default: The default item to insert and return if key does not exist
+		:return: The item at 'key'
+		"""
+
+		return self.__buffer__.setdefault(key, default)
+
+	def pop(self, key: K, default: typing.Optional[V] = ...) -> V:
+		"""
+		Removes and returns the element at the specified key
+		:param key: The key to remove and return
+		:param default: The default value to return or raise KeyError if not supplied
+		:return: The removed element
+		"""
+
+		return self.__buffer__.pop(key) if default is ... else self.__buffer__.pop(key, default)
+
+	def pop_last(self) -> tuple[K, V]:
+		"""
+		Removes and returns the last key-value pair added to this mapping
+		:return: The removed pair
+		"""
+
+		return self.__buffer__.popitem()
+
+	def update(self, mapping: collections.abc.Mapping[K, V], /, **kwargs) -> Mapping[K, V]:
+		"""
+		Adds the key-value pairs from the specified mapping to this one in-place\n
+		Duplicate keys are overwritten
+		:param mapping: The mapping to add
+		:return: This mapping
+		"""
+
+		self.__buffer__.update(mapping, **kwargs)
+		return self
+
+
+class LockedMapping[K, V](MutableMapping):
+	"""
+	Thread safe mapping using locks
+	"""
+
+	def __init__(self, mapping: collections.abc.Mapping[K, V] = ..., *, lock: threading.Lock | Synchronization.SynchronizationPrimitive = Synchronization.SpinLock()):
+		"""
+		Thread safe mapping using locks\n
+		- Constructor -
+		:param mapping: The initial mapping
+		:param lock: The lock to use for operations
+		"""
+
+		Misc.raise_ifn(isinstance(lock, (threading.Lock, Synchronization.SynchronizationPrimitive)), Exceptions.InvalidArgumentException(LockedSequence.__init__, 'lock', type(lock), (threading.Lock, Synchronization.SynchronizationPrimitive)))
+		super().__init__(mapping)
+		self.__lock__: threading.Lock | Synchronization.SpinLock | Synchronization.ReaderWriterLock = lock
+
+	def __contains__(self, key: K) -> bool:
+		with self.read_lock():
+			return super().__contains__(key)
+
+	def __eq__(self, other: Mapping[K, V]) -> bool:
+		with self.read_lock():
+			return super().__eq__(other)
+
+	def __ne__(self, other: Mapping[K, V]) -> bool:
+		with self.read_lock():
+			return super().__ne__(other)
+
+	def __gt__(self, other: Mapping[K, V]) -> bool:
+		with self.read_lock():
+			return super().__gt__(other)
+
+	def __lt__(self, other: Mapping[K, V]) -> bool:
+		with self.read_lock():
+			return super().__lt__(other)
+
+	def __ge__(self, other: Mapping[K, V]) -> bool:
+		with self.read_lock():
+			return super().__ge__(other)
+
+	def __le__(self, other: Mapping[K, V]) -> bool:
+		with self.read_lock():
+			return super().__le__(other)
+
+	def __bool__(self) -> bool:
+		with self.read_lock():
+			return super().__bool__()
+
+	def __len__(self) -> int:
+		with self.read_lock():
+			return super().__len__()
+
+	def __repr__(self) -> str:
+		with self.read_lock():
+			return super().__repr__()
+
+	def __str__(self) -> str:
+		with self.read_lock():
+			return super().__str__()
+
+	def __iter__(self) -> collections.abc.Iterator[tuple[K, V]]:
+		keys: tuple[K, ...] = tuple(self.keys())
+
+		for key in keys:
+			yield key, self[key]
+
+	def __delitem__(self, key: K) -> None:
+		with self.write_lock():
+			super().__delitem__(key)
+
+	def __setitem__(self, key: K, value: V) -> None:
+		with self.write_lock():
+			super().__setitem__(key, value)
+
+	def __getitem__(self, key: K) -> V:
+		with self.read_lock():
+			return super().__getitem__(key)
+
+	def __or__(self, other: collections.abc.Mapping[K, V]) -> Mapping[K, V]:
+		with self.read_lock():
+			return type(self)(self.__buffer__ | dict(other))
+
+	def clear(self) -> None:
+		with self.write_lock():
+			self.__buffer__.clear()
+
+	def copy[I: LockedMapping](self: I) -> I:
+		with self.read_lock():
+			return type(self)(self.__buffer__.copy())
+
+	def get_or_default(self, key: K, default: typing.Optional[V] = None) -> typing.Optional[V]:
+		with self.read_lock():
+			return self.__buffer__.get(key, default)
+
+	def get_or_insert(self, key: K, default: typing.Optional[V] = None) -> V:
+		with self.write_lock():
+			return self.__buffer__.setdefault(key, default)
+
+	def pop(self, key: K, default: typing.Optional[V] = ...) -> V:
+		with self.write_lock():
+			return self.__buffer__.pop(key) if default is ... else self.__buffer__.pop(key, default)
+
+	def pop_last(self) -> tuple[K, V]:
+		with self.write_lock():
+			return self.__buffer__.popitem()
+
+	def update(self, mapping: collections.abc.Mapping[K, V], /, **kwargs) -> Mapping[K, V]:
+		with self.write_lock():
+			self.__buffer__.update(mapping, **kwargs)
+			return self
+
+	def keys(self) -> collections.abc.KeysView[K]:
+		with self.read_lock():
+			return self.__buffer__.keys()
+
+	def values(self) -> collections.abc.ValuesView[V]:
+		with self.read_lock():
+			return self.__buffer__.values()
+
+	def acquire_read_lock(self) -> bool:
+		"""
+		Acquires the reader lock if an RW lock, otherwise acquires the lock\n
+		Blocks until lock is acquired
+		:return: Whether the lock was acquired
+		"""
+
+		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
+			return self.__lock__.acquire()
+		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
+			return self.__lock__.acquire_reader()
+
+	def acquire_write_lock(self) -> bool:
+		"""
+		Acquires the writer lock if an RW lock, otherwise acquires the lock\n
+		Blocks until lock is acquired
+		:return: Whether the lock was acquired
+		"""
+
+		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
+			return self.__lock__.acquire()
+		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
+			return self.__lock__.acquire_writer()
+
+	def read_lock(self) -> threading.Lock | Synchronization.SynchronizationPrimitive | Synchronization.ReaderWriterLock.Lock:
+		"""
+		Returns the reader lock if an RW lock, otherwise the lock
+		:return: The lock object for context management
+		"""
+
+		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
+			return self.__lock__
+		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
+			return self.__lock__.reader()
+
+	def write_lock(self) -> threading.Lock | Synchronization.SynchronizationPrimitive | Synchronization.ReaderWriterLock.Lock:
+		"""
+		Returns the reader lock if an RW lock, otherwise the lock
+		:return: The lock object for context management
+		"""
+
+		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
+			return self.__lock__
+		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
+			return self.__lock__.writer()
+
+
+def frange(start: float, stop: float = None, step: float = 1, precision: int = None) -> collections.abc.Generator[float]:
 	"""
 	Float compatible range generator
 	:param start: Start of range

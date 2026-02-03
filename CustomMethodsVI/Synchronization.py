@@ -100,12 +100,12 @@ class ReaderWriterLock(SynchronizationPrimitive):
 		elif self.writer_acquired:
 			self.release_writer()
 
-	def acquire_reader(self, timeout: float = None) -> None:
+	def acquire_reader(self, timeout: float = None) -> bool:
 		"""
 		Acquires the reader lock\n
 		If no writer is in the queue, will return immediately
 		:param timeout: The number of seconds to wait or None to wait indefinitely
-		:raises TimeoutError: If the lock is not acquired withing the specified timeout
+		:return: Whether the lock was acquired
 		"""
 
 		with self.__lock__:
@@ -121,15 +121,16 @@ class ReaderWriterLock(SynchronizationPrimitive):
 
 		if thread_info is None:
 			self.__thread_info__.signal.set()
+			return True
 		else:
-			Misc.raise_ifn(self.__thread_info__.signal.wait(timeout), TimeoutError('Lock acquisition timed out'))
+			return self.__thread_info__.signal.wait(timeout)
 
-	def acquire_writer(self, timeout: float = None) -> None:
+	def acquire_writer(self, timeout: float = None) -> bool:
 		"""
 		Acquires the writer lock\n
 		If no writer is in the queue, will return immediately
 		:param timeout: The number of seconds to wait or None to wait indefinitely
-		:raises TimeoutError: If the lock is not acquired withing the specified timeout
+		:return: Whether the lock was acquired
 		"""
 
 		with self.__lock__:
@@ -139,8 +140,9 @@ class ReaderWriterLock(SynchronizationPrimitive):
 
 		if thread_info is None:
 			self.__thread_info__.signal.set()
+			return True
 		else:
-			Misc.raise_ifn(self.__thread_info__.signal.wait(timeout), TimeoutError('Lock acquisition timed out'))
+			return self.__thread_info__.signal.wait(timeout)
 
 	def release_reader(self) -> None:
 		"""
@@ -240,12 +242,12 @@ class SpinLock(SynchronizationPrimitive):
 	def __exit__(self, exc_type, exc_val, exc_tb) -> None:
 		self.release()
 
-	def acquire(self, timeout: float = None) -> None:
+	def acquire(self, timeout: float = None) -> bool:
 		"""
 		Acquires the lock\n
 		Blocks until lock is acquired
 		:param timeout: The number of seconds to wait or None to wait indefinitely
-		:raises TimeoutError: If the lock is not acquired withing the specified timeout
+		:return: Whether the lock was acquired
 		"""
 
 		lock_id: int = struct.unpack('=Q', struct.pack('=II', os.getpid(), threading.current_thread().native_id))[0]
@@ -256,9 +258,9 @@ class SpinLock(SynchronizationPrimitive):
 				if self.__source__.value == 0 or self.__source__.value == lock_id:
 					self.__source__.value = lock_id
 					self.__count__ += 1
-					return
+					return True
 				elif timeout is not None and timeout is not ... and time.perf_counter() - t1 >= timeout:
-					raise TimeoutError('Lock acquisition timed out')
+					return False
 
 	def release(self) -> None:
 		"""
@@ -316,25 +318,32 @@ class Semaphore(SynchronizationPrimitive):
 	def __exit__(self, exc_type, exc_val, exc_tb) -> None:
 		self.release()
 
-	def acquire(self, timeout: float = None) -> None:
+	def acquire(self, timeout: float = None) -> bool:
 		"""
 		Acquires the lock\n
 		The internal counter is decremented by one
 		:param timeout: The number of seconds to wait or None to wait indefinitely
-		:raises TimeoutError: If the lock is not acquired withing the specified timeout
+		:return: Whether the lock was acquired
 		"""
 
 		try:
 			t1: float = time.perf_counter()
-			Misc.raise_ifn(self.__acc_lock__.acquire(timeout=-1 if timeout is None or timeout is ... else timeout), TimeoutError('Lock acquisition timed out'))
+
+			if not self.__acc_lock__.acquire(timeout=-1 if timeout is None or timeout is ... else timeout):
+				return False
+
 			t2: float = time.perf_counter()
-			Misc.raise_ifn(self.__event__.wait(None if timeout is None or timeout is ... else (timeout - (t2 - t1))), TimeoutError('Lock acquisition timed out'))
+
+			if not self.__event__.wait(None if timeout is None or timeout is ... else (timeout - (t2 - t1))):
+				return False
 
 			with self.__rel_lock__:
 				self.__count__ -= 1
 
 				if self.__count__ == 0:
 					self.__event__.clear()
+
+			return True
 		finally:
 			self.__acc_lock__.release()
 
