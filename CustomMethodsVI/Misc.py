@@ -3,7 +3,6 @@ import time
 import typing
 
 from . import Exceptions
-from . import Decorators
 
 
 def raise_if(expression: bool, exception: BaseException = AssertionError('Assertion Failed')) -> None:
@@ -148,7 +147,6 @@ def convert_ddhhmmss(value: float | int) -> str:
 	return f'{sign}{days:02}:{hours:02}:{minutes:02}:{seconds:02}:{milliseconds:04}'
 
 
-@Decorators.Overload
 def minmax(a: typing.Any, b: typing.Any) -> tuple[typing.Any, typing.Any]:
 	"""
 	:param a: The first value
@@ -158,22 +156,14 @@ def minmax(a: typing.Any, b: typing.Any) -> tuple[typing.Any, typing.Any]:
 
 	return (a, b) if a <= b else (b, a)
 
-@Decorators.DefaultOverload
-def minmax(collection: typing.Iterable[typing.Any]) -> tuple[typing.Any, typing.Any]:
+
+def clamp(value: float, lower: float, upper: float) -> float:
 	"""
-	:param collection: The collection to scan
-	:return: A tuple of the smallest and largest value in the collection
+	Clamps a value between 'lower' and 'upper'
+	:param value: The value to clamp
+	:param lower: The lower limit
+	:param upper: The upper limit
+	:return: The clamped value
 	"""
 
-	iterator: typing.Iterator[typing.Any] = iter(collection)
-	lowest = highest = next(iterator)
-
-	try:
-		while True:
-			current = next(iterator)
-			lowest = min(lowest, current)
-			highest = max(highest, current)
-	except StopIteration:
-		pass
-
-	return lowest, highest
+	return min(upper, max(lower, value))

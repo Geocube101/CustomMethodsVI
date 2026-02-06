@@ -1,26 +1,25 @@
 from __future__ import annotations
 
+import cv2
+import collections.abc
 import colorsys
+import datetime
 import inspect
-import PIL
-import PIL.Image
-import PIL.ImageDraw
-import PIL.ImageTk
 import math
 import matplotlib.cm
 import numpy
-import numpy.exceptions
-import numpy.polynomial.polyutils
 import scipy
 import sys
 import typing
-import tkinter
 import warnings
 
-from ..Math import Vector
-from ..Math.Statistics import Functions as Stats
-from .. import Iterable
-from .. import Misc
+from . import Plotter
+
+from .. import Statistics
+from .. import Vector
+
+from ... import Misc
+from ... import Iterable
 
 
 class AxisPlot2D(object):
@@ -258,10 +257,10 @@ class AxisPlot2D(object):
 		else:
 			return self.__axes__[axis]
 
-	def draw_linear_axis(self, image: PIL.Image.Image, size: int, axis: str) -> AxisPlot2D:
+	def draw_linear_axis(self, image: numpy.ndarray, size: int, axis: str) -> AxisPlot2D:
 		"""
 		Draws a linear axis
-		:param image: The PIL image to draw to
+		:param image: The image to draw to
 		:param size: The square size of the image
 		:param axis: The axis name to draw
 		:return: This graph
@@ -273,52 +272,60 @@ class AxisPlot2D(object):
 			raise KeyError(f'Axis \'{axis}\' is not a part of this plot')
 
 		axis: AxisPlot2D.Axis = self.__axes__[axis]
-		drawer: PIL.ImageDraw.ImageDraw = PIL.ImageDraw.ImageDraw(image)
-		diagonal: float = (size ** 2 + size ** 2) ** 0.5
-		diagonal_radius: float = diagonal / 2
-		center: Vector.Vector = Vector.Vector(axis.position)
-		theta: float = round((axis.angle % 360) * math.pi / 180, 8)
-		x: float = diagonal_radius * math.cos(theta)
-		y: float = diagonal_radius * math.sin(theta)
-		line_pos: Vector.Vector = Vector.Vector(x, y)
-		line_p1: Vector.Vector = line_pos + center
-		line_p2: Vector.Vector = -line_pos + center
-		theta = round((theta + math.pi / 2) % (2 * math.pi), 8)
-		tick_dir: Vector.Vector = Vector.Vector(math.cos(theta), math.sin(theta))
-		image_line_p1: tuple[int, int] = self.__source__.plot_point_to_image_point((line_p1[0], line_p1[1]), size)
-		image_line_p2: tuple[int, int] = self.__source__.plot_point_to_image_point((line_p2[0], line_p2[1]), size)
-
 		r: int = (axis.color >> 24) & 0xFF
 		g: int = (axis.color >> 16) & 0xFF
 		b: int = (axis.color >> 8) & 0xFF
 		a: int = axis.color & 0xFF
-		drawer.line((*image_line_p1, *image_line_p2), (r, g, b, a), 1)
+		minx, maxx, miny, maxy = self.__source__.get_bounds()
+		center: Vector.Vector = Vector.Vector(axis.position)
+		theta: float = round(math.radians(axis.angle), 8)
+		theta90: float = round(math.radians(axis.angle + 90), 8)
+		min_distance, max_distance = self.__source__.bounds_distance_to_point(center)
+		direction: Vector.Vector = Vector.Vector(math.cos(theta), math.sin(theta))
+		image_axis_point_1: tuple[int, ...] = self.__source__.plot_point_to_image_point(center - direction * max_distance, size).rounded()
+		image_axis_point_2: tuple[int, ...] = self.__source__.plot_point_to_image_point(center + direction * max_distance, size).rounded()
+		cv2.line(image, image_axis_point_1, image_axis_point_2, (b, g, r, a), 1, cv2.LINE_AA)
 
-		x = 0
-		tick_index: int = 0
-		line_dir: Vector.Vector = (line_p1 - center).normalized()
-		offset: Vector.Vector = line_dir * axis.tick_offset
-		extent: float = max(self.__source__.extents())
+		if axis.minor_spacing <= 0:
+			return self
 
-		while x <= extent:
+		tick_index: int = math.floor(min_distance / axis.minor_spacing)
+		max_tick_index: int = math.ceil(max_distance / axis.minor_spacing)
+		main_direction: Vector.Vector = direction * axis.minor_spacing
+		tick_direction: Vector.Vector = Vector.Vector(math.cos(theta90), math.sin(theta90))
+		forward_position: Vector.Vector = center + direction * min_distance
+		backward_position: Vector.Vector = center - direction * min_distance
+
+		if forward_position[0] < minx and backward_position[0] < minx:
+			return self
+		elif forward_position[0] > maxx and backward_position[0] > maxx:
+			return self
+		elif forward_position[1] < miny and backward_position[1] < miny:
+			return self
+		elif forward_position[1] > maxy and backward_position[1] > maxy:
+			return self
+
+		for i in range(tick_index, max_tick_index):
 			is_major: bool = False if axis.major_spacing <= 0 else tick_index % axis.major_spacing == 0
-			pixel_height: int = size // (64 if is_major else 128)
-			pos1: Vector.Vector = center + line_dir * x + offset
-			pos2: Vector.Vector = center - line_dir * x + offset
-			impos1: Vector.Vector = self.__source__.plot_point_to_image_point(pos1, size)
-			impos2: Vector.Vector = self.__source__.plot_point_to_image_point(pos2, size)
-			tick1_pos1: Vector.Vector = round(impos1 + (tick_dir * pixel_height))
-			tick1_pos2: Vector.Vector = round(impos1 - (tick_dir * pixel_height))
-			tick2_pos1: Vector.Vector = round(impos2 + (tick_dir * pixel_height))
-			tick2_pos2: Vector.Vector = round(impos2 - (tick_dir * pixel_height))
-			drawer.line((*tick1_pos1.components, *tick1_pos2.components), (r, g, b, a), 1)
-			drawer.line((*tick2_pos1.components, *tick2_pos2.components), (r, g, b, a), 1)
-			x += axis.minor_spacing
-			tick_index += 1
+			tick_scale: float = 0.0125 if is_major else 0.00625
+			tick: Vector.Vector = tick_direction * size * tick_scale
+
+			tick_position: Vector.Vector = self.__source__.plot_point_to_image_point(forward_position, size)
+			tick_pos_1: Vector.Vector = tick_position + tick
+			tick_pos_2: Vector.Vector = tick_position - tick
+			cv2.line(image, tick_pos_1.rounded(), tick_pos_2.rounded(), (b, g, r, a), 1, cv2.LINE_AA)
+
+			tick_position = self.__source__.plot_point_to_image_point(backward_position, size)
+			tick_pos_1 = tick_position + tick
+			tick_pos_2 = tick_position - tick
+			cv2.line(image, tick_pos_1.rounded(), tick_pos_2.rounded(), (b, g, r, a), 1, cv2.LINE_AA)
+
+			forward_position += main_direction
+			backward_position -= main_direction
 
 		return self
 
-	def draw_radial_axis(self, image: PIL.Image.Image, size: int, axis: str) -> AxisPlot2D:
+	def draw_radial_axis(self, image: numpy.ndarray, size: int, axis: str) -> AxisPlot2D:
 		"""
 		Draws a radial axis
 		:param image: The PIL image to draw to
@@ -334,22 +341,22 @@ class AxisPlot2D(object):
 
 		axis: AxisPlot2D.Axis = self.__axes__[axis]
 		radius: float = size / 2 * 0.95
-		drawer: PIL.ImageDraw.ImageDraw = PIL.ImageDraw.ImageDraw(image)
 		image_center: tuple[int, int] = self.__source__.plot_point_to_image_point(axis.position, size)
 
 		r: int = (axis.color >> 24) & 0xFF
 		g: int = (axis.color >> 16) & 0xFF
 		b: int = (axis.color >> 8) & 0xFF
 		a: int = axis.color & 0xFF
-		drawer.circle(image_center, radius, (0, 0, 0, 0), (r, g, b, a), 1)
+		cv2.circle(image, image_center, round(radius), (b, g, r, a), 1, cv2.LINE_AA)
 		image_center: Vector.Vector = Vector.Vector(*image_center)
 
-		angle = axis.angle * math.pi / 180
+		angle = math.radians(axis.angle)
+		circle: float = math.radians(360)
 		theta: float = 0
-		delta: float = axis.minor_spacing * math.pi / 180
+		delta: float = math.radians(axis.minor_spacing)
 		tick_index: int = 0
 
-		while theta < math.pi * 2:
+		while theta < circle:
 			tick_index += 1
 			is_major: bool = False if axis.major_spacing <= 0 else tick_index % axis.major_spacing == 0
 			pixel_height: int = size // (64 if is_major else 128)
@@ -359,145 +366,13 @@ class AxisPlot2D(object):
 			pos: Vector.Vector = Vector.Vector(tx, ty) + image_center
 			pos1: Vector.Vector = pos + tick_dir
 			pos2: Vector.Vector = pos - tick_dir
-			drawer.line((*pos1.components, *pos2.components), (r, g, b, a), 1)
+			cv2.line(image, pos1.rounded(), pos2.rounded(), (b, g, r, a), 1)
 			theta += delta
 
 		return self
 
-class Plottable(object):
-	"""
-	Base class representing a plot that can be imaged
-	"""
 
-	def __init__(self):
-		"""
-		Base class representing a plot that can be imaged
-		- Constructor -
-		"""
-
-		super(Plottable, self).__init__()
-		self.__grid__: list[int] = [0, 0]
-		self.__alpha__: float = 1
-		self.__explicit_bounds__: tuple[float, float, float, float] | None = None
-
-	def __draw__(self, image: PIL.Image.Image, size: int) -> None:
-		"""
-		- ABSTRACT -
-		Overload this method to control plot drawing
-		This method draws the specified plot to the given image
-		:param image: The PIL image to draw to
-		:param size: The square image size
-		"""
-		pass
-
-	def show(self, *, square_size: int = 1024) -> None:
-		"""
-		Shows this plot in a tkinter window
-		:param square_size: The square image size to render at
-		"""
-
-		square_size: int = int(square_size)
-		root: tkinter.Tk = tkinter.Tk()
-		root.overrideredirect(False)
-		root.resizable(False, False)
-		root.title(f'{type(self).__name__}@{hex(id(self))}')
-		root.configure(background='#222222')
-
-		canvas: tkinter.Canvas = tkinter.Canvas(root, background='#222222', highlightthickness=1, highlightcolor='#eeeeee', highlightbackground='#eeeeee', width=square_size, height=square_size)
-		canvas.pack()
-
-		image: numpy.ndarray[numpy.uint8] = self.as_image(square_size=square_size)
-		pilmage: PIL.Image.Image = PIL.Image.fromarray(image)
-		pilmage_tk: PIL.ImageTk.PhotoImage = PIL.ImageTk.PhotoImage(pilmage)
-		canvas.create_image(0, 0, image=pilmage_tk, anchor='nw')
-
-		root.mainloop()
-
-	def save(self, filename: str, *, square_size: int = 1024) -> None:
-		"""
-		Saves this plot as a rendered image
-		:param filename: The filepath to save to
-		:param square_size: The square image size to render at
-		"""
-
-		image: PIL.Image.Image = PIL.Image.fromarray(self.as_image(square_size=square_size))
-		image.save(filename)
-
-	def plot_point_to_image_point(self, point: tuple[float, float] | Vector.Vector, size: int) -> tuple[int, int] | Vector.Vector:
-		"""
-		Converts a point from plot-space into image-space
-		:param point: The plot-space point
-		:param size: The square image size
-		:return: The image-space point
-		"""
-
-		x, y = point
-		bounds: tuple[float, float, float, float] = self.get_bounds()
-		minx, maxx, miny, maxy = bounds
-		rx: float = Misc.get_ratio(x, minx, maxx)
-		ry: float = Misc.get_ratio(y, miny, maxy)
-		fx: float = Misc.get_value(rx, 0, size)
-		fy: float = Misc.get_value(1 - ry, 0, size)
-		return Vector.Vector(round(fx), round(fy)) if isinstance(point, Vector.Vector) else (round(fx), round(fy))
-
-	def image_point_to_plot_point(self, point: tuple[int, int] | Vector.Vector, size: int) -> tuple[float, float]:
-		"""
-		Converts a point from image-space into plot-space
-		:param point: The image-space point
-		:param size: The square image size
-		:return: The plot-space point
-		"""
-
-		x, y = point
-		bounds: tuple[float, float, float, float] = self.get_bounds()
-		minx, maxx, miny, maxy = bounds
-		rx: float = Misc.get_ratio(x, 0, size)
-		ry: float = Misc.get_ratio(y, 0, size)
-		fx: float = Misc.get_value(rx, minx, maxx)
-		fy: float = Misc.get_value(1 - ry, miny, maxy)
-		return Vector.Vector(fx, fy) if isinstance(point, Vector.Vector) else (fx, fy)
-
-	def as_image(self, *, square_size: int = 1024) -> numpy.ndarray[numpy.uint8]:
-		"""
-		Renders this plot as an image
-		:param square_size: The square image size to render as
-		:return: The rendered RGBA image
-		"""
-
-		square_size: int = int(square_size)
-		image: PIL.Image.Image = PIL.Image.new('RGBA', (square_size, square_size), '#222222')
-		self.__draw__(image, square_size)
-		return numpy.array(image)
-
-	def set_bounds(self, minx: float | None, maxx: float | None, miny: float | None, maxy: float | None) -> Plottable:
-		"""
-		Sets the boundaries of this plot
-		Data outside this bound will not be rendered
-		Any 'None' values are infinite
-		:param minx: The minimum x bound
-		:param maxx: The maximum x bound
-		:param miny: The minimum y bound
-		:param maxy: The maximum y bound
-		:return: This plot
-		"""
-
-		inf: float = float('inf')
-		bounds: tuple[float, float, float, float] = (-inf if minx is None or minx is ... else float(minx), inf if maxx is None or maxx is ... else float(maxx), -inf if miny is None or miny is ... else float(miny), inf if maxy is None or maxy is ... else float(maxy))
-		self.__explicit_bounds__ = None if all(b == inf for b in bounds) else bounds
-		return self
-
-	def get_bounds(self) -> tuple[float, float, float, float]:
-		"""
-		Gets the bounds of this plot
-		Any infinite boundaries are set to 10
-		:return: (min_x, max_x, min_y, max_y)
-		"""
-
-		minx, maxx, miny, maxy = (-10, 10, -10, 10) if self.__explicit_bounds__ is None else self.__explicit_bounds__
-		inf: float = float('inf')
-		return -10 if abs(minx) == inf else minx, 10 if abs(maxx) == inf else maxx, -10 if abs(miny) == inf else miny, 10 if abs(maxy) == inf else maxy
-
-class Plot2D[PointType](Plottable):
+class Plot2D[PointType](Plotter.Plottable):
 	"""
 	Base class representing a single 2D graph
 	"""
@@ -570,6 +445,9 @@ class Plot2D[PointType](Plottable):
 		:return: (min_x, max_x, min_y, max_y)
 		"""
 
+		if self.has_calculated_bounds:
+			return self.__calculated_bounds__
+
 		minx, maxx, miny, maxy = self.bounds
 		inf: float = float('inf')
 		return -10 if abs(minx) == inf else minx, 10 if abs(maxx) == inf else maxx, -10 if abs(miny) == inf else miny, 10 if abs(maxy) == inf else maxy
@@ -597,6 +475,15 @@ class Plot2D[PointType](Plottable):
 		"""
 
 		return (self.__point_color__ >> 24) & 0xFF, (self.__point_color__ >> 16) & 0xFF, (self.__point_color__ >> 8) & 0xFF, self.__point_color__ & 0xFF
+
+	@property
+	def point_color_bgra(self) -> tuple[int, int, int, int]:
+		"""
+		:return: The point color of this plot as BGRA
+		"""
+
+		r, g, b, a = self.point_color_rgba
+		return b, g, r, a
 
 	@property
 	def regular_point_shape(self) -> int:
@@ -650,10 +537,13 @@ class Plot2D[PointType](Plottable):
 			self.__explicit_bounds__ = None
 		else:
 			bounds: tuple[float, float, float, float] = tuple(bounds)
-			assert all(isinstance(x, (int, float)) for x in bounds), 'One or more bounds is not a float'
+			assert all(x is None or isinstance(x, (int, float)) for x in bounds), 'One or more bounds is not a float'
 			self.__explicit_bounds__ = bounds[:4]
 
-class MultiPlot2D[PlotType: Plot2D](Plottable):
+		self.invalidate_bounds()
+
+
+class MultiPlot2D[PlotType: Plot2D](Plotter.Plottable):
 	"""
 	Base class representing multiple stacked 2D plots
 	"""
@@ -678,7 +568,7 @@ class MultiPlot2D[PlotType: Plot2D](Plottable):
 		:raises KeyError: If the plot does not exist
 		"""
 
-		order_index: int | None = (index if index >= 0 else (len(self.__plot_order__) + index)) if isinstance(index, int) else None
+		order_index: typing.Optional[int] = (index if index >= 0 else (len(self.__plot_order__) + index)) if isinstance(index, int) else None
 
 		if order_index is not None and order_index >= len(self.__plot_order__):
 			raise IndexError(f'Index {index} out of bounds for multi-plot with {len(self.__plot_order__)} plots')
@@ -719,14 +609,14 @@ class MultiPlot2D[PlotType: Plot2D](Plottable):
 		key: str = index if order_index is None else self.__plot_order__[order_index]
 		del self.__plots__[key]
 
-	def __draw__(self, image: PIL.Image.Image, size: int) -> None:
+	def __draw__(self, image: numpy.ndarray, size: int) -> None:
 		super().__draw__(image, size)
 		bounds: tuple[float, float, float, float] = tuple(bound * 1.25 for bound in self.bounds)
 
 		for plot_name in reversed(self.__plot_order__):
 			self.__draw_plot__(image, size, plot_name, bounds)
 
-	def __draw_plot__(self, image: PIL.Image.Image, size: int, sub_plot_name: str, bounds: tuple[float, float, float, float]) -> None:
+	def __draw_plot__(self, image: numpy.ndarray, size: int, sub_plot_name: str, bounds: tuple[float, float, float, float]) -> None:
 		"""
 		- ABSTRACT -
 		Overload this method to control plot drawing
@@ -816,13 +706,16 @@ class MultiPlot2D[PlotType: Plot2D](Plottable):
 			assert all(isinstance(x, (int, float)) for x in bounds), 'One or more bounds is not a float'
 			self.__explicit_bounds__ = bounds[:4]
 
+		self.invalidate_bounds()
+
+
 class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]]):
 	"""
 	Class representing a scatter plot in 2D cartesian space
 	 ... PointType = tuple[float, float]
 	"""
 
-	POLY_FIT_METHODS: dict[str, typing.Callable] = {
+	POLY_FIT_METHODS: dict[str, collections.abc.Callable] = {
 		'poly': numpy.polynomial.polynomial.polyfit,
 		'polynomial': numpy.polynomial.polynomial.polyfit,
 		'chebyshev': numpy.polynomial.chebyshev.chebfit,
@@ -839,34 +732,47 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 		"""
 
 		super(CartesianScatterPlot2D, self).__init__(self)
-		self.__graph_functions__: dict[str, list[typing.Callable[[float], float]]] = {}
+		self.__graph_functions__: dict[str, list[collections.abc.Callable[[float], float]]] = {}
 		self.add_axis('x', (0, 0), 0, major_spacing=5)
 		self.add_axis('y', (0, 0), 90, major_spacing=5)
 
-	def __draw__(self, image: PIL.Image.Image, size: int) -> None:
+	def __draw__(self, image: numpy.ndarray, size: int) -> None:
 		super().draw_linear_axis(image, size, 'x')
 		super().draw_linear_axis(image, size, 'y')
 		super().__draw__(image, size)
 
-	def __draw_plot__(self, image: PIL.Image.Image, size: int, sub_plot_name: str, bounds: tuple[float, float, float, float]) -> None:
+	def __draw_plot__(self, image: numpy.ndarray, size: int, sub_plot_name: str, bounds: tuple[float, float, float, float]) -> None:
 		sub_plot: Plot2D = self.__plots__[sub_plot_name]
 		points: tuple[tuple[float, float], ...] = tuple(sorted(sub_plot.points, key=lambda point: point[0]))
 		mapped_points: list[tuple[int, int]] = []
-		drawer: PIL.ImageDraw.ImageDraw = PIL.ImageDraw.ImageDraw(image)
 
 		for x, y in points:
 			image_point: tuple[int, int] = self.plot_point_to_image_point((x, y), size)
 			mapped_points.append(image_point)
 
 			if sub_plot.regular_point_shape == 0:
-				drawer.circle(image_point, sub_plot.point_size / 2, sub_plot.point_color_rgba, width=0)
+				cv2.circle(image, image_point, round(sub_plot.point_size / 2), sub_plot.point_color_bgra, -1)
 			elif sub_plot.regular_point_shape >= 3:
-				drawer.regular_polygon((*image_point, sub_plot.point_size / 2), sub_plot.regular_point_shape, 0, sub_plot.point_color_rgba, width=0)
+				circle: float = math.radians(360)
+				delta: float = circle / sub_plot.regular_point_shape
+				radius: float = sub_plot.point_size / 2
+				theta: float = 0
+				offset: float = math.radians(90)
+				points: list[tuple[int, int]] = []
+				cx, cy = image_point
 
-		drawer.line(mapped_points, sub_plot.point_color_rgba, max(1, round(sub_plot.point_size / 4)))
+				while theta < circle:
+					px: float = math.cos(theta - offset) * radius + cx
+					py: float = math.sin(theta - offset) * radius + cy
+					points.append((round(px), round(py)))
+					theta += delta
+
+				cv2.fillPoly(image, [numpy.array(points, numpy.int32)], sub_plot.point_color_bgra, cv2.LINE_AA)
+
+		cv2.polylines(image, [numpy.array(mapped_points, numpy.int32)], False, sub_plot.point_color_bgra, max(1, round(sub_plot.point_size / 10)), cv2.LINE_AA)
 
 		if sub_plot_name in self.__graph_functions__:
-			functions: list[typing.Callable[[float], float]] = self.__graph_functions__[sub_plot_name]
+			functions: list[collections.abc.Callable[[float], float]] = self.__graph_functions__[sub_plot_name]
 
 			for function in functions:
 				mapped_function_points: list[tuple[float, float]] = []
@@ -878,9 +784,9 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 					image_point: tuple[int, int] = self.plot_point_to_image_point((x, y), size)
 					mapped_function_points.append(image_point)
 
-				drawer.line(mapped_function_points, sub_plot.point_color_rgba, max(1, round(sub_plot.point_size / 4)))
+				cv2.polylines(image, [numpy.array(mapped_function_points, numpy.int32)], False, sub_plot.point_color_bgra, max(1, round(sub_plot.point_size / 10)), cv2.LINE_AA)
 
-	def graph(self, function: typing.Callable[[float], float], *, plot_name: typing.Optional[str] = ...) -> CartesianScatterPlot2D:
+	def graph(self, function: collections.abc.Callable[[float], float], *, plot_name: typing.Optional[str] = ...) -> CartesianScatterPlot2D:
 		"""
 		Graphs the specified function onto this plot
 		This function is not called immediately, instead the function is queued and will be called on draw
@@ -908,7 +814,7 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 
 		return self
 
-	def graph_points(self, function: typing.Callable[[float], float], minx: float = None, maxx: float = None, step: float = 1e-3, *, plot_name: typing.Optional[str] = ...) -> CartesianScatterPlot2D:
+	def graph_points(self, function: collections.abc.Callable[[float], float], minx: float = None, maxx: float = None, step: float = 1e-3, *, plot_name: typing.Optional[str] = ...) -> CartesianScatterPlot2D:
 		"""
 		Graphs the specified function onto this plot
 		This runs the function immediately, storing the resulting points on this graph
@@ -949,7 +855,7 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 
 		return self
 
-	def linear_regression(self, *, plot_name: typing.Optional[str] = ...) -> tuple[typing.Optional[str], typing.Optional[float], typing.Callable[[float], typing.Optional[float]]]:
+	def linear_regression(self, *, plot_name: typing.Optional[str] = ...) -> tuple[typing.Optional[str], typing.Optional[float], collections.abc.Callable[[float], typing.Optional[float]]]:
 		"""
 		Calculates the best fit linear regression for the active plot's points
 		:param plot_name: The plot name to graph to or the active plot if None
@@ -977,7 +883,7 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 		r2: float = 1 - sum((point[1] - (_a * point[0] + _b)) ** 2 for point in points) / sum((point[1] - _y) ** 2 for point in points)
 		return f'y={_a}x+{_b}; r²={r2}', r2, lambda x, m=_a, b=_b: m * x + b
 
-	def exponential_regression(self, *, plot_name: typing.Optional[str] = ...) -> tuple[typing.Optional[str], typing.Optional[float], typing.Callable[[float], typing.Optional[float]]]:
+	def exponential_regression(self, *, plot_name: typing.Optional[str] = ...) -> tuple[typing.Optional[str], typing.Optional[float], collections.abc.Callable[[float], typing.Optional[float]]]:
 		"""
 		Calculates the best fit exponential regression for the active plot's points
 		:param plot_name: The plot name to graph to or the active plot if None
@@ -1005,7 +911,7 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 		r2: float = 1 - sum((point[1] - (_a * point[0] + _b)) ** 2 for point in points) / sum(point[1] - _y for point in points)
 		return f'y=e^({_a}x+{_b}); r²={r2}', r2, lambda x: pow(math.e, _a * x + _b)
 
-	def polynomial_regression(self, degree: int = None, max_degree: int = None, fit_method='poly', *, plot_name: typing.Optional[str] = ...) -> tuple[typing.Optional[str], typing.Optional[float], typing.Callable[[float], typing.Optional[float]]]:
+	def polynomial_regression(self, degree: int = None, max_degree: int = None, fit_method='poly', *, plot_name: typing.Optional[str] = ...) -> tuple[typing.Optional[str], typing.Optional[float], collections.abc.Callable[[float], typing.Optional[float]]]:
 		"""
 		Calculates the best fit polynomial regression for the active plot's points
 		Calculates an equation of degree 'degree' if 'max_degree' is None otherwise returns the best fit from equations between 'degree' and 'max_degree'
@@ -1083,7 +989,7 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 		equation: str = ''.join(f'{"+" if m >= 0 and b > 0 else ""}{m}x^{(len(factors) - b - 1)}' for b, m in enumerate(factors))
 		return (f'y={equation}; r²={r2}', r2, lambda x_, f=factors: sum(m * x_ ** (len(f) - b - 1) for b, m in enumerate(f))) if len(factors) > 0 else (None, None, lambda x_: None)
 
-	def sinusoidal_regression(self, *, plot_name: typing.Optional[str] = ...) -> tuple[typing.Optional[str], typing.Optional[float], typing.Callable[[float], typing.Optional[float]]]:
+	def sinusoidal_regression(self, *, plot_name: typing.Optional[str] = ...) -> tuple[typing.Optional[str], typing.Optional[float], collections.abc.Callable[[float], typing.Optional[float]]]:
 		"""
 		Calculates the best fit sinusoidal regression for the active plot's points
 		:return: Either a tuple of None if the graph is empty or a tuple containing the equation, r squared, and a callable representing the regression function
@@ -1122,6 +1028,7 @@ class CartesianScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]
 		r2: float = 1 - sum((point[1] - (a * math.sin(b * point[0] + c) + d)) ** 2 for point in points) / sum((point[1] - _y) ** 2 for point in points)
 		return f'y={a}*sin({b}*x+{c})+{d}; r²={r2}', r2, lambda x: a * math.sin(b * x + c) + d
 
+
 class PolarScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]]):
 	"""
 	Class representing a scatter plot in 2D polar space
@@ -1136,22 +1043,21 @@ class PolarScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]]):
 		"""
 
 		super(PolarScatterPlot2D, self).__init__(self)
-		self.__graph_functions__: dict[str, list[tuple[typing.Callable[[float], float], float]]] = {}
+		self.__graph_functions__: dict[str, list[tuple[collections.abc.Callable[[float], float], float]]] = {}
 		self.add_axis('x', (0, 0), 0, major_spacing=5)
 		self.add_axis('y', (0, 0), 90, major_spacing=5)
 		self.add_axis('t', (0, 0), 0, minor_spacing=22.5, major_spacing=2)
 
-	def __draw__(self, image: PIL.Image.Image, size: int) -> None:
+	def __draw__(self, image: numpy.ndarray, size: int) -> None:
 		super().draw_radial_axis(image, size, 't')
 		super().draw_linear_axis(image, size, 'x')
 		super().draw_linear_axis(image, size, 'y')
 		super().__draw__(image, size)
 
-	def __draw_plot__(self, image: PIL.Image.Image, size: int, sub_plot_name: str, bounds: tuple[float, float, float, float]) -> None:
+	def __draw_plot__(self, image: numpy.ndarray, size: int, sub_plot_name: str, bounds: tuple[float, float, float, float]) -> None:
 		sub_plot: Plot2D = self.__plots__[sub_plot_name]
 		points: tuple[tuple[float, float], ...] = tuple(sorted(sub_plot.points, key=lambda point: point[0]))
 		mapped_points: list[tuple[int, int]] = []
-		drawer: PIL.ImageDraw.ImageDraw = PIL.ImageDraw.ImageDraw(image)
 
 		for t, r in points:
 			x: float = r * math.cos(t)
@@ -1160,15 +1066,29 @@ class PolarScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]]):
 			mapped_points.append(image_point)
 
 			if sub_plot.regular_point_shape == 0:
-				drawer.circle(image_point, sub_plot.point_size / 2, sub_plot.point_color_rgba, width=0)
+				cv2.circle(image, image_point, round(sub_plot.point_size / 2), sub_plot.point_color_bgra, -1)
 			elif sub_plot.regular_point_shape >= 3:
-				drawer.regular_polygon((*image_point, sub_plot.point_size / 2), sub_plot.regular_point_shape, 0, sub_plot.point_color_rgba, width=0)
+				circle: float = math.radians(360)
+				delta: float = circle / sub_plot.regular_point_shape
+				radius: float = sub_plot.point_size / 2
+				theta: float = 0
+				offset: float = math.radians(90)
+				points: list[tuple[int, int]] = []
+				cx, cy = image_point
 
-		drawer.line(mapped_points, sub_plot.point_color_rgba, max(1, round(sub_plot.point_size / 4)))
+				while theta < circle:
+					px: float = math.cos(theta - offset) * radius + cx
+					py: float = math.sin(theta - offset) * radius + cy
+					points.append((round(px), round(py)))
+					theta += delta
+
+				cv2.fillPoly(image, [numpy.array(points, numpy.int32)], sub_plot.point_color_bgra, cv2.LINE_AA)
+
+		cv2.polylines(image, [numpy.array(mapped_points, numpy.int32)], False, sub_plot.point_color_bgra, max(1, round(sub_plot.point_size / 10)), cv2.LINE_AA)
 
 		if sub_plot_name in self.__graph_functions__:
-			functions: list[tuple[typing.Callable[[float], float], float]] = self.__graph_functions__[sub_plot_name]
-			radian: float = 0.001 * math.pi / 180
+			functions: list[tuple[collections.abc.Callable[[float], float], float]] = self.__graph_functions__[sub_plot_name]
+			radian: float = math.radians(0.001)
 
 			for function, max_radian in functions:
 				mapped_function_points: list[tuple[float, float]] = []
@@ -1183,13 +1103,14 @@ class PolarScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]]):
 					mapped_function_points.append(image_point)
 					theta += radian
 
-				drawer.line(mapped_function_points, sub_plot.point_color_rgba, max(1, round(sub_plot.point_size / 4)))
+				cv2.polylines(image, [numpy.array(mapped_function_points, numpy.int32)], False, sub_plot.point_color_bgra, max(1, round(sub_plot.point_size / 10)), cv2.LINE_AA)
 
-	def graph(self, function: typing.Callable[[float], float], *, angle: float = 360, plot_name: typing.Optional[str] = ...) -> PolarScatterPlot2D:
+	def graph(self, function: collections.abc.Callable[[float], float], *, angle: float = 360, plot_name: typing.Optional[str] = ...) -> PolarScatterPlot2D:
 		"""
 		Graphs the specified function onto this plot
 		This function is not called immediately, instead the function is queued and will be called on draw
 		:param function: A function accepting a single float and returning a single float
+		:param angle: The maximum angle to graph this function to
 		:param plot_name: The plot name to graph to or the active plot if None
 		:return: This plot
 		:raises TypeError: If plot name is not a string
@@ -1207,13 +1128,13 @@ class PolarScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]]):
 			raise ValueError('Specified function is not callable')
 
 		if plot in self.__graph_functions__:
-			self.__graph_functions__[plot].append((function, angle * math.pi / 180))
+			self.__graph_functions__[plot].append((function, math.radians(angle)))
 		else:
-			self.__graph_functions__[plot] = [(function, angle * math.pi / 180)]
+			self.__graph_functions__[plot] = [(function, math.radians(angle))]
 
 		return self
 
-	def graph_points(self, function: typing.Callable[[float], float], minx: float = None, maxx: float = None, step: float = 1e-3, *, plot_name: typing.Optional[str] = ...) -> PolarScatterPlot2D:
+	def graph_points(self, function: collections.abc.Callable[[float], float], minx: float = None, maxx: float = None, step: float = 1e-3, *, plot_name: typing.Optional[str] = ...) -> PolarScatterPlot2D:
 		"""
 		Graphs the specified function onto this plot
 		This runs the function immediately, storing the resulting points on this graph
@@ -1254,19 +1175,17 @@ class PolarScatterPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[tuple[float, float]]]):
 
 		return self
 
+
 class PiePlot2D(Plot2D[tuple[str, float]]):
 	"""
 	Class representing a 2D pie plot
 	 ... PointType = tuple[str, float]
 	"""
 
-	def __draw__(self, image: PIL.Image.Image, size: int) -> None:
-		pie_size: float = size * 0.95 / 2
-		center: float = size / 2
-		corner1: float = center - pie_size
-		corner2: float = center + pie_size
-		bounds: tuple[float, float, float, float] = (corner1, corner1, corner2, corner2)
-		drawer: PIL.ImageDraw.ImageDraw = PIL.ImageDraw.ImageDraw(image)
+	def __draw__(self, image: numpy.ndarray, size: int) -> None:
+		pie_size: int = round(size * 0.95 / 2)
+		center: tuple[int, int] = (round(size / 2), round(size / 2))
+		brg: matplotlib.colors.Colormap = matplotlib.cm.get_cmap('brg')
 
 		if len(self.__points__) > 0:
 			total: float = sum(point[1] for point in self.__points__ if point[1] > 0)
@@ -1277,12 +1196,24 @@ class PiePlot2D(Plot2D[tuple[str, float]]):
 					continue
 
 				percent: float = (value / total)
-				color: tuple[float, float, float, float] = matplotlib.cm.brg(percent)
+				color: tuple[float, float, float, float] = brg(percent)
 				partial: float = 360 * percent
 				degree1: float = theta
 				theta += partial
 				degree2: float = theta
-				drawer.pieslice(bounds, degree1, degree2, tuple(round(c * 255) for c in color), self.point_color_rgba, 1)
+				cv2.ellipse(image, center, (pie_size, pie_size), 0, degree1, degree2, tuple(round(c * 255) for c in color), -1, cv2.LINE_AA)
+				cv2.ellipse(image, center, (pie_size, pie_size), 0, degree1, degree2, self.point_color_bgra, 1, cv2.LINE_AA)
+
+				if percent >= 1:
+					continue
+
+				degree1 = math.radians(degree1)
+				degree2 = math.radians(degree2)
+				point1: tuple[float, float] = (math.cos(degree1) * pie_size + center[0], math.sin(degree1) * pie_size + center[1])
+				point2: tuple[float, float] = (math.cos(degree2) * pie_size + center[0], math.sin(degree2) * pie_size + center[1])
+				points: tuple[tuple[float, float], ...] = (point1, center, point2)
+				cv2.polylines(image, [numpy.array(points, numpy.int32)], False, self.point_color_bgra, 1, cv2.LINE_AA)
+
 
 class BarPlot2D(AxisPlot2D, Plot2D[tuple[str, float]]):
 	"""
@@ -1301,19 +1232,20 @@ class BarPlot2D(AxisPlot2D, Plot2D[tuple[str, float]]):
 		self.add_axis('x', (0, 0), 0, major_spacing=0, minor_spacing=1, tick_offset=1)
 		self.add_axis('y', (0, 0), 90, major_spacing=0, minor_spacing=1, tick_offset=0)
 
-	def __draw__(self, image: PIL.Image.Image, size: int) -> None:
-		drawer: PIL.ImageDraw.ImageDraw = PIL.ImageDraw.ImageDraw(image)
+	def __draw__(self, image: numpy.ndarray, size: int) -> None:
 		count: int = len(self.__points__)
+		brg: matplotlib.colors.Colormap = matplotlib.cm.get_cmap('brg')
 
 		for i, (label, value) in enumerate(self.__points__):
 			p1: tuple[float, float] = self.plot_point_to_image_point((i + 1.375, 0), size)
 			p2: tuple[float, float] = self.plot_point_to_image_point((i + 0.625, 0 + value), size)
 			x1, y1 = p1
 			x2, y2 = p2
-			minx, maxx = Iterable.minmax(x1, x2)
-			miny, maxy = Iterable.minmax(y1, y2)
-			color: tuple[float, float, float, float] = matplotlib.cm.brg(i / count)
-			drawer.rectangle((minx, miny, maxx, maxy), tuple(round(c * 255) for c in color), width=0)
+			minx, maxx = Misc.minmax(x1, x2)
+			miny, maxy = Misc.minmax(y1, y2)
+			color: tuple[float, float, float, float] = brg(i / count)
+			cv2.rectangle(image, (minx, miny), (maxx, maxy), tuple(round(c * 255) for c in color), -1, cv2.LINE_AA)
+			cv2.rectangle(image, (minx, miny), (maxx, maxy), self.point_color_bgra, 1, cv2.LINE_AA)
 
 		super().draw_linear_axis(image, size, 'x')
 		super().draw_linear_axis(image, size, 'y')
@@ -1325,8 +1257,9 @@ class BarPlot2D(AxisPlot2D, Plot2D[tuple[str, float]]):
 
 		miny: float
 		maxy: float
-		miny, maxy = Iterable.minmax(point[1] for point in self.__points__)
+		miny, maxy = Iterable.Iterable.minmax(point[1] for point in self.__points__)
 		return -1.0, len(self.__points__) + 1.0, min(miny - 1, -1), maxy + 1
+
 
 class HistogramPlot2D(AxisPlot2D, Plot2D[tuple[float, float]]):
 	"""
@@ -1344,17 +1277,15 @@ class HistogramPlot2D(AxisPlot2D, Plot2D[tuple[float, float]]):
 		self.add_axis('x', (0, 0), 0, major_spacing=0, minor_spacing=1, tick_offset=1)
 		self.add_axis('y', (0, 0), 90, major_spacing=0, minor_spacing=1, tick_offset=0)
 
-	def __draw__(self, image: PIL.Image.Image, size: int) -> None:
-		drawer: PIL.ImageDraw.ImageDraw = PIL.ImageDraw.ImageDraw(image)
-
+	def __draw__(self, image: numpy.ndarray, size: int) -> None:
 		for i, (label, value) in enumerate(self.__points__):
 			p1: tuple[float, float] = self.plot_point_to_image_point((i + 1.5, 0), size)
 			p2: tuple[float, float] = self.plot_point_to_image_point((i + 0.5, value), size)
 			x1, y1 = p1
 			x2, y2 = p2
-			minx, maxx = Iterable.minmax(x1, x2)
-			miny, maxy = Iterable.minmax(y1, y2)
-			drawer.rectangle((minx, miny, maxx, maxy), self.point_color_rgba, width=0)
+			minx, maxx = Misc.minmax(x1, x2)
+			miny, maxy = Misc.minmax(y1, y2)
+			cv2.rectangle(image, (minx, miny), (maxx, maxy), self.point_color_bgra, -1, cv2.LINE_AA)
 
 		super().draw_linear_axis(image, size, 'x')
 		super().draw_linear_axis(image, size, 'y')
@@ -1366,8 +1297,9 @@ class HistogramPlot2D(AxisPlot2D, Plot2D[tuple[float, float]]):
 
 		miny: float
 		maxy: float
-		miny, maxy = Iterable.minmax(point[1] for point in self.__points__)
+		miny, maxy = Iterable.Iterable.minmax(point[1] for point in self.__points__)
 		return -1.0, len(self.__points__) + 1.0, min(miny - 1, -1), maxy + 1
+
 
 class DensityPlot2D(AxisPlot2D, MultiPlot2D[HistogramPlot2D]):
 	"""
@@ -1385,35 +1317,35 @@ class DensityPlot2D(AxisPlot2D, MultiPlot2D[HistogramPlot2D]):
 		self.add_axis('x', (0, 0), 0, major_spacing=0, minor_spacing=1, tick_offset=1)
 		self.add_axis('y', (0, 0), 90, major_spacing=0, minor_spacing=1, tick_offset=0)
 
-	def __draw__(self, image: PIL.Image.Image, size: int) -> None:
+	def __draw__(self, image: numpy.ndarray, size: int) -> None:
 		super().draw_linear_axis(image, size, 'x')
 		super().draw_linear_axis(image, size, 'y')
 		super().__draw__(image, size)
 
-	def __draw_plot__(self, image: PIL.Image.Image, size: int, sub_plot_name: str, bounds: tuple[float, float, float, float]) -> None:
-		drawer: PIL.ImageDraw.ImageDraw = PIL.ImageDraw.ImageDraw(image)
+	def __draw_plot__(self, image: numpy.ndarray, size: int, sub_plot_name: str, bounds: tuple[float, float, float, float]) -> None:
 		plot: HistogramPlot2D = self.__plots__[sub_plot_name]
 		minx, maxx, _, _ = self.get_bounds()
 		final_points: tuple[tuple[float, float], ...] = ((minx, 0), *plot.points, (maxx, 0))
 		points: tuple[tuple[int, int], ...] = tuple(self.plot_point_to_image_point(point, size) for point in final_points)
 		line_x: tuple[int, ...] = tuple(point[0] for point in points)
 		line_y: tuple[int, ...] = tuple(point[1] for point in points)
-		interpolator: typing.Callable = scipy.interpolate.interp1d(line_x, line_y, kind=2)
-		line_x: numpy.ndarray = numpy.linspace(*Iterable.minmax(line_x), num=100)
+		interpolator: collections.abc.Callable = scipy.interpolate.interp1d(line_x, line_y, kind=2)
+		line_x: numpy.ndarray = numpy.linspace(*Iterable.Iterable.minmax(line_x), num=100)
 		line_y: numpy.ndarray = interpolator(line_x)
 
 		for i in range(len(line_x) - 1):
 			point1: tuple[int, int] = (int(line_x[i]), int(line_y[i]))
 			point2: tuple[int, int] = (int(line_x[i + 1]), int(line_y[i + 1]))
-			drawer.line((point1, point2), fill=plot.point_color_rgba, width=1)
+			cv2.line(image, point1, point2, plot.point_color_bgra, 1, cv2.LINE_AA)
 
 		for x, y in points[1:-1]:
-			drawer.circle((x, y), plot.point_size / 2, fill=plot.point_color_rgba, width=0)
+			cv2.circle(image, (x, y), round(plot.point_size / 2), plot.point_color_bgra, -1, cv2.LINE_AA)
 
 	@property
 	def bounds(self) -> tuple[float, float, float, float]:
 		minx, maxx, miny, maxy = super().bounds
 		return -1, max(maxx, 1), min(miny, -1), max(maxy, 1)
+
 
 class DotPlot2D(AxisPlot2D, MultiPlot2D[BarPlot2D]):
 	"""
@@ -1431,16 +1363,16 @@ class DotPlot2D(AxisPlot2D, MultiPlot2D[BarPlot2D]):
 		self.add_axis('x', (0, 0), 0, major_spacing=0, minor_spacing=1, tick_offset=1)
 		self.add_axis('y', (0, 0), 90, major_spacing=0, minor_spacing=1, tick_offset=0)
 
-	def __draw__(self, image: PIL.Image.Image, size: int) -> None:
+	def __draw__(self, image: numpy.ndarray, size: int) -> None:
 		super().draw_linear_axis(image, size, 'x')
 		super().draw_linear_axis(image, size, 'y')
 		super().__draw__(image, size)
 
-	def __draw_plot__(self, image: PIL.Image.Image, size: int, sub_plot_name: str, bounds: tuple[float, float, float, float]) -> None:
-		drawer: PIL.ImageDraw.ImageDraw = PIL.ImageDraw.ImageDraw(image)
+	def __draw_plot__(self, image: numpy.ndarray, size: int, sub_plot_name: str, bounds: tuple[float, float, float, float]) -> None:
 		plot: BarPlot2D = self.__plots__[sub_plot_name]
 		index: int = self.__plot_order__.index(sub_plot_name)
-		r, g, b, a = matplotlib.cm.brg(index / len(self.__plots__))
+		brg: matplotlib.colors.Colormap = matplotlib.cm.get_cmap('brg')
+		r, g, b, a = brg(index / len(self.__plots__))
 		total: float = sum(point[1] for point in plot.points)
 
 		for i, (label, value) in enumerate(plot.points):
@@ -1451,7 +1383,7 @@ class DotPlot2D(AxisPlot2D, MultiPlot2D[BarPlot2D]):
 			h, s, v = colorsys.rgb_to_hsv(r, g, b)
 			dr, dg, db = colorsys.hsv_to_rgb(h, s * (value / total), v)
 			color: tuple[float, float, float, float] = (dr, dg, db, a)
-			drawer.circle(image_point, plot.point_size, tuple(round(c * 255) for c in color), width=0)
+			cv2.circle(image, image_point, round(plot.point_size / 2), tuple(round(c * 255) for c in color), -1, cv2.LINE_AA)
 
 	@property
 	def bounds(self) -> tuple[float, float, float, float]:
@@ -1460,6 +1392,7 @@ class DotPlot2D(AxisPlot2D, MultiPlot2D[BarPlot2D]):
 
 		maxx: float = max(len(plot.points) for plot in self.__plots__.values())
 		return -1.0, maxx + 1.0, -1, len(self.__plots__) + 1
+
 
 class StackedDotPlot2D(AxisPlot2D, Plot2D[tuple[str, int]]):
 	"""
@@ -1477,13 +1410,11 @@ class StackedDotPlot2D(AxisPlot2D, Plot2D[tuple[str, int]]):
 		self.add_axis('x', (0, 0), 0, major_spacing=0, minor_spacing=1, tick_offset=1)
 		self.add_axis('y', (0, 0), 90, major_spacing=0, minor_spacing=1, tick_offset=0)
 
-	def __draw__(self, image: PIL.Image.Image, size: int) -> None:
-		drawer: PIL.ImageDraw.ImageDraw = PIL.ImageDraw.ImageDraw(image)
-
+	def __draw__(self, image: numpy.ndarray, size: int) -> None:
 		for i, (label, value) in enumerate(self.__points__):
 			for j in range(1, value + 1) if value > 0 else range(value, 0):
 				image_point: tuple[int, int] = self.plot_point_to_image_point((i + 1, j), size)
-				drawer.circle(image_point, self.point_size / 2, self.point_color_rgba, width=0)
+				cv2.circle(image, image_point, round(self.point_size / 2), self.point_color_bgra, -1, cv2.LINE_AA)
 
 		super().draw_linear_axis(image, size, 'x')
 		super().draw_linear_axis(image, size, 'y')
@@ -1495,8 +1426,9 @@ class StackedDotPlot2D(AxisPlot2D, Plot2D[tuple[str, int]]):
 
 		miny: float
 		maxy: float
-		miny, maxy = Iterable.minmax(point[1] for point in self.__points__)
+		miny, maxy = Iterable.Iterable.minmax(point[1] for point in self.__points__)
 		return -1.0, len(self.__points__) + 1.0, min(miny - 1, -1), maxy + 1
+
 
 class BoxPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[float]]):
 	"""
@@ -1514,35 +1446,36 @@ class BoxPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[float]]):
 		self.add_axis('x', (0, 0), 0, major_spacing=0, minor_spacing=1, tick_offset=1)
 		self.add_axis('y', (0, 0), 90, major_spacing=0, minor_spacing=1, tick_offset=0)
 
-	def __draw__(self, image: PIL.Image.Image, size: int) -> None:
+	def __draw__(self, image: numpy.ndarray, size: int) -> None:
 		super().draw_linear_axis(image, size, 'x')
 		super().draw_linear_axis(image, size, 'y')
 		super().__draw__(image, size)
 
-	def __draw_plot__(self, image: PIL.Image.Image, size: int, sub_plot_name: str, bounds: tuple[float, float, float, float]) -> None:
-		drawer: PIL.ImageDraw.ImageDraw = PIL.ImageDraw.ImageDraw(image)
+	def __draw_plot__(self, image: numpy.ndarray, size: int, sub_plot_name: str, bounds: tuple[float, float, float, float]) -> None:
+		brg: matplotlib.colors.Colormap = matplotlib.cm.get_cmap('brg')
 		points: tuple[float, ...] = self.__plots__[sub_plot_name].points
 		index: int = self.__plot_order__.index(sub_plot_name)
 		yoffset: int = index + 1
 		ydelta: float = 0.25
 		minx: float
 		maxx: float
-		minx, maxx = Iterable.minmax(points)
-		p25: float = Stats.quantile(points, 0.25)
-		p50: float = Stats.quantile(points, 0.5)
-		p75: float = Stats.quantile(points, 0.75)
+		minx, maxx = Iterable.Iterable.minmax(points)
+		p25: float = Statistics.Functions.quantile(points, 0.25)
+		p50: float = Statistics.Functions.quantile(points, 0.5)
+		p75: float = Statistics.Functions.quantile(points, 0.75)
 		x1, y1 = self.plot_point_to_image_point((p25, yoffset + ydelta), size)
 		x2, y2 = self.plot_point_to_image_point((p75, yoffset - ydelta), size)
-		color: tuple[int, ...] = tuple(round(c * 255) for c in matplotlib.cm.brg(index / len(self.__plots__)))
-		radius: float = self.plot_point_to_image_point((1, 0), size)[0] * (ydelta / 2)
-		drawer.rectangle((x1, y1, x2, y2), outline=color, width=2)
-		minx_dot: tuple[float, float] = self.plot_point_to_image_point((minx, yoffset), size)
-		maxx_dot: tuple[float, float] = self.plot_point_to_image_point((maxx, yoffset), size)
-		drawer.circle(minx_dot, radius, color, width=0)
-		drawer.circle(maxx_dot, radius, color, width=0)
-		drawer.line((*self.plot_point_to_image_point((p50, yoffset - ydelta), size), *self.plot_point_to_image_point((p50, yoffset + ydelta), size)), color, width=2)
-		drawer.line((*minx_dot, *self.plot_point_to_image_point((p25, yoffset), size)), color, width=2)
-		drawer.line((*maxx_dot, *self.plot_point_to_image_point((p75, yoffset), size)), color, width=2)
+		color: tuple[int, ...] = tuple(round(c * 255) for c in brg(index / len(self.__plots__)))
+		radius: int = round(self.plot_point_to_image_point((1, 0), size)[0] * (ydelta / 2))
+		cv2.rectangle(image, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
+		minx_dot: tuple[int, int] = self.plot_point_to_image_point((minx, yoffset), size)
+		maxx_dot: tuple[int, int] = self.plot_point_to_image_point((maxx, yoffset), size)
+		cv2.circle(image, minx_dot, radius, color, -1, cv2.LINE_AA)
+		cv2.circle(image, maxx_dot, radius, color, -1, cv2.LINE_AA)
+		cv2.line(image, minx_dot, self.plot_point_to_image_point((p25, yoffset), size), color, 2, cv2.LINE_AA)
+		cv2.line(image, maxx_dot, self.plot_point_to_image_point((p75, yoffset), size), color, 2, cv2.LINE_AA)
+		medx: float = self.plot_point_to_image_point((p50, yoffset), size)[0]
+		cv2.line(image, (medx, y1), (medx, y2), color, 2, cv2.LINE_AA)
 
 	@property
 	def bounds(self) -> tuple[float, float, float, float]:
@@ -1552,120 +1485,94 @@ class BoxPlot2D(AxisPlot2D, MultiPlot2D[Plot2D[float]]):
 		maxx: float = max(max(plot.points) for plot in self.__plots__.values())
 		return -1.0, maxx + 1.0, -1, len(self.__plots__) + 1
 
-class Plot3D[PointType](Plottable):
-	def __draw__(self, image: PIL.Image.Image, size: int) -> None:
-		pass
 
-class GridPlotDisplay:
+class CandlestickPlot2D(AxisPlot2D, Plot2D['CandlestickPlot2D.CandleFrame']):
 	"""
-	Grid-style display for showing multiple plots at once
+	Class representing a 2D candlestick plot
+	 ... PointType = CandleFrame
 	"""
+
+	class CandleFrame:
+		def __init__(self, time: datetime.datetime, open_price: float, high_price: float, low_price: float, close_price: float):
+			self.__time__: datetime.datetime = time
+			self.__prices__: tuple[float, float, float, float] = (float(open_price), float(high_price), float(low_price), float(close_price))
+
+		def __iter__(self) -> collections.abc.Iterator[float]:
+			return iter(self.__prices__)
+
+		@property
+		def time(self) -> datetime.datetime:
+			return self.__time__
+
+		@property
+		def open(self) -> float:
+			return self.__prices__[0]
+
+		@property
+		def high(self) -> float:
+			return self.__prices__[1]
+
+		@property
+		def low(self) -> float:
+			return self.__prices__[2]
+
+		@property
+		def close(self) -> float:
+			return self.__prices__[3]
 
 	def __init__(self):
 		"""
-		Grid-style display for showing multiple plots at once
-		- Constructor -
+		Class representing a 2D box plot
+		 ... PointType = float
 		"""
 
-		self.__grid__: dict[tuple[int, int], Plottable] = {}
+		super().__init__(self)
+		self.__candle_colors__: list[tuple[int, int, int, int]] = [(255, 128, 128, 255), (128, 255, 128, 255)]
+		self.add_axis('time', (0, 0), 0, major_spacing=0, minor_spacing=86400, tick_offset=1)
+		self.add_axis('price', (0, 0), 90, major_spacing=0, minor_spacing=1, tick_offset=0)
 
-	def __setitem__(self, coordinate: tuple[int, int], plot: Plottable) -> None:
-		"""
-		Adds a plot to this display at the specified grid coordinates
-		:param coordinate: The grid coordinates starting at 0
-		:param plot: The plot to display at these coordinates
-		:raises AssertionError: If the coordinate is not an iterable containing exactly 2 integers >= 0
-		:raises AssertionError: If the plot is not an instance of 'Plottable'
-		"""
+	def __draw__(self, image: numpy.ndarray, size: int) -> None:
+		last_close: float = 0
+		delta: float = min(self.points[i + 1].time.timestamp() - self.points[i].time.timestamp() for i in range(len(self.__points__) - 1))
+		minx, maxx = self.bounds[:2]
+		image_delta: int = round(size * Misc.get_ratio(delta / 4, 0, maxx - minx))
+		line_width: int = max(1, round(image_delta / 10))
+		bearish, bullish = self.__candle_colors__
 
-		assert hasattr(coordinate, '__iter__') and len(coordinate := tuple(coordinate)) == 2 and all(isinstance(x, int) and int(x) >= 0 for x in coordinate), 'Coordinate must be an iterable containing exactly 2 integers >= 0'
-		assert isinstance(plot, Plottable), 'Not a plottable plot'
-		row: int = int(coordinate[0])
-		col: int = int(coordinate[1])
-		self.__grid__[(row, col)] = plot
+		for frame in self.__points__:
+			timestamp: float = frame.time.timestamp()
+			medlx, medly = self.plot_point_to_image_point((timestamp, frame.low), size)
+			medhx, medhy = self.plot_point_to_image_point((timestamp, frame.high), size)
+			medox, medoy = self.plot_point_to_image_point((timestamp, frame.open), size)
+			medcx, medcy = self.plot_point_to_image_point((timestamp, frame.close), size)
+			lx, ux = Misc.minmax(medox, medcx)
+			ly, uy = Misc.minmax(medoy, medcy)
+			color: tuple[int, int, int, int] = bullish if frame.close >= last_close else bearish
+			cv2.line(image, (medlx, medly), (medhx, medhy), color, line_width, cv2.LINE_AA)
+			cv2.rectangle(image, (lx - image_delta, ly), (ux + image_delta, uy), color, -1, cv2.LINE_AA)
+			last_close = frame.close
 
-	def __delitem__(self, coordinate: tuple[int, int]) -> None:
-		"""
-		Removes a plot at the specified grid coordinates from this display
-		:param coordinate: The grid coordinates starting at 0
-		:raises AssertionError: If the coordinate is not an iterable containing exactly 2 integers >= 0
-		"""
+		super().draw_linear_axis(image, size, 'time')
+		super().draw_linear_axis(image, size, 'price')
+		super().__draw__(image, size)
 
-		assert hasattr(coordinate, '__iter__') and len(coordinate := tuple(coordinate)) == 2 and all(isinstance(x, int) and int(x) > 0 for x in coordinate), 'Coordinate must be an iterable containing exactly 2 integers >= 0'
-		row: int = int(coordinate[0])
-		col: int = int(coordinate[1])
-		del self.__grid__[(row, col)]
+	def plot_info(self, *, regular_point_shape: typing.Optional[int] = ..., point_color: typing.Optional[str | int | tuple[int, int, int]] = ..., point_size: typing.Optional[int] = ..., bullish_color: typing.Optional[tuple[int, int, int, int]] = ..., bearish_color: typing.Optional[tuple[int, int, int, int]] = ...) -> Plot2D:
+		if bullish_color is not ...:
+			assert isinstance(bullish_color, tuple) and len(bullish_color := tuple(bullish_color)) == 4 and all(isinstance(x, int) and 0 <= x <= 255 for x in bullish_color), 'Invalid color'
+			self.__candle_colors__[1] = bullish_color
 
-	def __getitem__(self, coordinate: tuple[int, int]) -> Plottable:
-		"""
-		Gets a plot at the specified grid coordinates from this display
-		:param coordinate: The grid coordinates starting at 0
-		:raises AssertionError: If the coordinate is not an iterable containing exactly 2 integers >= 0
-		"""
+		if bearish_color is not ...:
+			assert isinstance(bearish_color, tuple) and len(bearish_color := tuple(bearish_color)) == 4 and all(isinstance(x, int) and 0 <= x <= 255 for x in bearish_color), 'Invalid color'
+			self.__candle_colors__[0] = bearish_color
 
-		assert hasattr(coordinate, '__iter__') and len(coordinate := tuple(coordinate)) == 2 and all(isinstance(x, int) and int(x) > 0 for x in coordinate), 'Coordinate must be an iterable containing exactly 2 integers >= 0'
-		row: int = int(coordinate[0])
-		col: int = int(coordinate[1])
-		return self.__grid__[(row, col)]
+		return super().plot_info(regular_point_shape=regular_point_shape, point_color=point_color, point_size=point_size)
 
-	def show(self, *, square_size: int = 1024) -> None:
-		"""
-		Shows this plot in a tkinter window
-		:param square_size: The square image size to render each plot as
-		"""
-
-		root: tkinter.Tk = tkinter.Tk()
-		root.overrideredirect(False)
-		root.resizable(False, False)
-		root.title(f'{type(self).__name__}@{hex(id(self))}')
-		root.configure(background='#222222')
-
-		image: numpy.ndarray[numpy.uint8] = self.as_image(square_size=square_size)
-		pilmage: PIL.Image.Image = PIL.Image.fromarray(image)
-		pilmage_tk: PIL.ImageTk.PhotoImage = PIL.ImageTk.PhotoImage(pilmage)
-
-		canvas: tkinter.Canvas = tkinter.Canvas(root, background='#222222', highlightthickness=1, highlightcolor='#eeeeee', highlightbackground='#eeeeee', width=pilmage.width, height=pilmage.height)
-		canvas.pack()
-
-		canvas.create_image(0, 0, image=pilmage_tk, anchor='nw')
-
-		root.mainloop()
-
-	def save(self, filename: str, *, square_size: int = 1024) -> None:
-		"""
-		Saves this plot as a rendered image
-		:param filename: The filepath to save to
-		:param square_size: The square image size to render each plot as
-		"""
-
-		image: PIL.Image.Image = PIL.Image.fromarray(self.as_image(square_size=square_size))
-		image.save(filename)
-
-	def as_image(self, *, square_size: int = 1024, padding: int = 32, border_width: int = 2) -> numpy.ndarray[numpy.uint8]:
-		"""
-		Renders this plot display as an image
-		:param square_size: The square image size to render each plot as
-		:param padding: The padding (in pixels) between images
-		:param border_width: The width (in pixels) of the border between images
-		:return: The rendered RGBA image
-		"""
-
-		border_width: int = int(border_width)
-		padding: int = int(padding) + border_width
-		plot_width: int = max(coord[1] for coord in self.__grid__.keys()) + 1
-		plot_height: int = max(coord[0] for coord in self.__grid__.keys()) + 1
-		image_width: int = (square_size + padding) * plot_width
-		image_height: int = (square_size + padding) * plot_height
-		square_size: int = int(square_size)
-		image: PIL.Image.Image = PIL.Image.new('RGBA', (image_width, image_height), '#222222')
-		border: PIL.Image.Image = PIL.Image.new('RGBA', (square_size + border_width * 2, square_size + border_width * 2), '#eeeeee')
-
-		for coord, plot in self.__grid__.items():
-			result: numpy.ndarray[numpy.uint8] = plot.as_image(square_size=square_size)
-			pilmage: PIL.Image.Image = PIL.Image.fromarray(result)
-			y: int = coord[0] * (square_size + padding) + (padding >> 1)
-			x: int = coord[1] * (square_size + padding) + (padding >> 1)
-			image.paste(border, (x - border_width, y - border_width))
-			image.paste(pilmage, (x, y))
-
-		return numpy.array(image)
+	@property
+	def bounds(self) -> tuple[float, float, float, float]:
+		minx, maxx = Iterable.Iterable.minmax(frame.time.timestamp() for frame in self.points)
+		data: tuple[tuple[float, ...], ...] = tuple(zip(*[Iterable.Iterable.minmax(frame) for frame in self.points]))
+		maxy: float = max(data[1])
+		miny: float = min(data[0])
+		padding_x: float = (maxx - minx) * 0.95
+		padding_y: float = (maxy - miny) * 0.95
+		return minx - padding_x, maxx + padding_x, miny - padding_y, maxy + padding_y

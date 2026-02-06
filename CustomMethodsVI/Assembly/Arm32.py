@@ -1,5 +1,4 @@
-import collections
-import typing
+import collections.abc
 
 from .. import Exceptions
 from ..Math import Based
@@ -68,7 +67,7 @@ class Assembler:
 	)
 
 	@staticmethod
-	def encode(assembly: typing.Iterable[str]) -> tuple[int, ...]:
+	def encode(assembly: collections.abc.Iterable[str]) -> tuple[int, ...]:
 		"""
 		Encodes a set of assembly instructions to machine code
 		:param assembly: An iterable of assembly code lines to encode
@@ -367,7 +366,7 @@ class Assembler:
 		return tuple(output)
 
 	@staticmethod
-	def decode(assembly: typing.Iterable[int]) -> tuple[str, ...]:
+	def decode(assembly: collections.abc.Iterable[int]) -> tuple[str, ...]:
 		"""
 		Decodes a set of assembly instructions from machine code
 		:param assembly: An iterable of 32-bit machine code values to decode

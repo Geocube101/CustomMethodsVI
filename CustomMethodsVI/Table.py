@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import collections
+import collections.abc
 import typing
 
 from . import Exceptions
 from . import Misc
 
 
-class Table2D(typing.Sized):
+class Table2D(collections.abc.Sequence):
 	"""
 	Class representing a 2D table of any size
 	"""
@@ -33,7 +33,7 @@ class Table2D(typing.Sized):
 		return index
 
 	@classmethod
-	def shaped(cls, iterable: typing.Iterable[typing.Any], shape: tuple[int, int]) -> Table2D:
+	def shaped(cls, iterable: collections.abc.Iterable[typing.Any], shape: tuple[int, int]) -> Table2D:
 		"""
 		Creates a shaped table
 		:param iterable: The iterable used to populate this table
@@ -61,7 +61,7 @@ class Table2D(typing.Sized):
 		return instance
 
 	@classmethod
-	def fromarray(cls, iterable: typing.Iterable[typing.Iterable[typing.Any]]) -> Table2D:
+	def fromarray(cls, iterable: collections.abc.Iterable[collections.abc.Iterable[typing.Any]]) -> Table2D:
 		"""
 		Creates a table from a nested iterable
 		:param iterable: The 2D nested iterable

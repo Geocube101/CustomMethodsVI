@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections.abc
 import typing
 
 from .. import Exceptions
@@ -13,7 +14,7 @@ class BaseNumber:
 	"""
 
 	@Overload(strict=True)
-	def __init__(self, base: int, digits: typing.Iterable[int]):
+	def __init__(self, base: int, digits: collections.abc.Iterable[int]):
 		"""
 		Represents a number converted to base-N
 		- Constructor -

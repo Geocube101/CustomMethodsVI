@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections.abc
 import inspect
 import os
 import typing
@@ -18,17 +19,17 @@ class __OverloadCaller__:
 	"""
 
 	__FunctionOverloads: dict[str, __OverloadCaller__] = {}
-	__FunctionCallers: dict[typing.Callable, __OverloadCaller__] = {}
+	__FunctionCallers: dict[collections.abc.Callable, __OverloadCaller__] = {}
 
 	@classmethod
-	def assoc(cls, lambda_: typing.Callable, caller: __OverloadCaller__) -> None:
+	def assoc(cls, lambda_: collections.abc.Callable, caller: __OverloadCaller__) -> None:
 		if callable(caller):
 			cls.__FunctionCallers[lambda_] = caller
 		elif lambda_ in cls.__FunctionCallers:
 			del cls.__FunctionCallers[lambda_]
 
 	@classmethod
-	def new(cls, function: typing.Callable | types.FunctionType | types.LambdaType | types.MethodType, strict_only: bool | None = False) -> __OverloadCaller__:
+	def new(cls, function: collections.abc.Callable | types.FunctionType | types.LambdaType | types.MethodType, strict_only: bool | None = False) -> __OverloadCaller__:
 		"""
 		Creates and stores a new function overload
 		:param function: (CALLABLE) The function to overload
@@ -58,7 +59,7 @@ class __OverloadCaller__:
 			cls.__FunctionOverloads[function.__qualname__] = new_caller
 			return new_caller
 
-	def __init__(self, function: typing.Callable, strict_only: bool | None):
+	def __init__(self, function: collections.abc.Callable, strict_only: bool | None):
 		"""
 		INTERNAL CLASS; DO NOT USE
 		[__OverloadCaller] - Class for handling function overloads and delegation
@@ -69,7 +70,7 @@ class __OverloadCaller__:
 		"""
 
 		self.__function_qual_name: str = function.__qualname__
-		self.__function_overloads: dict[typing.Callable | types.FunctionType | types.LambdaType | types.MethodType, bool] = {} if strict_only is None else {function: strict_only}
+		self.__function_overloads: dict[collections.abc.Callable | types.FunctionType | types.LambdaType | types.MethodType, bool] = {} if strict_only is None else {function: strict_only}
 		self.__default: 'typing.Callable | None' = function if strict_only is None else None
 
 	def __eq__(self, other: '__OverloadCaller | typing.Any') -> bool:
@@ -109,7 +110,7 @@ class __OverloadCaller__:
 				return (annotation,)
 			elif isinstance(annotation, types.UnionType):
 				return annotation.__args__
-			elif annotation == typing.Callable:
+			elif annotation == collections.abc.Callable:
 				return types.FunctionType, types.MethodType, types.BuiltinFunctionType, types.LambdaType, types.MethodDescriptorType
 			elif isinstance(annotation, str):
 				try:
@@ -152,8 +153,8 @@ class __OverloadCaller__:
 				raise TypeError(f'Uncastable [{type(_value)} >> {_type}]') from None
 
 		assert len(self.__function_overloads) > 0 or self.__default is not None, 'No function to call'
-		strict_match: list[tuple[typing.Callable, inspect.Signature]] = []
-		soft_match: list[tuple[typing.Callable, inspect.Signature]] = []
+		strict_match: list[tuple[collections.abc.Callable, inspect.Signature]] = []
+		soft_match: list[tuple[collections.abc.Callable, inspect.Signature]] = []
 
 		for function, strict_only in self.__function_overloads.items():
 			args: list[typing.Any] = list(reversed(_args))
@@ -161,7 +162,7 @@ class __OverloadCaller__:
 			is_bound: bool = function.__qualname__ != function.__name__ and not isinstance(function, (staticmethod, classmethod))
 			bound_removed: bool = False
 			signature: inspect.Signature = inspect.signature(function)
-			parameters: typing.Mapping[str, inspect.Parameter] = signature.parameters
+			parameters: collections.abc.Mapping[str, inspect.Parameter] = signature.parameters
 			var_keyword: inspect.Parameter | None = next(p for p in parameters.values() if p.kind == p.VAR_KEYWORD) if any(p.kind == p.VAR_KEYWORD for p in parameters.values()) else None
 			arguments: dict[str, typing.Any] = {}
 			_annotations: dict[str, typing.Any] = typing.get_type_hints(function)
@@ -331,7 +332,7 @@ class __OverloadCaller__:
 			raise TypeError(f'No matches found for function \'{self.__function_qual_name}\':\n\t...\n{msg}')
 
 
-def Overload(*function: typing.Callable, strict: bool = False) -> typing.Callable:
+def Overload(*function: collections.abc.Callable, strict: bool = False) -> collections.abc.Callable:
 	"""
 	Decorator for overloading functions
 	Function parameters must be type hinted (or typing.Any is assumed)
@@ -343,24 +344,24 @@ def Overload(*function: typing.Callable, strict: bool = False) -> typing.Callabl
 	"""
 
 	if len(function) == 0:
-		def binder(callback: typing.Callable):
+		def binder(callback: collections.abc.Callable):
 			Misc.raise_ifn(callable(callback), Exceptions.InvalidArgumentException(Overload, 'function', type(callback)))
 			caller: __OverloadCaller__ = __OverloadCaller__.new(callback, strict)
-			redirect: typing.Callable = lambda *args, __caller=caller, **kwargs: __caller(*args, **kwargs)
+			redirect: collections.abc.Callable = lambda *args, __caller=caller, **kwargs: __caller(*args, **kwargs)
 			__OverloadCaller__.assoc(redirect, caller)
 			return redirect
 
 		return binder
 	elif callable(function[0]):
 		caller: __OverloadCaller__ = __OverloadCaller__.new(function[0], strict)
-		redirect: typing.Callable = lambda *args, __caller=caller, **kwargs: __caller(*args, **kwargs)
+		redirect: collections.abc.Callable = lambda *args, __caller=caller, **kwargs: __caller(*args, **kwargs)
 		__OverloadCaller__.assoc(redirect, caller)
 		return redirect
 	else:
 		raise Exceptions.InvalidArgumentException(Overload, 'function', type(function[0]))
 
 
-def DefaultOverload(function: typing.Callable):
+def DefaultOverload(function: collections.abc.Callable):
 	"""
 	Decorator for overloading functions
 	Marks this function as a default fallback
@@ -371,7 +372,7 @@ def DefaultOverload(function: typing.Callable):
 
 	Misc.raise_ifn(callable(function), Exceptions.InvalidArgumentException(Overload, 'function', type(function)))
 	caller: __OverloadCaller__ = __OverloadCaller__.new(function, None)
-	redirect: typing.Callable = lambda *args, __caller=caller, **kwargs: __caller(*args, **kwargs)
+	redirect: collections.abc.Callable = lambda *args, __caller=caller, **kwargs: __caller(*args, **kwargs)
 	__OverloadCaller__.assoc(redirect, caller)
 	return redirect
 

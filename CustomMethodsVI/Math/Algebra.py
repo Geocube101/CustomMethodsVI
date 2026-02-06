@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import builtins
+import collections
 import copy
 import cmath
 import math
-import sys
 import types
 import typing
 
@@ -312,11 +312,11 @@ class PoweredTerm(Expression):
 
 
 class FunctionTerm(Expression):
-	def __init__(self, coefficient: complex, exponent: float, expression: Expression | complex, function: typing.Callable[[complex], complex], inverse: typing.Optional[typing.Callable[[complex], complex]] = ...):
+	def __init__(self, coefficient: complex, exponent: float, expression: Expression | complex, function: collections.abc.Callable[[complex], complex], inverse: typing.Optional[collections.abc.Callable[[complex], complex]] = ...):
 		super().__init__(coefficient, exponent)
 		self.__expression__: Expression = expression if isinstance(expression, Expression) else Expression(complex(expression), 1)
-		self.__function__: typing.Callable[[complex], complex] = function
-		self.__inverse__: typing.Optional[typing.Callable[[complex], complex]] = inverse
+		self.__function__: collections.abc.Callable[[complex], complex] = function
+		self.__inverse__: typing.Optional[collections.abc.Callable[[complex], complex]] = inverse
 
 	def __str__(self) -> str:
 		imag: str = self.__imaginary_str__()
@@ -397,25 +397,7 @@ class LimitedTerm(Expression):
 			values: dict[str, complex] = {lim.variable: lim.limit for lim in self.__limits__}
 			return self.__expression__.solve(**values)
 		else:
-			max_step: int = 1000
-			results: list[complex] = []
-			total_weight: float = 0
-			current_weight: float = 1
-			infinite: set[str] = {lim.variable for lim in self.__limits__}
-			values: dict[str, complex] = {lim.variable: int(sys.float_info.max) if lim.limit == float('inf') else int(sys.float_info.min) if lim.limit == float('-inf') else lim.limit for lim in self.__limits__}
-
-			for i in range(max_step):
-				result: complex = self.__expression__.solve(**values)
-				weight: float = current_weight
-				results.append(result * weight)
-				total_weight += weight
-				current_weight *= 0.75
-
-				for variable in infinite:
-					values[variable] >>= 1
-
-			average: complex = sum(results) / total_weight
-			return complex(round(average.real, 24), round(average.imag, 24))
+			raise NotImplementedError
 
 	@property
 	def limits(self) -> tuple[LimitedTerm.Limit, ...]:

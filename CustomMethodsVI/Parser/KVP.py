@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import base64
+import collections.abc
 import typing
-import typeguard
 
 
 class KVP:
@@ -23,7 +23,7 @@ class KVP:
 		def valid(self) -> bool:
 			return self.formatter in ('B', 'I', 'L', 'O', 'F', 'D', 'S', 'X', '') and (self.value is None or isinstance(self.value, (bool, float, int, str, bytes)))
 
-	class __ListWrapper__[T](typing.Sized, typing.Iterable[T]):
+	class __ListWrapper__[T](collections.abc.Sequence[T]):
 		def __init__(self, list_: list):
 			self.__reference__: list[KVP.__FormatMarker__] = list_
 
@@ -38,7 +38,7 @@ class KVP:
 			else:
 				raise ValueError(f'Expected either an int, float, str, or None; got \'{type(value)}\'')
 
-		def __iter__(self) -> typing.Iterator[bool, int | float | str | bytes | None]:
+		def __iter__(self) -> collections.abc.Iterator[bool, int | float | str | bytes | None]:
 			for item in self.__reference__:
 				yield item.value
 
@@ -90,7 +90,7 @@ class KVP:
 
 			return count
 
-		def extend(self, iterable: typing.Iterable[bool | int | float | str | bytes | None]) -> None:
+		def extend(self, iterable: collections.abc.Iterable[bool | int | float | str | bytes | None]) -> None:
 			"""
 			Adds an iterable to the end of this list
 			:param iterable: The iterable to add
@@ -102,14 +102,20 @@ class KVP:
 				else:
 					raise ValueError(f'Expected either an int, float, str, or None; got \'{type(item)}\'')
 
-		def index(self, item: bool | int | float | str | bytes | None) -> int:
+		def index(self, item: bool | int | float | str | bytes | None, start: int = ..., stop: int = ...) -> int:
 			"""
 			:param item: The item to look for
+			:param start: The index to begin search
+			:param stop: The index to end search
 			:return: The item's index in this list or -1 if not found
 			"""
 
-			for i, x in enumerate(self.__reference__):
-				if x.value == item:
+			length: int = len(self)
+			start: int = 0 if start is None or start is ... else int(start)
+			stop: int = length if stop is None or stop is ... else int(stop)
+
+			for i in range(start if start >= 0 else (length + start), stop if stop >= 0 else (length + stop)):
+				if self.__reference__[i].value == item:
 					return i
 
 			return -1
@@ -157,7 +163,7 @@ class KVP:
 
 			self.__reference__.reverse()
 
-		def sort(self, *, key: typing.Optional[typing.Callable[[bool | int | float | str | bytes | None], typing.Any]] = None, reverse: bool = False) -> None:
+		def sort(self, *, key: typing.Optional[collections.abc.Callable[[bool | int | float | str | bytes | None], typing.Any]] = None, reverse: bool = False) -> None:
 			"""
 			Sorts this list in-place
 			:param key: The key to sort by
@@ -352,24 +358,10 @@ class KVP:
 				line_number += 1
 
 		line_number: int = 1
-		lines: typing.Generator[str] = _line_getter()
+		lines: collections.abc.Generator[str] = _line_getter()
 		result: dict[str, list[KVP.__FormatMarker__] | KVP]
 		_, result = _decode_inner(None)
 		return cls(root_name, result)
-
-	@staticmethod
-	def __is_iterable(x) -> bool:
-		"""
-		INTERNAL METHOD; DO NOT USE
-		:param x: The object
-		:return: Whether an object is iterable
-		"""
-
-		try:
-			typeguard.check_type(x, typing.Iterable)
-			return True
-		except typeguard.TypeCheckError:
-			return False
 
 	@staticmethod
 	def __mark_formatter__(val: bool | int | float | str | bytes | None | KVP.__FormatMarker__) -> KVP.__FormatMarker__:
@@ -412,7 +404,7 @@ class KVP:
 		self.__mapping__: dict[str, list[KVP.__FormatMarker__] | KVP] = {}
 		self.__namespace__: str = f'KVP @ {hex(id(self))} (ROOT)' if namespace_name is None else str(namespace_name)
 		key: str
-		value: typing.Iterable[KVP.__FormatMarker__ | bool | int | float | str | bytes | None] | KVP | dict | bool | int | float | str | bytes | None | KVP.__FormatMarker__
+		value: collections.abc.Iterable[KVP.__FormatMarker__ | bool | int | float | str | bytes | None] | KVP | dict | bool | int | float | str | bytes | None | KVP.__FormatMarker__
 
 		for key, value in data.items():
 			if type(value) is dict:
@@ -494,7 +486,7 @@ class KVP:
 
 		return self[item]
 
-	def __setitem__(self, key: str, value: typing.Iterable[bool | int | float | str | bytes | None] | bool | int | float | str | bytes | None | KVP | dict) -> None:
+	def __setitem__(self, key: str, value: collections.abc.Iterable[bool | int | float | str | bytes | None] | bool | int | float | str | bytes | None | KVP | dict) -> None:
 		"""
 		Sets the specified mapping key to a value
 		:param key: The mapping key
@@ -507,7 +499,7 @@ class KVP:
 		valid_types: tuple[type, ...] = (bool, int, float, str, type(None), type(self))
 		key = str(key)
 
-		if isinstance(value, typing.Mapping):
+		if isinstance(value, collections.abc.Mapping):
 			self.__mapping__[key] = KVP(key, value)
 
 		elif not isinstance(value, str) and KVP.__is_iterable(value):
@@ -552,7 +544,7 @@ class KVP:
 	def __delattr__(self, item: str):
 		"""
 		Deletes the specified mapping key
-		:param key: The mapping key
+		:param item: The mapping key
 		:return: The associated map value
 		:raises AssertionError: If the key is not a string
 		"""

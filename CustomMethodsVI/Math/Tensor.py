@@ -13,13 +13,13 @@ from .. import Stream
 from ..Math import Functions, Vector
 
 
-class Tensor(typing.SupportsRound['Tensor'], typing.SupportsAbs['Tensor'], collections.abc.Hashable):
+class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable):
 	"""
 	Class representing an N-rank tensor
 	"""
 
 	@classmethod
-	def shaped(cls, array: typing.Iterable[typing.Optional[float]], dimension: int, *dimensions: int) -> Tensor:
+	def shaped(cls, array: collections.abc.Iterable[typing.Optional[float]], dimension: int, *dimensions: int) -> Tensor:
 		"""
 		Creates a tensor from the specified iterable with the specified dimensions
 		:param array: The input values
@@ -125,7 +125,7 @@ class Tensor(typing.SupportsRound['Tensor'], typing.SupportsAbs['Tensor'], colle
 
 		return cls.shaped((1.0 if i % 2 == 0 else -1.0 for i in range(math.prod((dimension, *dimensions)))), dimension, *dimensions)
 
-	def __init__(self, tensor: Tensor | typing.Iterable[typing.Any]):
+	def __init__(self, tensor: Tensor | collections.abc.Iterable[typing.Any]):
 		"""
 		Class representing an N-rank tensor
 		- Constructor -
@@ -133,8 +133,8 @@ class Tensor(typing.SupportsRound['Tensor'], typing.SupportsAbs['Tensor'], colle
 		:param tensor: The nested tensor iterable
 		"""
 
-		def __flattener__(iterable: typing.Iterable[typing.Any] | float, output: list[typing.Optional[float]]) -> typing.Optional[list[int]]:
-			if isinstance(iterable, typing.Iterable):
+		def __flattener__(iterable: collections.abc.Iterable[typing.Any] | float, output: list[typing.Optional[float]]) -> typing.Optional[list[int]]:
+			if isinstance(iterable, collections.abc.Iterable):
 				iterable: tuple = tuple(iterable)
 				dims: list[int] = [len(iterable)]
 				results: list[list[int]] = []
@@ -154,7 +154,7 @@ class Tensor(typing.SupportsRound['Tensor'], typing.SupportsAbs['Tensor'], colle
 			self.__size__: int = tensor.__size__
 			self.__dimensions__: tuple[int, ...] = tensor.__dimensions__
 			self.__array__: list[typing.Optional[float]] = tensor.__array__.copy()
-		elif isinstance(tensor, typing.Iterable):
+		elif isinstance(tensor, collections.abc.Iterable):
 			array: list[typing.Optional[float]] = []
 			dimensions: list[int] = __flattener__(tensor, array)
 
@@ -162,7 +162,7 @@ class Tensor(typing.SupportsRound['Tensor'], typing.SupportsAbs['Tensor'], colle
 			self.__dimensions__: tuple[int, ...] = (0, 0) if len(dimensions) == 0 else (1, dimensions[0]) if len(dimensions) == 1 else tuple(dimensions)
 			self.__array__: list[typing.Optional[float]] = array
 		else:
-			raise Exceptions.InvalidArgumentException(Tensor.__init__, 'tensor', type(tensor), (typing.Iterable, Tensor))
+			raise Exceptions.InvalidArgumentException(Tensor.__init__, 'tensor', type(tensor), (collections.abc.Iterable, Tensor))
 
 	def __index_to_position__(self, index: int) -> tuple[int, ...]:
 		"""
@@ -202,7 +202,7 @@ class Tensor(typing.SupportsRound['Tensor'], typing.SupportsAbs['Tensor'], colle
 
 		return self.__size__
 
-	def __iter__(self) -> typing.Iterator[typing.Optional[float] | Tensor | Vector.Vector]:
+	def __iter__(self) -> collections.abc.Iterator[typing.Optional[float] | Tensor | Vector.Vector]:
 		"""
 		:return: An iterator over the major dimension of this tensor
 		"""
@@ -270,7 +270,7 @@ class Tensor(typing.SupportsRound['Tensor'], typing.SupportsAbs['Tensor'], colle
 		for pos in position:
 			result = result[pos]
 
-		return result if result is None or isinstance(result, float) else Tensor(result) if any(isinstance(x, typing.Iterable) for x in result) else Vector.Vector(result)
+		return result if result is None or isinstance(result, float) else Tensor(result) if any(isinstance(x, collections.abc.Iterable) for x in result) else Vector.Vector(result)
 
 	def __add__(self, other: float | int | Tensor) -> Tensor:
 		"""
@@ -902,7 +902,7 @@ class Tensor(typing.SupportsRound['Tensor'], typing.SupportsAbs['Tensor'], colle
 		:return: This tensor converted to a nested list
 		"""
 
-		def lister(iterable: typing.Iterable | typing.Optional[float]):
+		def lister(iterable: collections.abc.Iterable | typing.Optional[float]):
 			return iterable if iterable is None or isinstance(iterable, float) else [lister(x) for x in iterable]
 
 		return lister(self)
@@ -959,7 +959,7 @@ class Tensor(typing.SupportsRound['Tensor'], typing.SupportsAbs['Tensor'], colle
 
 		return Tensor.shaped(data, *dimensions)
 
-	def transform_by(self, callback: typing.Callable[[typing.Optional[float]], typing.Optional[float]]) -> Tensor:
+	def transform_by(self, callback: collections.abc.Callable[[typing.Optional[float]], typing.Optional[float]]) -> Tensor:
 		"""
 		Applies a function to all values in this tensor
 		:param callback: A transformer callback accepting a single optional float and returning a single optional float
@@ -970,7 +970,7 @@ class Tensor(typing.SupportsRound['Tensor'], typing.SupportsAbs['Tensor'], colle
 		assert callable(callback), 'Callback is not callable'
 		return type(self).shaped((float(callback(x)) for x in self.__array__), *self.__dimensions__)
 
-	def filter_by(self, callback: typing.Callable[[typing.Optional[float]], bool]) -> Tensor:
+	def filter_by(self, callback: collections.abc.Callable[[typing.Optional[float]], bool]) -> Tensor:
 		"""
 		Applies a function to filter all values in this tensor
 		Any non-matching values are replaced with 'None'

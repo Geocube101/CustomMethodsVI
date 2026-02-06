@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections.abc
 import typing
 
 from .Math import Based
@@ -30,7 +31,7 @@ class FiniteAutomaton:
 	Class representing a finite automata
 	"""
 
-	def __init__(self, states: typing.Iterable[str], language: typing.Iterable[typing.Any], start_state: str, accept_states: typing.Iterable[str], transformer: dict[str, dict[typing.Any, str | set[str]]], *, deterministic: bool = True):
+	def __init__(self, states: collections.abc.Iterable[str], language: collections.abc.Iterable[typing.Any], start_state: str, accept_states: collections.abc.Iterable[str], transformer: dict[str, dict[typing.Any, str | set[str]]], *, deterministic: bool = True):
 		"""
 		Class representing a finite automata
 		- Constructor -
@@ -54,7 +55,7 @@ class FiniteAutomaton:
 		self.__accepted_states__: set[str] = set(accept_states)
 		self.__transformer_callable__: bool = False
 		self.__deterministic__: bool = bool(deterministic)
-		self.__transformer__: typing.Callable[[str, typing.Any], str | set[str]] | dict[str, dict[typing.Any, str | set[str]]] = transformer
+		self.__transformer__: collections.abc.Callable[[str, typing.Any], str | set[str]] | dict[str, dict[typing.Any, str | set[str]]] = transformer
 
 		assert self.__start_state__ in self.__states__, 'Start state does not exist'
 		assert len(self.__accepted_states__.difference(self.__states__)) == 0, 'One or more accepted states does not exist'
@@ -106,7 +107,7 @@ class FiniteAutomaton:
 		else:
 			self.__state__ = result_states
 
-	def check_accepted(self, input_: typing.Iterable[typing.Any]) -> bool:
+	def check_accepted(self, input_: collections.abc.Iterable[typing.Any]) -> bool:
 		"""
 		Checks whether the given sequence of inputs is accepted by this machine
 		:param input_: The input sequence
@@ -174,6 +175,7 @@ class FiniteAutomaton:
 	def to_regular_expression(self) -> str:
 		incoming_edges: dict[str, set[tuple[str, typing.Any]]] = {state: self.incoming_edges(state) for state in self.__states__}
 		print(incoming_edges)
+		raise NotImplementedError
 
 	@property
 	def accepted(self) -> bool:

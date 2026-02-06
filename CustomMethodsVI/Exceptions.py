@@ -1,3 +1,4 @@
+import collections.abc
 import typing
 import types
 
@@ -7,7 +8,7 @@ class InvalidArgumentException(TypeError):
 	Exception representing an invalid type passed to a parameter
 	"""
 
-	def __init__(self, caller: typing.Callable | types.FunctionType | types.MethodType | types.LambdaType = None, parameter_name: str = None, argument_type: type = None, parameter_types: typing.Iterable[type | str] = None):
+	def __init__(self, caller: collections.abc.Callable | types.FunctionType | types.MethodType | types.LambdaType = None, parameter_name: str = None, argument_type: type = None, parameter_types: collections.abc.Iterable[type | str] = None):
 		"""
 		Exception representing an invalid type passed to a parameter
 		- Constructor -

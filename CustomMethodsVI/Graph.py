@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections.abc
 import typing
 
 
@@ -9,7 +10,7 @@ from . import Misc
 
 class UnweightedGraph:
 	class Node:
-		def __init__(self, graph: UnweightedGraph, name: str, connections: typing.Optional[typing.Iterable[UnweightedGraph.Node]] = None):
+		def __init__(self, graph: UnweightedGraph, name: str, connections: typing.Optional[collections.abc.Iterable[UnweightedGraph.Node]] = None):
 			Misc.raise_ifn(isinstance(graph, UnweightedGraph), Exceptions.InvalidArgumentException(UnweightedGraph.Node.__init__, 'graph', type(graph), (UnweightedGraph,)))
 			Misc.raise_ifn(isinstance(name, str), Exceptions.InvalidArgumentException(UnweightedGraph.Node.__init__, 'name', type(name), (str,)))
 			Misc.raise_ifn(connections is None or connections is ... or hasattr(connections, '__iter__'), TypeError('Node connections list is not iterable'))
@@ -100,10 +101,10 @@ class UnweightedGraph:
 		def friends(self) -> set[UnweightedGraph.Node]:
 			return self.__connections__.copy()
 
-	def __init__(self, nodes: typing.Optional[typing.Mapping[str, typing.Iterable[str]]] = ...):
+	def __init__(self, nodes: typing.Optional[collections.abc.Mapping[str, collections.abc.Iterable[str]]] = ...):
 		self.__graph__: set[UnweightedGraph.Node] = set()
 
-		if isinstance(nodes, typing.Mapping):
+		if isinstance(nodes, collections.abc.Mapping):
 			for name, connections in nodes.items():
 				Misc.raise_ifn(hasattr(connections, '__iter__'), TypeError('Node connections list is not iterable'))
 				Misc.raise_ifn(isinstance(name, str), TypeError('Node name is not a string'))
@@ -128,7 +129,7 @@ class UnweightedGraph:
 	def __hash__(self) -> int:
 		return id(self)
 
-	def __iter__(self) -> typing.Iterator[UnweightedGraph.Node]:
+	def __iter__(self) -> collections.abc.Iterator[UnweightedGraph.Node]:
 		return iter(self.__graph__)
 
 	def __getitem__(self, node: str | UnweightedGraph.Node) -> typing.Optional[UnweightedGraph.Node]:
@@ -182,7 +183,7 @@ class UnweightedGraph:
 
 class UnweightedDirectionalGraph:
 	class Node:
-		def __init__(self, graph: UnweightedDirectionalGraph, name: str, connections: typing.Optional[typing.Iterable[UnweightedDirectionalGraph.Node]] = None):
+		def __init__(self, graph: UnweightedDirectionalGraph, name: str, connections: typing.Optional[collections.abc.Iterable[UnweightedDirectionalGraph.Node]] = None):
 			Misc.raise_ifn(isinstance(graph, UnweightedDirectionalGraph), Exceptions.InvalidArgumentException(UnweightedDirectionalGraph.Node.__init__, 'graph', type(graph), (UnweightedDirectionalGraph,)))
 			Misc.raise_ifn(isinstance(name, str), Exceptions.InvalidArgumentException(UnweightedDirectionalGraph.Node.__init__, 'name', type(name), (str,)))
 			Misc.raise_ifn(connections is None or connections is ... or hasattr(connections, '__iter__'), TypeError('Node connections list is not iterable'))
@@ -275,10 +276,10 @@ class UnweightedDirectionalGraph:
 		def friends(self) -> set[UnweightedDirectionalGraph.Node]:
 			return self.__connections__.copy()
 
-	def __init__(self, nodes: typing.Optional[typing.Mapping[str, typing.Iterable[str]]] = ...):
+	def __init__(self, nodes: typing.Optional[collections.abc.Mapping[str, collections.abc.Iterable[str]]] = ...):
 		self.__graph__: set[UnweightedDirectionalGraph.Node] = set()
 
-		if isinstance(nodes, typing.Mapping):
+		if isinstance(nodes, collections.abc.Mapping):
 			for name, connections in nodes.items():
 				Misc.raise_ifn(hasattr(connections, '__iter__'), TypeError('Node connections list is not iterable'))
 				Misc.raise_ifn(isinstance(name, str), TypeError('Node name is not a string'))
@@ -303,7 +304,7 @@ class UnweightedDirectionalGraph:
 	def __hash__(self) -> int:
 		return id(self)
 
-	def __iter__(self) -> typing.Iterator[UnweightedDirectionalGraph.Node]:
+	def __iter__(self) -> collections.abc.Iterator[UnweightedDirectionalGraph.Node]:
 		return iter(self.__graph__)
 
 	def __getitem__(self, node: str | UnweightedDirectionalGraph.Node) -> typing.Optional[UnweightedDirectionalGraph.Node]:

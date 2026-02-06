@@ -184,7 +184,7 @@ class MutableMapping[K, V](Mapping[K, V], collections.abc.MutableMapping):
 		return self
 
 
-class LockedMapping[K, V](MutableMapping):
+class LockedMapping[K, V](MutableMapping[K, V]):
 	"""
 	Thread safe mapping using locks
 	"""
@@ -571,6 +571,173 @@ class MutableMultiMapping[K, V](MultiMapping[K, V], collections.abc.MutableMappi
 				self.__buffer__[k] = [v]
 
 		return self
+
+
+class LockedMultiMapping[K, V](MutableMultiMapping[K, V]):
+	"""
+	Thread safe multi-mapping using locks
+	"""
+
+	def __init__(self, mapping: collections.abc.Mapping[K, V] = ..., *, lock: threading.Lock | Synchronization.SynchronizationPrimitive = Synchronization.SpinLock()):
+		"""
+		Thread safe multi-mapping using locks\n
+		- Constructor -
+		:param mapping: The initial mapping
+		:param lock: The lock to use for operations
+		"""
+
+		Misc.raise_ifn(isinstance(lock, (threading.Lock, Synchronization.SynchronizationPrimitive)), Exceptions.InvalidArgumentException(LockedMapping.__init__, 'lock', type(lock), (threading.Lock, Synchronization.SynchronizationPrimitive)))
+		super().__init__(mapping)
+		self.__lock__: threading.Lock | Synchronization.SpinLock | Synchronization.ReaderWriterLock = lock
+
+	def __contains__(self, key: K) -> bool:
+		with self.read_lock():
+			return super().__contains__(key)
+
+	def __eq__(self, other: MultiMapping[K, V]) -> bool:
+		with self.read_lock():
+			return super().__eq__(other)
+
+	def __ne__(self, other: MultiMapping[K, V]) -> bool:
+		with self.read_lock():
+			return super().__ne__(other)
+
+	def __gt__(self, other: MultiMapping[K, V]) -> bool:
+		with self.read_lock():
+			return super().__gt__(other)
+
+	def __lt__(self, other: MultiMapping[K, V]) -> bool:
+		with self.read_lock():
+			return super().__lt__(other)
+
+	def __ge__(self, other: MultiMapping[K, V]) -> bool:
+		with self.read_lock():
+			return super().__ge__(other)
+
+	def __le__(self, other: MultiMapping[K, V]) -> bool:
+		with self.read_lock():
+			return super().__le__(other)
+
+	def __bool__(self) -> bool:
+		with self.read_lock():
+			return super().__bool__()
+
+	def __len__(self) -> int:
+		with self.read_lock():
+			return super().__len__()
+
+	def __repr__(self) -> str:
+		with self.read_lock():
+			return super().__repr__()
+
+	def __str__(self) -> str:
+		with self.read_lock():
+			return super().__str__()
+
+	def __iter__(self) -> collections.abc.Iterator[tuple[K, V]]:
+		keys: tuple[K, ...] = tuple(self.keys())
+
+		for key in keys:
+			yield key, self[key]
+
+	def __delitem__(self, key: K) -> None:
+		with self.write_lock():
+			super().__delitem__(key)
+
+	def __setitem__(self, key: K, value: V) -> None:
+		with self.write_lock():
+			super().__setitem__(key, value)
+
+	def __getitem__(self, key: K) -> V:
+		with self.read_lock():
+			return super().__getitem__(key)
+
+	def __or__(self, other: collections.abc.Mapping[K, V]) -> Mapping[K, V]:
+		with self.read_lock():
+			return type(self)(self.__buffer__ | dict(other))
+
+	def clear(self) -> None:
+		with self.write_lock():
+			self.__buffer__.clear()
+
+	def copy[I: LockedMapping](self: I) -> I:
+		with self.read_lock():
+			return type(self)(self.__buffer__.copy())
+
+	def get_or_default(self, key: K, default: typing.Optional[V] = None) -> typing.Optional[V]:
+		with self.read_lock():
+			return self.__buffer__.get(key, default)
+
+	def get_or_insert(self, key: K, default: typing.Optional[V] = None) -> V:
+		with self.write_lock():
+			return self.__buffer__.setdefault(key, default)
+
+	def pop(self, key: K, default: typing.Optional[V] = ...) -> V:
+		with self.write_lock():
+			return self.__buffer__.pop(key) if default is ... else self.__buffer__.pop(key, default)
+
+	def pop_last(self) -> tuple[K, V]:
+		with self.write_lock():
+			return self.__buffer__.popitem()
+
+	def update(self, mapping: collections.abc.Mapping[K, V], /, **kwargs) -> Mapping[K, V]:
+		with self.write_lock():
+			self.__buffer__.update(mapping, **kwargs)
+			return self
+
+	def keys(self) -> collections.abc.KeysView[K]:
+		with self.read_lock():
+			return self.__buffer__.keys()
+
+	def values(self) -> collections.abc.ValuesView[list[V]]:
+		with self.read_lock():
+			return self.__buffer__.values()
+
+	def acquire_read_lock(self) -> bool:
+		"""
+		Acquires the reader lock if an RW lock, otherwise acquires the lock\n
+		Blocks until lock is acquired
+		:return: Whether the lock was acquired
+		"""
+
+		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
+			return self.__lock__.acquire()
+		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
+			return self.__lock__.acquire_reader()
+
+	def acquire_write_lock(self) -> bool:
+		"""
+		Acquires the writer lock if an RW lock, otherwise acquires the lock\n
+		Blocks until lock is acquired
+		:return: Whether the lock was acquired
+		"""
+
+		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
+			return self.__lock__.acquire()
+		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
+			return self.__lock__.acquire_writer()
+
+	def read_lock(self) -> threading.Lock | Synchronization.SynchronizationPrimitive | Synchronization.ReaderWriterLock.Lock:
+		"""
+		Returns the reader lock if an RW lock, otherwise the lock
+		:return: The lock object for context management
+		"""
+
+		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
+			return self.__lock__
+		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
+			return self.__lock__.reader()
+
+	def write_lock(self) -> threading.Lock | Synchronization.SynchronizationPrimitive | Synchronization.ReaderWriterLock.Lock:
+		"""
+		Returns the reader lock if an RW lock, otherwise the lock
+		:return: The lock object for context management
+		"""
+
+		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
+			return self.__lock__
+		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
+			return self.__lock__.writer()
 
 
 class MappingView[K, V](Iterable.IterableView[Mapping, tuple[K, V]]):

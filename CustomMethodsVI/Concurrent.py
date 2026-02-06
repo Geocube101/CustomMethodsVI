@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections.abc
 import multiprocessing
 import multiprocessing.connection
 import os
@@ -28,9 +29,9 @@ class Promise[T]:
 		"""
 
 		self.__response__: tuple[bool, typing.Any] | None = None
-		self.__callbacks__: list[typing.Callable] = []
+		self.__callbacks__: list[collections.abc.Callable] = []
 
-	def __await__(self):
+	def __await__(self) -> collections.abc.Iterator[None]:
 		while not self.fulfilled():
 			yield None
 
@@ -107,7 +108,7 @@ class Promise[T]:
 
 		return self.response(throw_err) if done else ...
 
-	def then(self, callback: typing.Callable[[Promise[T]], ...]) -> None:
+	def then(self, callback: collections.abc.Callable[[Promise[T]], ...]) -> None:
 		"""
 		Binds a callback to execute once this promise is fulfilled
 		Callback should be a callable accepting this promise as the first argument
@@ -167,7 +168,7 @@ class ConcurrentPromise[T](Promise):
 		self.__src__: int = os.getpid()
 		self.__poll_thread__: typing.Optional[threading.Thread] = None
 
-	def __await__(self) -> typing.Iterator[None]:
+	def __await__(self) -> collections.abc.Iterator[None]:
 		while not self.fulfilled():
 			yield
 
@@ -251,7 +252,7 @@ class ConcurrentPromise[T](Promise):
 		else:
 			raise IOError('Cannot poll reply as producer')
 
-	def then(self, callback: typing.Callable[[ConcurrentPromise[T]], None]) -> None:
+	def then(self, callback: collections.abc.Callable[[ConcurrentPromise[T]], None]) -> None:
 		"""
 		Binds a callback to execute once this promise is fulfilled
 		Callback should be a callable accepting this promise as the first argument
@@ -436,7 +437,7 @@ class ThreadedFunction:
 	Class handling function spawned on a separate threading.Thread
 	"""
 
-	def __init__(self, function: typing.Callable):
+	def __init__(self, function: collections.abc.Callable):
 		"""
 		Class handling function spawned on a separate threading.Thread
 		- Constructor -
@@ -445,7 +446,7 @@ class ThreadedFunction:
 		"""
 
 		Misc.raise_ifn(callable(function), Exceptions.InvalidArgumentException(ThreadedFunction.__init__, 'function', type(function)))
-		self.__cb__: typing.Callable = function
+		self.__cb__: collections.abc.Callable = function
 		self.__thread__: typing.Optional[threading.Thread] = None
 
 	def __wrapper__(self, promise: ThreadedPromise, *args: tuple, **kwargs: dict) -> None:
@@ -481,7 +482,7 @@ class ConcurrentFunction:
 	Class handling function spawned on a separate multiprocessing.Process
 	"""
 
-	def __init__(self, function: typing.Callable):
+	def __init__(self, function: collections.abc.Callable):
 		"""
 		Class handling function spawned on a separate multiprocessing.Process
 		- Constructor -
@@ -490,11 +491,11 @@ class ConcurrentFunction:
 		"""
 
 		Misc.raise_ifn(callable(function), Exceptions.InvalidArgumentException(ThreadedFunction.__init__, 'function', type(function)))
-		self.__cb__: typing.Callable = function
+		self.__cb__: collections.abc.Callable = function
 		self.__thread__: typing.Optional[multiprocessing.Process] = None
 
 	@staticmethod
-	def __wrapper__(promise: ConcurrentPromise, func: typing.Callable, *args: tuple, **kwargs: dict) -> None:
+	def __wrapper__(promise: ConcurrentPromise, func: collections.abc.Callable, *args: tuple, **kwargs: dict) -> None:
 		"""
 		INTERNAL METHOD
 		Calls the function, handling all errors, and responds to promise accordingly
@@ -567,7 +568,7 @@ class ThreadPool:
 	"""
 
 	@staticmethod
-	def __wrapper__(function: typing.Callable, sync_event: typing.Optional[threading.Event], err_flag: threading.Event, args: tuple[typing.Any, ...], kwargs: dict[str, typing.Any]) -> None:
+	def __wrapper__(function: collections.abc.Callable, sync_event: typing.Optional[threading.Event], err_flag: threading.Event, args: tuple[typing.Any, ...], kwargs: dict[str, typing.Any]) -> None:
 		while sync_event is not None and not sync_event.is_set():
 			time.sleep(1e-6)
 
@@ -579,7 +580,7 @@ class ThreadPool:
 			err_flag.set()
 
 	@Decorators.Overload
-	def __init__(self, function: typing.Callable, workers: int, *, synchronous_start: bool = True, daemon: bool = False):
+	def __init__(self, function: collections.abc.Callable, workers: int, *, synchronous_start: bool = True, daemon: bool = False):
 		"""
 		Class for managing a pool of worker threading.Thread threads
 		- Constructor -
@@ -595,7 +596,7 @@ class ThreadPool:
 		Misc.raise_ifn(isinstance(workers, int) and (workers := int(workers)) > 0, ValueError('Number of workers must be a positive integer > 0'))
 
 		self.__processes__: list[tuple[threading.Thread, threading.Event]] = []
-		self.__function__: typing.Callable = function
+		self.__function__: collections.abc.Callable = function
 		self.__workers__: int = int(workers)
 		self.__synchronous_start__: bool = bool(synchronous_start)
 		self.__daemon__: bool = bool(daemon)
@@ -623,7 +624,7 @@ class ThreadPool:
 		if self.__synchronous_start__:
 			event.set()
 
-	def __await__(self) -> typing.Iterator[None]:
+	def __await__(self) -> collections.abc.Iterator[None]:
 		while any(p[0].is_alive() for p in self.__processes__):
 			yield
 
@@ -707,7 +708,7 @@ class ProcessPool:
 	"""
 
 	@Decorators.Overload
-	def __init__(self, function: typing.Callable, workers: int, *, synchronous_start: bool = True, daemon: bool = False):
+	def __init__(self, function: collections.abc.Callable, workers: int, *, synchronous_start: bool = True, daemon: bool = False):
 		"""
 		Class for managing a pool of worker multiprocessing.Process processes
 		- Constructor -
@@ -723,7 +724,7 @@ class ProcessPool:
 		Misc.raise_ifn(isinstance(workers, int) and (workers := int(workers)) > 0, ValueError('Number of workers must be a positive integer > 0'))
 
 		self.__processes__: list[multiprocessing.Process] = []
-		self.__function__: typing.Callable = function
+		self.__function__: collections.abc.Callable = function
 		self.__workers__: int = int(workers)
 		self.__synchronous_start__: bool = bool(synchronous_start)
 		self.__daemon__: bool = bool(daemon)
@@ -752,7 +753,7 @@ class ProcessPool:
 			for worker in self.__processes__:
 				psutil.Process(worker.pid).resume()
 
-	def __await__(self) -> typing.Iterator[None]:
+	def __await__(self) -> collections.abc.Iterator[None]:
 		while any(p.is_alive() for p in self.__processes__):
 			yield
 
@@ -903,7 +904,7 @@ class Thread:
 	Class handling a single multiprocessing.Process each on specific cores
 	"""
 
-	def __init__(self, function: typing.Callable, cores: typing.Iterable[int], *args, **kwargs):
+	def __init__(self, function: collections.abc.Callable, cores: collections.abc.Iterable[int], *args, **kwargs):
 		"""
 		Class handling a single multiprocessing.Process each on specific cores
 		- Constructor -
@@ -919,13 +920,13 @@ class Thread:
 		Misc.raise_ifn(callable(function), Exceptions.InvalidArgumentException(Thread.__init__, 'function', type(function)))
 		Misc.raise_ifn(hasattr(cores, '__iter__'), Exceptions.InvalidArgumentException(Thread.__init__, 'cores', type(cores)))
 		self.__cores__: tuple[int, ...] = tuple(cores)
-		self.__callback__: typing.Callable = function
+		self.__callback__: collections.abc.Callable = function
 		self.__args__: tuple[typing.Any, ...] = args
 		self.__kwargs__: dict[str, typing.Any] = kwargs
 		self.__proc__: typing.Optional[multiprocessing.Process] = None
 		Misc.raise_ifn(all(isinstance(x, int) and int(x) > 0 for x in self.__cores__), ValueError('One or more affinity cores is not a positive integer'))
 
-	def __await__(self) -> typing.Iterator[None]:
+	def __await__(self) -> collections.abc.Iterator[None]:
 		while self.__proc__.is_alive():
 			yield
 
@@ -982,7 +983,7 @@ class LogicalThread(Thread):
 
 	__next_core: int = 0
 
-	def __init__(self, function: typing.Callable, *args, **kwargs):
+	def __init__(self, function: collections.abc.Callable, *args, **kwargs):
 		"""
 		Class handling a single multiprocessing.Process each on a single logical core
 		Consecutive instances of this class will execute on the next core
@@ -1007,7 +1008,7 @@ class PhysicalThread(Thread):
 
 	__next_core: int = 0
 
-	def __init__(self, function: typing.Callable, *args, **kwargs):
+	def __init__(self, function: collections.abc.Callable, *args, **kwargs):
 		"""
 		Class handling a single multiprocessing.Process each on a single physical core
 		Consecutive instances of this class will execute on the next core

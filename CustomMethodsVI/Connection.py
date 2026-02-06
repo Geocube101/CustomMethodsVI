@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import collections.abc
 import datetime
 import flask
 import flask_socketio
@@ -121,7 +122,7 @@ class FlaskSocketioServer:
 		self.__socket__.stop()
 		self.__async_listener__ = None
 
-	def on(self, eid: str, func: typing.Callable = None) -> None | typing.Callable:
+	def on(self, eid: str, func: collections.abc.Callable = None) -> typing.Optional[collections.abc.Callable]:
 		"""
 		Binds a callback to a socket event id
 		:param eid: The event id to listen to
@@ -135,7 +136,7 @@ class FlaskSocketioServer:
 		eid = str(eid)
 
 		if func is None:
-			def binder(sub_func: typing.Callable):
+			def binder(sub_func: collections.abc.Callable):
 				Misc.raise_ifn(callable(sub_func), Exceptions.InvalidArgumentException(FlaskSocketioServer.on, 'func', type(sub_func)))
 				self.__spaces__[0].on(eid, sub_func)
 			return binder
@@ -237,7 +238,7 @@ class FlaskSocketioNamespace:
 		self.__server__: FlaskSocketioServer = server
 		self.__ready__: bool = False
 		self.__namespace__: str = str(namespace)
-		self.__events__: dict[str, list[typing.Callable]] = {}
+		self.__events__: dict[str, list[collections.abc.Callable]] = {}
 		self.__sockets__: dict[str, FlaskSocketioSocket] = {}
 		self.__socket_events__: dict[str, dict[str, FlaskSocketioSocket]] = {}
 
@@ -342,7 +343,7 @@ class FlaskSocketioNamespace:
 
 		self.__socket.emit(eid, data, to=socket.uid, namespace=self.__namespace__)
 
-	def __bind_callback__(self, eid: str, callback: typing.Callable) -> None:
+	def __bind_callback__(self, eid: str, callback: collections.abc.Callable) -> None:
 		"""
 		INTERNAL METHOD
 		Binds a new callback for the specified event id
@@ -358,7 +359,7 @@ class FlaskSocketioNamespace:
 		else:
 			self.__events__[eid].append(callback)
 
-	def on(self, eid: str, func: typing.Callable = None) -> typing.Optional[typing.Callable]:
+	def on(self, eid: str, func: collections.abc.Callable = None) -> typing.Optional[collections.abc.Callable]:
 		"""
 		Binds a callback to a socket event id
 		:param eid: The event id to listen to
@@ -372,7 +373,7 @@ class FlaskSocketioNamespace:
 		eid = str(eid)
 
 		if func is None:
-			def binder(sub_func: typing.Callable):
+			def binder(sub_func: collections.abc.Callable):
 				Misc.raise_ifn(callable(sub_func), Exceptions.InvalidArgumentException(FlaskSocketioNamespace.on, 'func', type(sub_func)))
 				self.__bind_callback__(eid, sub_func)
 			return binder
@@ -479,7 +480,7 @@ class FlaskSocketioSocket:
 		self.__space__: FlaskSocketioNamespace = namespace
 		self.__is_disconnector__: bool = False
 		self.__uid__: str = uid
-		self.__events__: dict[str, list[typing.Callable]] = {}
+		self.__events__: dict[str, list[collections.abc.Callable]] = {}
 		self.__auth__ = auth
 		self.__connected__: bool = True
 		self.__request__: flask.Request = request
@@ -508,7 +509,7 @@ class FlaskSocketioSocket:
 
 			return tuple(responses)
 
-	def __bind_callback__(self, eid: str, callback: typing.Callable) -> None:
+	def __bind_callback__(self, eid: str, callback: collections.abc.Callable) -> None:
 		"""
 		INTERNAL METHOD
 		Binds a new callback for the specified event id
@@ -528,7 +529,7 @@ class FlaskSocketioSocket:
 		else:
 			self.__events__[eid].append(callback)
 
-	def on(self, eid: str, func: typing.Callable = None) -> None | typing.Callable:
+	def on(self, eid: str, func: collections.abc.Callable = None) -> typing.Optional[collections.abc]:
 		"""
 		Binds a callback to a socket event id
 		:param eid: The event id to listen to
@@ -550,7 +551,7 @@ class FlaskSocketioSocket:
 			Misc.raise_ifn(callable(func), Exceptions.InvalidArgumentException(FlaskSocketioSocket.on, 'func', type(func)))
 			self.__bind_callback__(eid, func)
 
-	def off(self, eid: str, func: typing.Callable = None) -> None:
+	def off(self, eid: str, func: collections.abc.Callable = None) -> None:
 		"""
 		Unbinds a specific listener from an event or all listeners if not specified
 		:param eid: The event id to ignore
@@ -702,7 +703,7 @@ class SocketioClient:
 		self.__host__: str = str(host).rstrip('/')
 		self.__space__: str = str(namespace).rstrip('/')
 		self.__is_disconnector__: bool = False
-		self.__events__: dict[str, list[typing.Callable]] = {}
+		self.__events__: dict[str, list[collections.abc.Callable]] = {}
 		self.__socket__: socketio.Client = socketio.Client()
 
 	def __enter__(self) -> SocketioClient:
@@ -764,7 +765,7 @@ class SocketioClient:
 
 			return tuple(responses)
 
-	def __bind_callback__(self, eid: str, callback: typing.Callable) -> None:
+	def __bind_callback__(self, eid: str, callback: collections.abc.Callable) -> None:
 		"""
 		INTERNAL METHOD
 		Binds a new callback for the specified event id
@@ -785,7 +786,7 @@ class SocketioClient:
 		else:
 			self.__events__[eid].append(callback)
 
-	def on(self, eid: str, func: typing.Callable = None) -> None | typing.Callable:
+	def on(self, eid: str, func: collections.abc.Callable = None) -> typing.Optional[collections.abc]:
 		"""
 		Binds a callback to a socket event id
 		:param eid: The event id to listen to
@@ -799,7 +800,7 @@ class SocketioClient:
 		eid = str(eid)
 
 		if func is None:
-			def bind_event(callback: typing.Callable):
+			def bind_event(callback: collections.abc.Callable):
 				if callable(callback):
 					self.__bind_callback__(eid, callback)
 				else:
@@ -810,7 +811,7 @@ class SocketioClient:
 		else:
 			raise Exceptions.InvalidArgumentException(SocketioClient.on, 'func', type(func))
 
-	def off(self, eid: str, func: typing.Callable = None) -> None:
+	def off(self, eid: str, func: collections.abc.Callable = None) -> None:
 		"""
 		Unbinds a specific listener from an event or all listeners if not specified
 		:param eid: The event id to ignore
@@ -1054,10 +1055,10 @@ class FlaskServerAPI:
 		self.__app__: flask.Flask = app
 		self.__route__: str = f'/{route}'
 		self.__sessions__: dict[uuid.UUID, FlaskServerAPI.APISessionInfo] = {}
-		self.__callbacks__: dict[str, tuple[typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], typing.Mapping[str, typing.Any] | typing.Sequence[typing.Any]], bool]] = {}
+		self.__callbacks__: dict[str, tuple[collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], collections.abc.Mapping[str, typing.Any] | collections.abc.Sequence[typing.Any]], bool]] = {}
 		self.__auth__: bool = bool(requires_auth)
-		self.__connector__: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], bool | int | typing.Mapping[str, typing.Any] | None] | tuple[bool | int, typing.Mapping[str, typing.Any]]] = None
-		self.__disconnector__: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], typing.Mapping[str, typing.Any] | None]] = None
+		self.__connector__: typing.Optional[collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], bool | int | typing.Mapping[str, typing.Any] | None] | tuple[bool | int, collections.abc.Mapping[str, typing.Any]]] = None
+		self.__disconnector__: typing.Optional[collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], collections.abc.Mapping[str, typing.Any] | None]] = None
 		self.__setup_auth_channels__()
 		self.__app__.add_url_rule(f'{self.__route__}/<path:route>', view_func=self.__flask_route__, provide_automatic_options=False, methods=('POST',), endpoint=f'{self.__route__.replace('/', '_')}_flaskroute')
 			
@@ -1080,21 +1081,21 @@ class FlaskServerAPI:
 
 			token: uuid.UUID = self.__next_token__()
 			session: FlaskServerAPI.APISessionInfo = FlaskServerAPI.APISessionInfo(flask.request.remote_addr, token, datetime.datetime.now(datetime.timezone.utc))
-			response: typing.Mapping[str, typing.Any] | bool | int | None | tuple[bool | int, typing.Mapping[str, typing.Any]] = None
+			response: collections.abc.Mapping[str, typing.Any] | bool | int | None | tuple[bool | int, collections.abc.Mapping[str, typing.Any]] = None
 
 			try:
 				response = self.__connector__(session, flask.request.json)
 			except Exception as e:
 				sys.stderr.write(''.join(traceback.format_exception(e)))
 			
-			if isinstance(response, (bool, int, tuple, typing.Mapping)):
+			if isinstance(response, (bool, int, tuple, collections.abc.Mapping)):
 				ok: bool | int
-				res: bool | int | typing.Mapping[str, typing.Any]
+				res: bool | int | collections.abc.Mapping[str, typing.Any]
 
 				if isinstance(response, tuple):
 					ok = (response := tuple(response))[0]
 					res = response[1]
-				elif isinstance(response, typing.Mapping):
+				elif isinstance(response, collections.abc.Mapping):
 					ok = True
 					res = response
 				else:
@@ -1161,7 +1162,7 @@ class FlaskServerAPI:
 				return flask.Response(response=json.dumps({'error': 'not-authenticated'}), status=401, content_type='application/json')
 
 			try:
-				response: typing.Mapping[str, typing.Any] | typing.Sequence[typing.Any] | int | None = callback(session, flask.request.json)
+				response: collections.abc.Mapping[str, typing.Any] | collections.abc.Sequence[typing.Any] | int | None = callback(session, flask.request.json)
 
 				if response is None or response is ...:
 					return flask.Response(json.dumps({}), status=200, content_type='application/json')
@@ -1169,7 +1170,7 @@ class FlaskServerAPI:
 					return flask.Response(json.dumps({'error': 'NotImplemented'}), status=501, content_type='application/json')
 				elif isinstance(response, int):
 					return flask.Response(json.dumps({'error': 'NotImplemented'}), status=int(response), content_type='application/json')
-				elif isinstance(response, (typing.Mapping, typing.Sequence)):
+				elif isinstance(response, (collections.abc.Mapping, collections.abc.Sequence)):
 					return flask.Response(json.dumps(response), status=200, content_type='application/json')
 				else:
 					raise TypeError(f'Unexpected response type from API callback \'{route}\' - Expected either a JSON dictionary or None')
@@ -1266,7 +1267,7 @@ class FlaskServerAPI:
 		matches: tuple[FlaskServerAPI.APISessionInfo, ...] = tuple(session for session in self.__sessions__.values() if session.token == true_token)
 		return matches[0] if len(matches) == 1 else None
 
-	def endpoint(self, route: str, callback: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], typing.Mapping[str, typing.Any] | typing.Sequence[typing.Any]]] = ..., *, requires_auth: bool = True) -> typing.Optional[typing.Callable[[typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], typing.Mapping[str, typing.Any] | typing.Sequence[typing.Any]]], None]]:
+	def endpoint(self, route: str, callback: typing.Optional[collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], typing.Mapping[str, typing.Any] | typing.Sequence[typing.Any]]] = ..., *, requires_auth: bool = True) -> typing.Optional[collections.abc.Callable[[collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], collections.abc.Mapping[str, typing.Any] | collections.abc.Sequence[typing.Any]]], None]]:
 		"""
 		Binds a callback to the specified API endpoint
 		:param route: The API endpoint
@@ -1298,7 +1299,7 @@ class FlaskServerAPI:
 		else:
 			raise ValueError('Callback is not callable')
 
-	def connector(self, callback: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], bool | int | typing.Mapping[str, typing.Any] | None] | tuple[bool | int, typing.Mapping[str, typing.Any]]] = None) -> typing.Optional[typing.Callable[[typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], bool | int | typing.Mapping[str, typing.Any] | None] | tuple[bool | int, typing.Mapping[str, typing.Any]]], None]]:
+	def connector(self, callback: typing.Optional[collections.abc.Callable[[FlaskServerAPI.APISessionInfo, dict[str, typing.Any]], bool | int | collections.abc.Mapping[str, typing.Any] | None] | tuple[bool | int, collections.abc.Mapping[str, typing.Any]]] = None) -> typing.Optional[collections.abc.Callable[[collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], bool | int | collections.abc.Mapping[str, typing.Any] | None] | tuple[bool | int, collections.abc.Mapping[str, typing.Any]]], None]]:
 		"""
 		Binds a callback to the connection event\n
 		The callback bound may return the following:\n
@@ -1328,7 +1329,7 @@ class FlaskServerAPI:
 		else:
 			self.__connector__ = callback
 
-	def disconnector(self, callback: typing.Optional[typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], bool | int | typing.Mapping[str, typing.Any] | None] | tuple[bool | int, typing.Mapping[str, typing.Any]]] = None) -> typing.Optional[typing.Callable[[typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], bool | int | typing.Mapping[str, typing.Any] | None] | tuple[bool | int, typing.Mapping[str, typing.Any]]], None]]:
+	def disconnector(self, callback: typing.Optional[collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], bool | int | typing.Mapping[str, typing.Any] | None] | tuple[bool | int, collections.abc.Mapping[str, typing.Any]]] = None) -> typing.Optional[collections.abc.Callable[[collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], bool | int | collections.abc.Mapping[str, typing.Any] | None] | tuple[bool | int, collections.abc.Mapping[str, typing.Any]]], None]]:
 		"""
 		Binds a callback to the disconnection event\n
 		The callback may return JSON to send to client on disconnect

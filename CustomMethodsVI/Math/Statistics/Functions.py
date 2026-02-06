@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections.abc
 import math
 import typing
 
@@ -9,7 +10,7 @@ from ... import Misc
 from ...Decorators import Overload
 
 NUMBER_T: typing.TypeAlias = float | int | complex
-NUMBERSET_T: typing.TypeAlias = typing.Iterable[NUMBER_T]
+NUMBERSET_T: typing.TypeAlias = collections.abc.Iterable[NUMBER_T]
 
 
 @Overload
@@ -21,7 +22,7 @@ def mean(set_: NUMBERSET_T) -> NUMBER_T:
 	:raises ValueError: If set is empty
 	"""
 
-	set_: Iterable.SortedList = set_ if isinstance(set_, Iterable.SortedList) else Iterable.SortedList(set_)
+	set_: Iterable.Sequence.SortedList = set_ if isinstance(set_, Iterable.Sequence.SortedList) else Iterable.Sequence.SortedList(set_)
 	Misc.raise_if(len(set_) == 0, ValueError('Set is empty'))
 	return sum(set_) / len(set_)
 
@@ -36,7 +37,7 @@ def median(set_: NUMBERSET_T) -> NUMBER_T:
 	:raises ValueError: If set is empty
 	"""
 
-	set_: Iterable.SortedList = set_ if isinstance(set_, Iterable.SortedList) else Iterable.SortedList(set_)
+	set_: Iterable.Sequence.SortedList = set_ if isinstance(set_, Iterable.Sequence.SortedList) else Iterable.Sequence.SortedList(set_)
 	Misc.raise_if(len(set_) == 0, ValueError('Set is empty'))
 	return quantile(set_, 0.5)
 
@@ -51,7 +52,7 @@ def mode(set_: NUMBERSET_T) -> NUMBER_T:
 	:raises ValueError: If set is empty
 	"""
 
-	set_: Iterable.SortedList = set_ if isinstance(set_, Iterable.SortedList) else Iterable.SortedList(set_)
+	set_: Iterable.Sequence.SortedList = set_ if isinstance(set_, Iterable.Sequence.SortedList) else Iterable.Sequence.SortedList(set_)
 	Misc.raise_if(len(set_) == 0, ValueError('Set is empty'))
 	counts: dict[NUMBER_T, int] = {}
 
@@ -74,7 +75,7 @@ def variance(set_: NUMBERSET_T) -> NUMBER_T:
 	:raises ValueError: If set is empty
 	"""
 
-	set_: Iterable.SortedList = set_ if isinstance(set_, Iterable.SortedList) else Iterable.SortedList(set_)
+	set_: Iterable.Sequence.SortedList = set_ if isinstance(set_, Iterable.Sequence.SortedList) else Iterable.Sequence.SortedList(set_)
 	Misc.raise_if(len(set_) == 0, ValueError('Set is empty'))
 	mean_: NUMBER_T = mean(set_)
 	return sum((x - mean_) ** 2 for x in set_) / (len(set_) - 1)
@@ -90,7 +91,7 @@ def standard_deviation(set_: NUMBERSET_T) -> NUMBER_T:
 	:raises ValueError: If set is empty
 	"""
 
-	set_: Iterable.SortedList = set_ if isinstance(set_, Iterable.SortedList) else Iterable.SortedList(set_)
+	set_: Iterable.Sequence.SortedList = set_ if isinstance(set_, Iterable.Sequence.SortedList) else Iterable.Sequence.SortedList(set_)
 	Misc.raise_if(len(set_) == 0, ValueError('Set is empty'))
 	return variance(set_) ** 0.5
 
@@ -106,7 +107,7 @@ def quantile(set_: NUMBERSET_T, percent: float) -> NUMBER_T:
 	:raises ValueError: If the percent value is outside range [0, 1]
 	"""
 
-	set_: Iterable.SortedList = set_ if isinstance(set_, Iterable.SortedList) else Iterable.SortedList(set_)
+	set_: Iterable.Sequence.SortedList = set_ if isinstance(set_, Iterable.Sequence.SortedList) else Iterable.Sequence.SortedList(set_)
 	Misc.raise_if(len(set_) == 0, ValueError('Set is empty'))
 	Misc.raise_ifn(isinstance(percent, (int, float)) and 0 <= (percent := float(percent)) <= 1, ValueError('Percent value is outside range [0, 1]'))
 	index: float = len(set_) * percent - 0.5
@@ -115,6 +116,7 @@ def quantile(set_: NUMBERSET_T, percent: float) -> NUMBER_T:
 		return set_[int(index)]
 	else:
 		return (set_[math.floor(index)] + set_[math.ceil(index)]) / 2
+
 
 @Overload
 def standard_deviation_pn(p: float, n: float) -> float:

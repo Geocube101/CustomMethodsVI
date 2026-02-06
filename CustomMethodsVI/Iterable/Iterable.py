@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import collections.abc
+import math
 import sys
 import time
 import threading
@@ -318,21 +319,14 @@ def frange(start: float, stop: float = None, step: float = 1, precision: int = N
 	_stop: float = float(start) if stop is None else float(stop)
 	_step: float = float(step)
 	a: float = _start
-
-	if precision is None:
-		precision: int = 0
-		pstep: float = _step
-
-		while pstep != int(pstep):
-			precision += 1
-			pstep *= 10
+	precision = int(precision) if precision is None or precision is ... else max(0, -math.floor(math.log10(step)))
 
 	while a < _stop:
 		yield a
 		a = round(a + _step, precision)
 
 
-def minmax(arg: typing.Iterable, *args) -> tuple[typing.Any, typing.Any]:
+def minmax(arg: collections.abc.Iterable, *args) -> tuple[typing.Any, typing.Any]:
 	"""
 	:param arg: The first iterable to scan
 	:param args: The remaining iterables to scan

@@ -10,7 +10,7 @@ from .. import Misc
 from .. import Stream
 
 
-class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], collections.abc.Hashable, typing.Iterable[float]):
+class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable, collections.abc.Iterable[float]):
 	"""
 	Class representing an N-dimensional immutable vector
 	"""
@@ -87,7 +87,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		u2: Vector = w2.normalized()
 		return u1, u2
 
-	def __init__(self, component: typing.Optional[float] | typing.Iterable[typing.Optional[float]] | Vector, *components: typing.Optional[float]):
+	def __init__(self, component: typing.Optional[float] | collections.abc.Iterable[typing.Optional[float]] | Vector, *components: typing.Optional[float]):
 		"""
 		Class representing an N-dimensional immutable vector
 		- Constructor -
@@ -101,7 +101,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		if isinstance(component, Vector):
 			assert len(components) == 0, 'Expected either an iterable of floats, vector or a variadic list of floats'
 			components = component.components
-		elif isinstance(component, typing.Iterable):
+		elif isinstance(component, collections.abc.Iterable):
 			assert len(components) == 0, 'Expected either an iterable of floats, vector or a variadic list of floats'
 			components = tuple(component)
 		else:
@@ -112,7 +112,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 
 		self.__components__: tuple[typing.Optional[float], ...] = Stream.LinqStream(components).assert_if(lambda value: value is not None and not isinstance(value, (int, float)), TypeError(f'One or more components is not a float')).collect(tuple)
 
-	def __iter__(self) -> typing.Iterator[typing.Optional[float]]:
+	def __iter__(self) -> collections.abc.Iterator[typing.Optional[float]]:
 		return iter(self.__components__)
 
 	def __add__(self, other: Vector | float) -> Vector:
@@ -680,7 +680,7 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		result: tuple[float, ...] = tuple(self.dot(vector) for vector in orthonormal_basis)
 		return Math.Tensor.Tensor.shaped(result, self.dimension, 1)
 
-	def project(self, subspace: typing.Iterable[Vector]) -> Vector:
+	def project(self, subspace: collections.abc.Iterable[Vector]) -> Vector:
 		"""
 		Projects this vector onto a subspace
 		:param subspace: A subspace defined by 2 vectors
@@ -692,6 +692,13 @@ class Vector(typing.SupportsRound['Vector'], typing.SupportsAbs['Vector'], colle
 		assert all(isinstance(x, Vector) for x in subspace), 'Subspace is not a vector set'
 		u1, u2 = Vector.gram_schmidt(subspace[0], subspace[1])
 		return self.dot(u1) * u1 + self.dot(u2) * u2
+
+	def rounded(self) -> tuple[typing.Optional[int], ...]:
+		"""
+		:return: The components of this vector rounded
+		"""
+
+		return tuple(None if x is None else round(x) for x in self.__components__)
 
 	@property
 	def complete(self) -> bool:
