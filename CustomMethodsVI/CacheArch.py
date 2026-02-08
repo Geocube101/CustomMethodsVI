@@ -231,3 +231,6 @@ class CacheArchitecture:
 		"""
 
 		return self.__word_offset_size_bits__
+
+
+__all__: list[str] = ['CacheArchitecture']

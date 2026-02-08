@@ -9444,3 +9444,10 @@ class MySubTerminal(MyActivatableWidget):
 	@property
 	def __serializer__(self) -> type[MyWidget.MySerializedWidget]:
 		return MySubTerminal.MySerializedSubTerminal
+
+
+__all__: list[str] = [
+	'parse_color',
+	'MyWidget', 'MyActivatableWidget', 'MyButton', 'MyToggleButton', 'MyCheckbox', 'MyInlineCheckbox', 'MyRadialSpinner', 'MyHorizontalSlider', 'MyVerticalSlider', 'MyHorizontalProgressBar', 'MyVerticalProgressBar',
+	'MyText', 'MyDropdown', 'MyEntry', 'MyImage', 'MySubTerminal'
+]

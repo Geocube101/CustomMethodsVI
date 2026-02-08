@@ -89,8 +89,8 @@ class Equation:
 		:raises TypeError: If 'left' or 'right' contains anything that's not Heat, a PhasedCompound instance, a Compound instance, Atom instance, or Atoms instance
 		"""
 
-		self.__left__: tuple[EquationCompound | Heat, ...] = tuple(x if isinstance(x, (HeatSource, EquationCompound)) else EquationCompound(x) if isinstance(x, (Chemistry.Atom.Atom, Chemistry.Atom.Atoms)) else None for x in left)
-		self.__right__: tuple[EquationCompound | Heat, ...] = tuple(x if isinstance(x, (HeatSource, EquationCompound)) else EquationCompound(x) if isinstance(x, (Chemistry.Atom.Atom, Chemistry.Atom.Atoms)) else None for x in right)
+		self.__left__: tuple[EquationCompound | Heat, ...] = tuple(x if isinstance(x, (HeatSource, EquationCompound)) else EquationCompound(x, EquationCompound.Phase.UNKNOWN) if isinstance(x, (Chemistry.Atom.Atom, Chemistry.Atom.Atoms)) else None for x in left)
+		self.__right__: tuple[EquationCompound | Heat, ...] = tuple(x if isinstance(x, (HeatSource, EquationCompound)) else EquationCompound(x, EquationCompound.Phase.UNKNOWN) if isinstance(x, (Chemistry.Atom.Atom, Chemistry.Atom.Atoms)) else None for x in right)
 		self.__reversible__: bool = bool(reversible)
 
 		if None in self.__left__ or None in self.__right__:
@@ -206,3 +206,6 @@ class HeatSource:
 
 
 Heat: HeatSource = HeatSource()
+
+
+__all__: list[str] = ['EquationCompound', 'Equation', 'HeatSource', 'Heat']

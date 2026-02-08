@@ -110,7 +110,7 @@ class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable,
 		if len(components) < 1:
 			raise ValueError(f'Vector dimension is \'{len(components)}\' is less than 1')
 
-		self.__components__: tuple[typing.Optional[float], ...] = Stream.LinqStream(components).assert_if(lambda value: value is not None and not isinstance(value, (int, float)), TypeError(f'One or more components is not a float')).collect(tuple)
+		self.__components__: tuple[typing.Optional[float], ...] = Stream.LinqStream(components).assert_if(lambda value: value is not None and not isinstance(value, (int, float)), TypeError(f'One or more components is not a float')).cast_if(float, lambda value: value is not None).collect(tuple)
 
 	def __iter__(self) -> collections.abc.Iterator[typing.Optional[float]]:
 		return iter(self.__components__)
@@ -723,3 +723,6 @@ class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable,
 		"""
 
 		return self.__components__
+
+
+__all__: list[str] = ['Vector']

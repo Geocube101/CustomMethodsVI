@@ -1,4 +1,5 @@
 import collections.abc
+import inspect
 import typing
 import types
 
@@ -22,7 +23,7 @@ class InvalidArgumentException(TypeError):
 			super().__init__()
 		else:
 			if parameter_types is None and parameter_name in caller.__annotations__:
-				annotations: types.Union | type = caller.__annotations__[parameter_name]
+				annotations: typing.Union | type = caller.__annotations__[parameter_name]
 				parameter_types: tuple[type | str, ...] = (f"'{annotations}'",) if isinstance(annotations, (type, type(typing.Type), str)) else tuple(f"'{x}'" for x in annotations.__args__)
 				type_list: str = f'either {", ".join(parameter_types[:-1])}{f" or {parameter_types[-1]}" if len(parameter_types) > 1 else ""}' if len(parameter_types) > 1 else parameter_types[0]
 			elif parameter_types is None:
@@ -40,7 +41,12 @@ class InvalidArgumentException(TypeError):
 			elif isinstance(caller, types.FunctionType):
 				callable_type = 'Function'
 
-			super().__init__(f'{callable_type} {caller.__qualname__.replace(".", "::")}({", ".join(caller.__code__.co_varnames)}) - parameter \'\033[38;2;255;0;0m{parameter_name}\033[0m\' must be {type_list}; got \'{argument_type}\'')
+			try:
+				parameters: str = ", ".join(inspect.signature(caller).parameters.keys())
+			except ValueError:
+				parameters = '...'
+
+			super().__init__(f'{callable_type} {caller.__qualname__.replace(".", "::")}({parameters}) - parameter \'\033[38;2;255;0;0m{parameter_name}\033[0m\' must be {type_list}; got \'{argument_type}\'')
 
 
 class CorruptError(RuntimeError):
@@ -116,3 +122,6 @@ class InaccessibleAttributeException(AttributeError):
 		"""
 
 		super().__init__(what)
+
+
+__all__: list[str] = ['InvalidArgumentException', 'CorruptError', 'AmbiguousError', 'AlreadyDefinedError', 'IterableEmptyException', 'InaccessibleAttributeException']

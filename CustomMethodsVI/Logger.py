@@ -170,3 +170,6 @@ class Logger:
 
 		self.__stream__.write(self.__get_line__('CRITICAL', sep.join(map(str, data))) + end)
 		return self
+
+
+__all__: list[str] = ['Logger']

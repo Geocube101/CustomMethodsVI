@@ -350,3 +350,6 @@ def sort(collection: typing.Iterable[Atom | Atoms], attribute: str = 'proton_cou
 	atoms: tuple[Atom, ...] = tuple(atom if isinstance(atom, Atom) else atom.atom if isinstance(atom, Atoms) else None for atom in collection)
 	Misc.raise_if(None in atoms, TypeError('One or more atoms is not an Atom instance or an Atoms instance'))
 	return sorted(atoms, key=lambda atom: atom[attribute], reverse=reverse)
+
+
+__all__: list[str] = ['Atom', 'Atoms', 'sort']

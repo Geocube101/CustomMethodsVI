@@ -361,3 +361,6 @@ class Semaphore(SynchronizationPrimitive):
 
 			if self.__count__ > self.__max_count__:
 				raise IOError('Semaphore count exceeded')
+
+
+__all__: list[str] = ['SynchronizationPrimitive', 'ReaderWriterLock', 'SpinLock', 'Semaphore']

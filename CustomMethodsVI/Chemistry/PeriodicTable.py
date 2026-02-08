@@ -11,20 +11,20 @@ from ..Chemistry import Atom
 from .. import FileSystem
 
 
-class __PTABLE__:
+class PeriodicTable:
 	"""
 	Singleton class holding all atomic elements
 	"""
 
-	__SINGLETON: __PTABLE__ = ...
+	__SINGLETON: PeriodicTable = ...
 	__TABLE_FILE: str = 'periodic_table.json'
 	__MAX_ATOMIC_NUMBER = 118
 
-	def __new__(cls, *args, **kwargs) -> __PTABLE__:
-		if __PTABLE__.__SINGLETON is ...:
-			__PTABLE__.__SINGLETON = super().__new__(cls)
+	def __new__(cls, *args, **kwargs) -> PeriodicTable:
+		if PeriodicTable.__SINGLETON is ...:
+			PeriodicTable.__SINGLETON = super().__new__(cls)
 
-		return __PTABLE__.__SINGLETON
+		return PeriodicTable.__SINGLETON
 
 	def __init__(self):
 		"""
@@ -33,14 +33,14 @@ class __PTABLE__:
 		"""
 
 		home_dir: FileSystem.Directory = FileSystem.Directory(os.path.dirname(__file__))
-		table_json: FileSystem.File = home_dir.file(__PTABLE__.__TABLE_FILE)
+		table_json: FileSystem.File = home_dir.file(PeriodicTable.__TABLE_FILE)
 		self.__elements__: dict[str, Atom.Atom] = {}
 
 		if table_json.exists():
 			with table_json.open('r') as f:
 				elements: dict[str, dict[str, int | float | str]] = json.JSONDecoder().decode(f.read())
 
-				if len(elements) < __PTABLE__.__MAX_ATOMIC_NUMBER:
+				if len(elements) < PeriodicTable.__MAX_ATOMIC_NUMBER:
 					self.update()
 				else:
 					for k, v in elements.items():
@@ -94,7 +94,7 @@ class __PTABLE__:
 		"""
 
 		home_dir: FileSystem.Directory = FileSystem.Directory(os.path.dirname(__file__))
-		table_json: FileSystem.File = home_dir.file(__PTABLE__.__TABLE_FILE)
+		table_json: FileSystem.File = home_dir.file(PeriodicTable.__TABLE_FILE)
 		elements: dict[str, dict[str, int | float | str]] = {}
 
 		for name, atom in self.__elements__.items():
@@ -116,7 +116,7 @@ class __PTABLE__:
 		elements_py: FileSystem.File = home_dir.file('Elements.py')
 		lines: list[str] = ['from . import PeriodicTable', '']
 
-		for atomic_number in range(1, __PTABLE__.__MAX_ATOMIC_NUMBER + 1):
+		for atomic_number in range(1, PeriodicTable.__MAX_ATOMIC_NUMBER + 1):
 			response: requests.Response = requests.get(f'https://periodictable.com/Elements/{atomic_number:03}/data.html', headers=headers)
 
 			if not response.ok:
@@ -171,7 +171,10 @@ class __PTABLE__:
 			mapping[atom['Symbol']] = atom
 
 
-PTable: __PTABLE__ = __PTABLE__()
+PTable: PeriodicTable = PeriodicTable()
 """
 The periodic table singleton
 """
+
+
+__all__: list[str] = ['PTable']

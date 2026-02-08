@@ -6,6 +6,7 @@ from . import Decorators
 from . import Misc
 from .Math import Tensor
 
+
 class TensorEncryption:
 	"""
 	Class using N-rank tensors to encrypt data
@@ -120,4 +121,7 @@ class TensorEncryption:
 
 		data: bytes = bytes(int(x) % 256 for x in matrix.flattened()[:-padding] if not math.isinf(x))
 		return data
+
+
+__all__: list[str] = ['TensorEncryption']
 

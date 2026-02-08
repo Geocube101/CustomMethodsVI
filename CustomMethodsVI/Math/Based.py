@@ -225,3 +225,6 @@ class BaseN:
 		"""
 
 		return self.__base__
+
+
+__all__: list[str] = ['BaseNumber', 'BaseN']

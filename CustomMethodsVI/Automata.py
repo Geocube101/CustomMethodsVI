@@ -211,3 +211,6 @@ class FiniteAutomaton:
 
 
 StateMachine = FiniteAutomaton
+
+
+__all__: list[str] = ['AutomatonException', 'InvalidLanguageSymbolException', 'InvalidStateException', 'AutomatonDeadlockedException', 'MultipleStatesException', 'FiniteAutomaton', 'StateMachine']

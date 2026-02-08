@@ -352,3 +352,6 @@ def minmax(arg: collections.abc.Iterable, *args) -> tuple[typing.Any, typing.Any
 
 	except StopIteration:
 		raise ValueError('minmax() iterable argument is empty') from None
+
+
+__all__: list[str] = ['Iterable', 'IterableView', 'ThreadedGenerator', 'frange', 'minmax']

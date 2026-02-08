@@ -374,3 +374,6 @@ class MultiEventHandler[*HCB]:
 		"""
 
 		return tuple(self.__handlers__.keys())
+
+
+__all__: list[str] = ['EventHandler', 'MultiEventHandler']

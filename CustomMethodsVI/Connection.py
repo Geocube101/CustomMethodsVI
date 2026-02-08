@@ -1856,3 +1856,6 @@ else:
 			return self.__isserver__
 
 	NamedPipe = UnixNamedPipe
+
+
+__all__: list[str] = ['FlaskSocketioServer', 'FlaskSocketioNamespace', 'FlaskSocketioSocket', 'SocketioClient', 'FlaskServerAPI', 'NamedPipe']

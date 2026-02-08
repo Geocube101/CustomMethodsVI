@@ -3922,3 +3922,6 @@ class WindowTerminal:
 	@property
 	def remote_exit_reason(self) -> None | BaseException:
 		return self.__remote_exit_reason__
+
+
+__all__: list[str] = ['Terminal', 'WindowTerminal']

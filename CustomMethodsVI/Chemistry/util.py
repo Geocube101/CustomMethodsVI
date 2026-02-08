@@ -9,3 +9,6 @@ def convert_int_to_subscript_str(number: int) -> str:
 		number //= 10
 
 	return output + ''.join(reversed(buffer))
+
+
+__all__: list[str] = ['convert_int_to_subscript_str']

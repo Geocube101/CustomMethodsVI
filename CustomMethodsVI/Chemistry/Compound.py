@@ -250,3 +250,6 @@ class Compound:
 				atoms.add(atom * self.__count__)
 
 		return atoms
+
+
+__all__: list[str] = ['Compound']

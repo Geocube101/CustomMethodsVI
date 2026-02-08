@@ -1513,6 +1513,45 @@ class LinqStream[T](typing.Reversible):
 
 		return LinqStream(__cast(self))
 
+	def cast_if[Q](self, cls: type[Q], filter_: typing.Callable[[T], bool], *, on_error: typing.Literal['ignore', 'replace', 'pass', 'throw'] = 'replace') -> LinqStream[T | Q]:
+		"""
+		Casts matching elements in this query to the specified type
+		:param cls: The type to cast to
+		:param filter_: The filter to apply; matching elements will be cast
+		:param on_error: How to handle serialization errors
+		:return: The modified query
+		:raises TypeError: If 'on_error' is throw and a cast error occurs
+		:raises InvalidArgumentException: If 'filter_' is not callable
+
+		*Casting Errors*\n
+		- ignore: Erroneous element is removed from the resulting query\n
+		- replace: Erroneous element is replaced with 'None'\n
+		- pass: Erroneous element is passed as is without serialization\n
+		- throw: Error is raised
+		"""
+
+		Misc.raise_ifn(callable(filter_), Exceptions.InvalidArgumentException(LinqStream.filter, 'filter_', type(filter_)))
+
+		def __cast(stream: LinqStream[T]) -> typing.Generator[Q]:
+			for elem in stream:
+				if not filter_(elem):
+					yield elem
+					continue
+
+				try:
+					yield cls(elem)
+				except Exception as err:
+					if on_error == 'ignore':
+						continue
+					elif on_error == 'replace':
+						yield None
+					elif on_error == 'pass':
+						yield elem
+					elif on_error == 'throw':
+						raise TypeError(f'Failed to cast element: \'{elem}\'') from err
+
+		return LinqStream(__cast(self))
+
 	def for_each(self, callback: typing.Callable[[T], typing.Any]) -> None:
 		"""
 		*Evaluates the query*\n
@@ -2417,3 +2456,10 @@ class LinqStream[T](typing.Reversible):
 						raise TypeError(f'Failed to deserialize element: \'{elem}\'') from err
 
 		return LinqStream(__deserialize(self))
+
+
+__all__: list[str] = [
+	'StreamError', 'StreamFullError', 'StreamEmptyError',
+	'Stream', 'FileStream', 'ListStream', 'OrderedStream', 'TypedStream', 'ByteStream', 'BitStream', 'StringStream', 'EventedStream', 'LinqStream',
+	'ZLibCompressorStream', 'ZLibDecompressorStream', 'PickleSerializerStream', 'PickleDeserializerStream', 'DillSerializerStream', 'DillDeserializerStream'
+]

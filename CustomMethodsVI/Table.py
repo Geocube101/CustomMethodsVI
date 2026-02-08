@@ -435,3 +435,6 @@ class Table2D(collections.abc.Sequence):
 			self.__allowed_types__.extend(whitelist)
 
 		return self
+
+
+__all__: list[str] = ['Table2D']

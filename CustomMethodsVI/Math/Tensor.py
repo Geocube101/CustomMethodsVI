@@ -1060,3 +1060,6 @@ class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable)
 		"""
 
 		return self.dimension
+
+
+__all__: list[str] = ['Tensor']

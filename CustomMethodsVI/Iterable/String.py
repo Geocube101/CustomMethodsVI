@@ -633,3 +633,6 @@ class ByteString(Sequence.MutableSequence[int], bytearray):
 
 		for byte in self:
 			yield byte.to_bytes(1, sys.byteorder)
+
+
+__all__: list[str] = ['String', 'ByteString']

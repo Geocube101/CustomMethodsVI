@@ -534,3 +534,6 @@ class Directory:
 			return tuple(Directory(data[0] + x) for x in data[1])
 		except StopIteration:
 			return tuple()
+
+
+__all__: list[str] = ['File', 'Directory']

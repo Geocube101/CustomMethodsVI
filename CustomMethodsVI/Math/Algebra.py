@@ -789,3 +789,10 @@ def root(base: Expression | complex, exponent: Expression | complex) -> PoweredT
 
 def limit(expression: Expression | complex, lim: LimitedTerm.Limit, *limits: LimitedTerm.Limit) -> LimitedTerm:
 	return LimitedTerm(1, 1, expression, lim, *limits)
+
+
+__all__: list[str] = [
+	'Equation', 'EqualityEquation', 'InequalityEquation', 'ComparisonEquation',
+	'Expression', 'InverseTerm', 'PoweredTerm', 'FunctionTerm', 'SingleTerm', 'LimitedTerm', 'CompoundTerm', 'AddedTerm', 'MultipliedTerm', 'DividedTerm',
+	'parse', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh', 'abs', 'pow', 'sqrt', 'cbrt', 'root', 'limit'
+]

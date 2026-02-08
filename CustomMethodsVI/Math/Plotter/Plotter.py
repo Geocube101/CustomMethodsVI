@@ -326,3 +326,6 @@ class GridPlotDisplay:
 			image[x - border_width:x + square_size + border_width, y - border_width:y + square_size + border_width, :] = border
 
 		return image
+
+
+__all__: list[str] = ['Plottable', 'GridPlotDisplay']

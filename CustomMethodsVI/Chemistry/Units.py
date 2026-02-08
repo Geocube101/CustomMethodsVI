@@ -17,3 +17,6 @@ class Pressure:
 			return str(self.__value__)
 		else:
 			return f'{self.__value__} {self.__unit__[0]}.{self.__unit__[1]}'
+
+
+__all__: list[str] = ['Pressure']

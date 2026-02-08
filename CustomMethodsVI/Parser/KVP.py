@@ -666,3 +666,6 @@ class KVPDecodeError(ValueError):
 
 class KVPEncodeError(ValueError):
 	pass
+
+
+__all__: list[str] = ['KVP', 'KVPDecodeError', 'KVPEncodeError']

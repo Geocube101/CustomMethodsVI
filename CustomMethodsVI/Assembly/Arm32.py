@@ -645,3 +645,6 @@ class Assembler:
 			lines[5] += f'{hex_.rjust(longest)}{end}'
 
 		print(msg + '\n'.join(lines))
+
+
+__all__: list[str] = ['Assembler']

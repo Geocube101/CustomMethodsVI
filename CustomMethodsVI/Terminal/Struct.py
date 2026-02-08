@@ -1255,3 +1255,6 @@ if os.name == 'nt':
 else:
 	class FontInfoEx:
 		pass
+
+
+__all__: list[str] = ['MouseInfo', 'BorderInfo', 'Color', 'AnsiStr', 'Font', 'SerializableCallable', 'FontInfoEx']
