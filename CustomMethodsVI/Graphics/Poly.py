@@ -16,7 +16,7 @@ class Triangle3D:
 	Class representing a single triangle in 3D space
 	"""
 
-	def __init__(self, point1: Math.Vector3, point2: Math.Vector3, point3: Math.Vector3, uv_mat: typing.Optional[Material.UVMap] = None):
+	def __init__(self, point1: Math.Vector3, point2: Math.Vector3, point3: Math.Vector3, *, uv_mat: typing.Optional[Material.UVMap] = None, invert_normal: bool = False):
 		"""
 		Class representing a single triangle in 3D space
 		:param point1: The first vertex
@@ -30,8 +30,12 @@ class Triangle3D:
 		Misc.raise_ifn(isinstance(point2, Math.Vector3), Exceptions.InvalidArgumentException(Triangle3D.__init__, 'point2', type(point2), (Math.Vector3,)))
 		Misc.raise_ifn(isinstance(point3, Math.Vector3), Exceptions.InvalidArgumentException(Triangle3D.__init__, 'point3', type(point3), (Math.Vector3,)))
 		Misc.raise_ifn(uv_mat is None or uv_mat is ... or isinstance(uv_mat, Material.UVMap), Exceptions.InvalidArgumentException(Triangle3D.__init__, 'uv', type(uv_mat), (Material.UVMap,)))
+		normal: Math.Vector3 = (point2 - point1).cross(point3 - point1).normalized()
 		self.__points__: tuple[Math.Vector3, Math.Vector3, Math.Vector3] = (point1, point2, point3)
 		self.__uv__: typing.Optional[Material.UVMap] = None if uv_mat is ... or uv_mat is None else uv_mat
+		self.__center__: Math.Vector3 = (point1 + point2 + point3) / 3
+		self.__invert_normal__: bool = bool(invert_normal)
+		self.__normal__: Math.Vector3 = -normal if self.is_normal_inverted else normal
 
 	def __hash__(self) -> int:
 		return hash(self.points)
@@ -39,25 +43,23 @@ class Triangle3D:
 	def __eq__(self, other: Triangle3D) -> bool:
 		return isinstance(other, Triangle3D) and self.points == other.points
 
-	def compute_normal(self) -> Math.Vector3:
+	def closest_vertex_to(self, point: Math.Vector3) -> Math.Vector3:
 		"""
-		Computes this triangle's facing normal
-		:return: The computed normal
-		"""
-
-		p1, p2, p3 = self.points
-		dir1: Math.Vector3 = p2 - p1
-		dir2: Math.Vector3 = p3 - p1
-		return dir1.cross(dir2)
-
-	def compute_center(self) -> Math.Vector3:
-		"""
-		Computes this triangle's center of area
-		:return: The midpoint of all three vertices
+		Calculates the closest vertex to the specified point
+		:param point: The point
+		:return: The closest vertex
 		"""
 
-		p1, p2, p3 = self.points
-		return (p1 + p2 + p3) / 3
+		return Stream.LinqStream(self.points).sort(lambda p: p.distance_squared(point)).first()
+
+	def farthest_vertex_from(self, point: Math.Vector3) -> Math.Vector3:
+		"""
+		Calculates the farthest vertex from the specified point
+		:param point: The point
+		:return: The farthest vertex
+		"""
+
+		return Stream.LinqStream(self.points).sort(lambda p: p.distance_squared(point), reverse=True).first()
 
 	def transform(self, matrix: Math.TransformMatrix3D) -> Triangle3D:
 		"""
@@ -66,7 +68,35 @@ class Triangle3D:
 		:return: The transformed  triangle
 		"""
 
-		return Triangle3D(*[matrix.transform_vector(point) for point in self.points])
+		p1, p2, p3 = self.points
+		p1 = matrix.transform_vector(p1)
+		p2 = matrix.transform_vector(p2)
+		p3 = matrix.transform_vector(p3)
+		return Triangle3D(p1, p2, p3, uv_mat=self.material, invert_normal=self.is_normal_inverted)
+
+	@property
+	def is_normal_inverted(self) -> bool:
+		"""
+		:return: Whether this triangle's normal is inverted
+		"""
+
+		return self.__invert_normal__
+
+	@property
+	def center(self) -> Math.Vector3:
+		"""
+		:return: This triangle's average midpoint
+		"""
+
+		return self.__center__
+
+	@property
+	def normal(self) -> Math.Vector3:
+		"""
+		:return: This triangle's facing normal
+		"""
+
+		return self.__normal__
 
 	@property
 	def points(self) -> tuple[Math.Vector3, Math.Vector3, Math.Vector3]:
@@ -100,73 +130,85 @@ class PolyShape3D(Util.Transformable):
 					Math.Vector3(0.5, 0.5, 0.5),
 					Math.Vector3(0.5, 0.5, -0.5),
 					Math.Vector3(-0.5, 0.5, 0.5),
-					uv_mat
+					uv_mat=uv_mat,
+					invert_normal=False
 				),
 				Triangle3D(
-					Math.Vector3(-0.5, 0.5, -0.5),
 					Math.Vector3(0.5, 0.5, -0.5),
 					Math.Vector3(-0.5, 0.5, 0.5),
-					uv_mat
+					Math.Vector3(-0.5, 0.5, -0.5),
+					uv_mat=uv_mat,
+					invert_normal=True
 				),
 				Triangle3D(
 					Math.Vector3(0.5, -0.5, 0.5),
 					Math.Vector3(0.5, -0.5, -0.5),
 					Math.Vector3(-0.5, -0.5, 0.5),
-					uv_mat
+					uv_mat=uv_mat,
+					invert_normal=True
 				),
 				Triangle3D(
 					Math.Vector3(-0.5, -0.5, -0.5),
 					Math.Vector3(0.5, -0.5, -0.5),
 					Math.Vector3(-0.5, -0.5, 0.5),
-					uv_mat
+					uv_mat=uv_mat,
+					invert_normal=False
 				),
 				Triangle3D(
 					Math.Vector3(0.5, -0.5, -0.5),
 					Math.Vector3(-0.5, -0.5, -0.5),
 					Math.Vector3(-0.5, 0.5, -0.5),
-					uv_mat
+					uv_mat=uv_mat,
+					invert_normal=True
 				),
 				Triangle3D(
 					Math.Vector3(0.5, -0.5, -0.5),
 					Math.Vector3(0.5, 0.5, -0.5),
 					Math.Vector3(-0.5, 0.5, -0.5),
-					uv_mat
+					uv_mat=uv_mat,
+					invert_normal=False
 				),
 				Triangle3D(
 					Math.Vector3(-0.5, -0.5, -0.5),
 					Math.Vector3(-0.5, -0.5, 0.5),
 					Math.Vector3(-0.5, 0.5, 0.5),
-					uv_mat
+					uv_mat=uv_mat,
+					invert_normal=False
 				),
 				Triangle3D(
 					Math.Vector3(-0.5, -0.5, -0.5),
 					Math.Vector3(-0.5, 0.5, -0.5),
 					Math.Vector3(-0.5, 0.5, 0.5),
-					uv_mat
+					uv_mat=uv_mat,
+					invert_normal=True
 				),
 				Triangle3D(
 					Math.Vector3(-0.5, -0.5, 0.5),
-					Math.Vector3(0.5, -0.5, 0.5),
-					Math.Vector3(0.5, 0.5, 0.5),
-					uv_mat
-				),
-				Triangle3D(
-					Math.Vector3(-0.5, -0.5, 0.5),
-					Math.Vector3(-0.5, 0.5, 0.5),
-					Math.Vector3(0.5, 0.5, 0.5),
-					uv_mat
-				),
-				Triangle3D(
-					Math.Vector3(0.5, -0.5, 0.5),
-					Math.Vector3(0.5, -0.5, -0.5),
-					Math.Vector3(0.5, 0.5, -0.5),
-					uv_mat
-				),
-				Triangle3D(
 					Math.Vector3(0.5, -0.5, 0.5),
 					Math.Vector3(0.5, 0.5, 0.5),
+					uv_mat=uv_mat,
+					invert_normal=True
+				),
+				Triangle3D(
+					Math.Vector3(-0.5, -0.5, 0.5),
+					Math.Vector3(-0.5, 0.5, 0.5),
+					Math.Vector3(0.5, 0.5, 0.5),
+					uv_mat=uv_mat,
+					invert_normal=False
+				),
+				Triangle3D(
+					Math.Vector3(0.5, -0.5, 0.5),
+					Math.Vector3(0.5, -0.5, -0.5),
 					Math.Vector3(0.5, 0.5, -0.5),
-					uv_mat
+					uv_mat=uv_mat,
+					invert_normal=False
+				),
+				Triangle3D(
+					Math.Vector3(0.5, -0.5, 0.5),
+					Math.Vector3(0.5, 0.5, 0.5),
+					Math.Vector3(0.5, 0.5, -0.5),
+					uv_mat=uv_mat,
+					invert_normal=True
 				)
 			)
 		)
@@ -202,11 +244,7 @@ class PolyShape3D(Util.Transformable):
 		"""
 
 		for triangle in self.triangles:
-			p1, p2, p3 = triangle.points
-			p1 = self.__world_matrix__.transform_vector(p1)
-			p2 = self.__world_matrix__.transform_vector(p2)
-			p3 = self.__world_matrix__.transform_vector(p3)
-			yield Triangle3D(p1, p2, p3, triangle.material)
+			yield triangle.transform(self.world_matrix)
 
 	@property
 	def triangles(self) -> tuple[Triangle3D, ...]:

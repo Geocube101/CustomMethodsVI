@@ -14,10 +14,8 @@ import typing
 import warnings
 
 from . import Plotter
-
 from .. import Statistics
 from .. import Vector
-
 from ... import Misc
 from ... import Iterable
 
@@ -257,12 +255,13 @@ class AxisPlot2D(object):
 		else:
 			return self.__axes__[axis]
 
-	def draw_linear_axis(self, image: numpy.ndarray, size: int, axis: str) -> AxisPlot2D:
+	def draw_linear_axis(self, image: numpy.ndarray, size: int, axis: str, *, center: typing.Optional[tuple[float, float]] = None) -> AxisPlot2D:
 		"""
 		Draws a linear axis
 		:param image: The image to draw to
 		:param size: The square size of the image
 		:param axis: The axis name to draw
+		:param center: The optional center to draw the axis at. Defaults to specified axis position
 		:return: This graph
 		"""
 
@@ -277,7 +276,7 @@ class AxisPlot2D(object):
 		b: int = (axis.color >> 8) & 0xFF
 		a: int = axis.color & 0xFF
 		minx, maxx, miny, maxy = self.__source__.get_bounds()
-		center: Vector.Vector = Vector.Vector(axis.position)
+		center: Vector.Vector = Vector.Vector(axis.position if center is ... or center is None else center)
 		theta: float = round(math.radians(axis.angle), 8)
 		theta90: float = round(math.radians(axis.angle + 90), 8)
 		min_distance, max_distance = self.__source__.bounds_distance_to_point(center)
@@ -289,8 +288,11 @@ class AxisPlot2D(object):
 		if axis.minor_spacing <= 0:
 			return self
 
+		side_a: float = maxx - minx
+		side_b: float = maxy - miny
+		length: float = Misc.get_value(math.sin(theta), side_a, side_b)
 		tick_index: int = math.floor(min_distance / axis.minor_spacing)
-		max_tick_index: int = math.ceil(max_distance / axis.minor_spacing)
+		max_tick_index: int = math.floor(length / axis.minor_spacing)
 		main_direction: Vector.Vector = direction * axis.minor_spacing
 		tick_direction: Vector.Vector = Vector.Vector(math.cos(theta90), math.sin(theta90))
 		forward_position: Vector.Vector = center + direction * min_distance
@@ -305,7 +307,7 @@ class AxisPlot2D(object):
 		elif forward_position[1] > maxy and backward_position[1] > maxy:
 			return self
 
-		for i in range(tick_index, max_tick_index):
+		for i in range(tick_index, tick_index + max_tick_index):
 			is_major: bool = False if axis.major_spacing <= 0 else tick_index % axis.major_spacing == 0
 			tick_scale: float = 0.0125 if is_major else 0.00625
 			tick: Vector.Vector = tick_direction * size * tick_scale
@@ -325,12 +327,13 @@ class AxisPlot2D(object):
 
 		return self
 
-	def draw_radial_axis(self, image: numpy.ndarray, size: int, axis: str) -> AxisPlot2D:
+	def draw_radial_axis(self, image: numpy.ndarray, size: int, axis: str, *, center: typing.Optional[tuple[float, float]] = None) -> AxisPlot2D:
 		"""
 		Draws a radial axis
 		:param image: The PIL image to draw to
 		:param size: The square size of the image
 		:param axis: The axis name to draw
+		:param center: The optional center to draw the axis at. Defaults to specified axis position
 		:return: This graph
 		"""
 
@@ -341,7 +344,7 @@ class AxisPlot2D(object):
 
 		axis: AxisPlot2D.Axis = self.__axes__[axis]
 		radius: float = size / 2 * 0.95
-		image_center: tuple[int, int] = self.__source__.plot_point_to_image_point(axis.position, size)
+		image_center: tuple[int, int] = self.__source__.plot_point_to_image_point(axis.position if center is None or center is ... else center, size)
 
 		r: int = (axis.color >> 24) & 0xFF
 		g: int = (axis.color >> 16) & 0xFF
@@ -372,7 +375,129 @@ class AxisPlot2D(object):
 		return self
 
 
-class Plot2D[PointType](Plotter.Plottable):
+class Bounded2D(Plotter.Plottable):
+	def __init__(self):
+		super().__init__()
+		self.__explicit_bounds__: tuple[float, float, float, float] | None = None
+		self.__calculated_bounds__: tuple[float, float, float, float] | None = None
+
+	def get_bounds(self) -> tuple[float, float, float, float]:
+		"""
+		Gets the bounds of this plot
+		Any infinite boundaries are set to 10
+		:return: (min_x, max_x, min_y, max_y)
+		"""
+
+		if self.has_calculated_bounds:
+			return self.__calculated_bounds__
+
+		minx, maxx, miny, maxy = (-10, 10, -10, 10) if self.__explicit_bounds__ is None else self.__explicit_bounds__
+		inf: float = float('inf')
+		self.__calculated_bounds__ = (-10 if abs(minx) == inf else minx, 10 if abs(maxx) == inf else maxx, -10 if abs(miny) == inf else miny, 10 if abs(maxy) == inf else maxy)
+		return self.__calculated_bounds__
+
+	def set_bounds(self, minx: float | None, maxx: float | None, miny: float | None, maxy: float | None) -> Bounded2D:
+		"""
+		Sets the boundaries of this plot
+		Data outside this bound will not be rendered
+		Any 'None' values are infinite
+		:param minx: The minimum x bound
+		:param maxx: The maximum x bound
+		:param miny: The minimum y bound
+		:param maxy: The maximum y bound
+		:return: This plot
+		"""
+
+		inf: float = float('inf')
+		bounds: tuple[float, float, float, float] = (-inf if minx is None or minx is ... else float(minx), inf if maxx is None or maxx is ... else float(maxx), -inf if miny is None or miny is ... else float(miny), inf if maxy is None or maxy is ... else float(maxy))
+		self.__explicit_bounds__ = None if all(b == inf for b in bounds) else bounds
+		return self
+
+	def invalidate_bounds(self) -> None:
+		"""
+		Invalidates the calculated bounds\n
+		Bounds will be re-calculated on next call to 'get_bounds'
+		"""
+
+		self.__calculated_bounds__ = None
+
+	def plot_point_to_image_point(self, point: tuple[float, float] | Vector.Vector, size: int) -> tuple[int, int] | Vector.Vector:
+		"""
+		Converts a point from plot-space into image-space
+		:param point: The plot-space point
+		:param size: The square image size
+		:return: The image-space point
+		"""
+
+		x, y = point
+		bounds: tuple[float, float, float, float] = self.get_bounds()
+		minx, maxx, miny, maxy = bounds
+		rx: float = Misc.clamp(Misc.get_ratio(x, minx, maxx), -1, 2)
+		ry: float = Misc.clamp(Misc.get_ratio(y, miny, maxy), -1, 2)
+		fx: float = Misc.get_value(rx, 0, size)
+		fy: float = Misc.get_value(1 - ry, 0, size)
+		return Vector.Vector(round(fx), round(fy)) if isinstance(point, Vector.Vector) else (round(fx), round(fy))
+
+	def image_point_to_plot_point(self, point: tuple[int, int] | Vector.Vector, size: int) -> tuple[float, float]:
+		"""
+		Converts a point from image-space into plot-space
+		:param point: The image-space point
+		:param size: The square image size
+		:return: The plot-space point
+		"""
+
+		x, y = point
+		bounds: tuple[float, float, float, float] = self.get_bounds()
+		minx, maxx, miny, maxy = bounds
+		rx: float = Misc.get_ratio(x, 0, size)
+		ry: float = Misc.get_ratio(y, 0, size)
+		fx: float = Misc.get_value(rx, minx, maxx)
+		fy: float = Misc.get_value(1 - ry, miny, maxy)
+		return Vector.Vector(fx, fy) if isinstance(point, Vector.Vector) else (fx, fy)
+
+	def bounds_distance_to_origin(self) -> tuple[float, float]:
+		"""
+		:return: The distance from graph origin to the nearest, farthest bounding corner
+		"""
+
+		return self.bounds_distance_to_point((0, 0))
+
+	def bounds_distance_to_point(self, point: tuple[float, float] | Vector.Vector) -> tuple[float, float]:
+		"""
+		:return: The distance from graph origin to the nearest, farthest bounding corner
+		"""
+
+		minx, maxx, miny, maxy = self.get_bounds()
+		cx, cy = point
+		points: tuple[tuple[float, float], ...] = (
+			(minx, miny), (minx, maxy),
+			(maxx, miny), (maxx, maxy)
+		)
+		min_distance, max_distance = Iterable.Iterable.minmax((Vector.Vector(p) - Vector.Vector(point)).length() for p in points)
+
+		if minx <= cx <= maxx and miny <= cy <= maxy:
+			min_distance = 0
+
+		return min_distance, max_distance
+
+	@property
+	def has_explicit_bounds(self) -> bool:
+		"""
+		:return: Whether this plot has explicit bounds set
+		"""
+
+		return self.__explicit_bounds__ is not None
+
+	@property
+	def has_calculated_bounds(self) -> bool:
+		"""
+		:return: Whether this plot has calculated bounds set
+		"""
+
+		return self.__calculated_bounds__ is not None
+
+
+class Plot2D[PointType](Bounded2D):
 	"""
 	Base class representing a single 2D graph
 	"""
@@ -383,11 +508,35 @@ class Plot2D[PointType](Plotter.Plottable):
 		- Constructor -
 		"""
 
-		super(Plot2D, self).__init__()
+		super().__init__()
 		self.__points__: list[PointType] = []
 		self.__point_regular_shape__: int = 4
 		self.__point_color__: int = 0xFFFFFFFF
 		self.__point_size__: int = 10
+
+	def get_bounds(self) -> tuple[float, float, float, float]:
+		"""
+		Gets the bounds of this plot
+		Any infinite boundaries are set to 10
+		:return: (min_x, max_x, min_y, max_y)
+		"""
+
+		inf: float = float('inf')
+		minx, maxx, miny, maxy = self.bounds
+
+		if self.has_explicit_bounds:
+			eminx, emaxx, eminy, emaxy = self.__explicit_bounds__
+			minx = minx if abs(eminx) == inf else eminx
+			maxx = maxx if abs(emaxx) == inf else emaxx
+			miny = miny if abs(eminy) == inf else eminy
+			maxy = maxy if abs(emaxy) == inf else emaxy
+
+		return (
+			-10 if abs(minx) == inf else minx,
+			10 if abs(maxx) == inf else maxx,
+			-10 if abs(miny) == inf else miny,
+			10 if abs(maxy) == inf else maxy
+		)
 
 	def plot_info(self, *, regular_point_shape: typing.Optional[int] = ..., point_color: typing.Optional[str | int | tuple[int, int, int]] = ..., point_size: typing.Optional[int] = ...) -> Plot2D:
 		"""
@@ -437,20 +586,6 @@ class Plot2D[PointType](Plotter.Plottable):
 		x_extent = 20 if abs(x_extent) == float('inf') else x_extent
 		y_extent = 20 if abs(y_extent) == float('inf') else y_extent
 		return x_extent, y_extent
-
-	def get_bounds(self) -> tuple[float, float, float, float]:
-		"""
-		Gets the bounds of this plot
-		Any infinite boundaries are set to 10
-		:return: (min_x, max_x, min_y, max_y)
-		"""
-
-		if self.has_calculated_bounds:
-			return self.__calculated_bounds__
-
-		minx, maxx, miny, maxy = self.bounds
-		inf: float = float('inf')
-		return -10 if abs(minx) == inf else minx, 10 if abs(maxx) == inf else maxx, -10 if abs(miny) == inf else miny, 10 if abs(maxy) == inf else maxy
 
 	@property
 	def points(self) -> tuple[PointType, ...]:
@@ -543,7 +678,7 @@ class Plot2D[PointType](Plotter.Plottable):
 		self.invalidate_bounds()
 
 
-class MultiPlot2D[PlotType: Plot2D](Plotter.Plottable):
+class MultiPlot2D[PlotType: Plot2D](Bounded2D):
 	"""
 	Base class representing multiple stacked 2D plots
 	"""
@@ -1500,6 +1635,12 @@ class CandlestickPlot2D(AxisPlot2D, Plot2D['CandlestickPlot2D.CandleFrame']):
 		def __iter__(self) -> collections.abc.Iterator[float]:
 			return iter(self.__prices__)
 
+		def __mul__(self, other: float) -> CandlestickPlot2D.CandleFrame:
+			return CandlestickPlot2D.CandleFrame(self.time, self.open * other, self.high * other, self.low * other, self.close * other) if isinstance(other, (int, float)) else NotImplemented
+
+		def __truediv__(self, other: float) -> CandlestickPlot2D.CandleFrame:
+			return CandlestickPlot2D.CandleFrame(self.time, self.open / other, self.high / other, self.low / other, self.close / other) if isinstance(other, (int, float)) else NotImplemented
+
 		@property
 		def time(self) -> datetime.datetime:
 			return self.__time__
@@ -1534,7 +1675,7 @@ class CandlestickPlot2D(AxisPlot2D, Plot2D['CandlestickPlot2D.CandleFrame']):
 	def __draw__(self, image: numpy.ndarray, size: int) -> None:
 		last_close: float = 0
 		delta: float = min(self.points[i + 1].time.timestamp() - self.points[i].time.timestamp() for i in range(len(self.__points__) - 1))
-		minx, maxx = self.bounds[:2]
+		minx, maxx, miny, maxy = self.get_bounds()
 		image_delta: int = round(size * Misc.get_ratio(delta / 4, 0, maxx - minx))
 		line_width: int = max(1, round(image_delta / 10))
 		bearish, bullish = self.__candle_colors__
@@ -1553,7 +1694,7 @@ class CandlestickPlot2D(AxisPlot2D, Plot2D['CandlestickPlot2D.CandleFrame']):
 			last_close = frame.close
 
 		super().draw_linear_axis(image, size, 'time')
-		super().draw_linear_axis(image, size, 'price')
+		super().draw_linear_axis(image, size, 'price', center=(minx, 0))
 		super().__draw__(image, size)
 
 	def plot_info(self, *, regular_point_shape: typing.Optional[int] = ..., point_color: typing.Optional[str | int | tuple[int, int, int]] = ..., point_size: typing.Optional[int] = ..., bullish_color: typing.Optional[tuple[int, int, int, int]] = ..., bearish_color: typing.Optional[tuple[int, int, int, int]] = ...) -> Plot2D:
@@ -1573,8 +1714,8 @@ class CandlestickPlot2D(AxisPlot2D, Plot2D['CandlestickPlot2D.CandleFrame']):
 		data: tuple[tuple[float, ...], ...] = tuple(zip(*[Iterable.Iterable.minmax(frame) for frame in self.points]))
 		maxy: float = max(data[1])
 		miny: float = min(data[0])
-		padding_x: float = (maxx - minx) * 0.95
-		padding_y: float = (maxy - miny) * 0.95
+		padding_x: float = (maxx - minx) * 0.025
+		padding_y: float = (maxy - miny) * 0.025
 		return minx - padding_x, maxx + padding_x, miny - padding_y, maxy + padding_y
 
 

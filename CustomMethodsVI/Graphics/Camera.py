@@ -144,15 +144,19 @@ class Camera:
 
 		transformed: list[Poly.Triangle3D] = []
 		triangles: tuple[Poly.Triangle3D, ...] = (triangle, *triangles)
+		theta90: float = math.radians(90)
 
 		for triangle in triangles:
+			if self.view.backward.angle(triangle.normal) >= theta90:
+				continue
+
 			points: tuple[Math.Vector3, ...] = self.points_world_to_screen(screen_width, screen_height, *triangle.points)
 
 			if len(points) != 3:
 				continue
 
 			p1, p2, p3 = points
-			transformed.append(Poly.Triangle3D(p1, p2, p3, triangle.material))
+			transformed.append(Poly.Triangle3D(p1, p2, p3, uv_mat=triangle.material, invert_normal=triangle.is_normal_inverted))
 
 		return tuple(transformed)
 

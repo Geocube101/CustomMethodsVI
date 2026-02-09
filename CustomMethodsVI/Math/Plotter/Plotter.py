@@ -8,10 +8,6 @@ import PIL.Image
 import PIL.ImageTk
 import tkinter
 
-from ...Math import Vector
-from ... import Iterable
-from ... import Misc
-
 
 class Plottable(object):
 	"""
@@ -36,11 +32,9 @@ class Plottable(object):
 		- Constructor -
 		"""
 
-		super(Plottable, self).__init__()
+		super().__init__()
 		self.__grid__: list[int] = [0, 0]
 		self.__alpha__: float = 1
-		self.__explicit_bounds__: tuple[float, float, float, float] | None = None
-		self.__calculated_bounds__: tuple[float, float, float, float] | None = None
 
 	def __draw__(self, image: numpy.ndarray, size: int) -> None:
 		"""
@@ -85,73 +79,6 @@ class Plottable(object):
 		image: numpy.ndarray = self.as_image(square_size=square_size)
 		cv2.imwrite(filename, image)
 
-	def invalidate_bounds(self) -> None:
-		"""
-		Invalidates the calculated bounds\n
-		Bounds will be re-calculated on next call to 'get_bounds'
-		"""
-
-		self.__calculated_bounds__ = None
-
-	def plot_point_to_image_point(self, point: tuple[float, float] | Vector.Vector, size: int) -> tuple[int, int] | Vector.Vector:
-		"""
-		Converts a point from plot-space into image-space
-		:param point: The plot-space point
-		:param size: The square image size
-		:return: The image-space point
-		"""
-
-		x, y = point
-		bounds: tuple[float, float, float, float] = self.get_bounds()
-		minx, maxx, miny, maxy = bounds
-		rx: float = Misc.clamp(Misc.get_ratio(x, minx, maxx), -1, 2)
-		ry: float = Misc.clamp(Misc.get_ratio(y, miny, maxy), -1, 2)
-		fx: float = Misc.get_value(rx, 0, size)
-		fy: float = Misc.get_value(1 - ry, 0, size)
-		return Vector.Vector(round(fx), round(fy)) if isinstance(point, Vector.Vector) else (round(fx), round(fy))
-
-	def image_point_to_plot_point(self, point: tuple[int, int] | Vector.Vector, size: int) -> tuple[float, float]:
-		"""
-		Converts a point from image-space into plot-space
-		:param point: The image-space point
-		:param size: The square image size
-		:return: The plot-space point
-		"""
-
-		x, y = point
-		bounds: tuple[float, float, float, float] = self.get_bounds()
-		minx, maxx, miny, maxy = bounds
-		rx: float = Misc.get_ratio(x, 0, size)
-		ry: float = Misc.get_ratio(y, 0, size)
-		fx: float = Misc.get_value(rx, minx, maxx)
-		fy: float = Misc.get_value(1 - ry, miny, maxy)
-		return Vector.Vector(fx, fy) if isinstance(point, Vector.Vector) else (fx, fy)
-
-	def bounds_distance_to_origin(self) -> tuple[float, float]:
-		"""
-		:return: The distance from graph origin to the nearest, farthest bounding corner
-		"""
-
-		return self.bounds_distance_to_point((0, 0))
-
-	def bounds_distance_to_point(self, point: tuple[float, float] | Vector.Vector) -> tuple[float, float]:
-		"""
-		:return: The distance from graph origin to the nearest, farthest bounding corner
-		"""
-
-		minx, maxx, miny, maxy = self.get_bounds()
-		cx, cy = point
-		points: tuple[tuple[float, float], ...] = (
-			(minx, miny), (minx, maxy),
-			(maxx, miny), (maxx, maxy)
-		)
-		min_distance, max_distance = Iterable.Iterable.minmax((Vector.Vector(p) - Vector.Vector(point)).length() for p in points)
-
-		if minx <= cx <= maxx and miny <= cy <= maxy:
-			min_distance = 0
-
-		return min_distance, max_distance
-
 	def as_image(self, *, square_size: int = 1024) -> numpy.ndarray:
 		"""
 		Renders this plot as an image
@@ -163,54 +90,6 @@ class Plottable(object):
 		image: numpy.ndarray = Plottable.generate_image_plate(square_size, square_size)
 		self.__draw__(image, square_size)
 		return numpy.array(image)
-
-	def set_bounds(self, minx: float | None, maxx: float | None, miny: float | None, maxy: float | None) -> Plottable:
-		"""
-		Sets the boundaries of this plot
-		Data outside this bound will not be rendered
-		Any 'None' values are infinite
-		:param minx: The minimum x bound
-		:param maxx: The maximum x bound
-		:param miny: The minimum y bound
-		:param maxy: The maximum y bound
-		:return: This plot
-		"""
-
-		inf: float = float('inf')
-		bounds: tuple[float, float, float, float] = (-inf if minx is None or minx is ... else float(minx), inf if maxx is None or maxx is ... else float(maxx), -inf if miny is None or miny is ... else float(miny), inf if maxy is None or maxy is ... else float(maxy))
-		self.__explicit_bounds__ = None if all(b == inf for b in bounds) else bounds
-		return self
-
-	def get_bounds(self) -> tuple[float, float, float, float]:
-		"""
-		Gets the bounds of this plot
-		Any infinite boundaries are set to 10
-		:return: (min_x, max_x, min_y, max_y)
-		"""
-
-		if self.has_calculated_bounds:
-			return self.__calculated_bounds__
-
-		minx, maxx, miny, maxy = (-10, 10, -10, 10) if self.__explicit_bounds__ is None else self.__explicit_bounds__
-		inf: float = float('inf')
-		self.__calculated_bounds__ = (-10 if abs(minx) == inf else minx, 10 if abs(maxx) == inf else maxx, -10 if abs(miny) == inf else miny, 10 if abs(maxy) == inf else maxy)
-		return self.__calculated_bounds__
-
-	@property
-	def has_explicit_bounds(self) -> bool:
-		"""
-		:return: Whether this plot has explicit bounds set
-		"""
-
-		return self.__explicit_bounds__ is not None
-
-	@property
-	def has_calculated_bounds(self) -> bool:
-		"""
-		:return: Whether this plot has calculated bounds set
-		"""
-
-		return self.__calculated_bounds__ is not None
 
 
 class GridPlotDisplay:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import dearpygui.dearpygui as dpg
 import tkinter
 import typing
@@ -7,6 +9,7 @@ import warnings
 
 from . import Camera
 from . import Material
+from . import Math
 from . import Poly
 from .. import Exceptions
 from .. import Misc
@@ -168,28 +171,42 @@ class TkinterRendererCPU(Renderer):
 
 		Misc.raise_ifn(isinstance(canvas, tkinter.Canvas), Exceptions.InvalidArgumentException(TkinterRendererCPU.__init__, 'canvas', type(canvas), (tkinter.Canvas,)))
 		self.__canvas__: tkinter.Canvas = canvas
-		self.__drawn__: list[int] = []
+		self.__drawn__: list[tuple[int, int]] = []
 		super().__init__()
 
 	def render(self) -> None:
 		Misc.raise_if(self.active_camera is None, ValueError('No active camera'))
-		triangles: tuple[Poly.Triangle3D, ...] = (*self.triangles, *Stream.LinqStream(self.meshes).transform_many(lambda shape: shape.get_triangles()).collect())
-		transformed: list[Poly.Triangle3D] = sorted(self.active_camera.triangles_world_to_screen(self.width, self.height, *triangles), key=lambda tri: self.active_camera.view.translation.distance_squared(tri.compute_center()), reverse=True)
+		triangles: tuple[Poly.Triangle3D, ...] = Stream.LinqStream(self.meshes).transform_many(lambda shape: shape.get_triangles()).merge(self.triangles).sort(lambda tri: self.active_camera.view.translation.distance_squared(tri.center), reverse=True).collect()
+		transformed: tuple[Poly.Triangle3D, ...] = self.active_camera.triangles_world_to_screen(self.width, self.height, *triangles)
+		last_drawn: int = 0
+		reverse: bool = self.active_camera.view.backward.angle(Math.Vector3.backward()) <= math.radians(90)
 
 		for i, triangle in enumerate(transformed):
 			if (uv := triangle.material) is None:
-				warnings.warn(f'Triangle @ {hex(id(triangle))} has no material and will not be visible')
 				continue
 			elif (material := uv.get_material(Material.SimpleMaterial)) is None:
-				raise TypeError('CPU only supports simple materials')
+				raise TypeError('CPU render only supports simple materials')
 
-			screen_points: tuple[tuple[float, float], ...] = tuple((x, y) for x, y, z in triangle.points)
+			points: tuple[tuple[float, float], ...] = tuple((x, y) for (x, y, z) in triangle.points)
 
-			if i < len(self.__drawn__):
-				self.__canvas__.coords(self.__drawn__[i], [point for sublist in screen_points for point in sublist])
+			if last_drawn < len(self.__drawn__):
+				shape_id: int = self.__drawn__[last_drawn][0]
+				self.__canvas__.coords(shape_id, *points)
+				self.__canvas__.itemconfigure(shape_id, state='normal')
+				self.__drawn__[last_drawn] = (shape_id, i)
 			else:
-				shape_id: int = self.__canvas__.create_polygon(screen_points, fill=str(material.fill)[:-2], outline=str(material.outline)[:-2])
-				self.__drawn__.append(shape_id)
+				shape_id: int = self.__canvas__.create_polygon(points, outline=str(material.outline)[:7], fill=str(material.fill)[:7])
+				self.__drawn__.append((shape_id, i))
+
+			last_drawn += 1
+
+		for i, pair in enumerate(self.__drawn__[last_drawn:]):
+			self.__canvas__.itemconfigure(pair[0], state='hidden')
+
+		z_order: list[tuple[int, int]] = sorted(self.__drawn__, key=lambda p: p[1], reverse=reverse)
+
+		for i in range(len(z_order) - 1):
+			self.__canvas__.tag_lower(z_order[i][0], z_order[i + 1][0])
 
 	@property
 	def width(self) -> int:
@@ -216,28 +233,41 @@ class DearPyGuiRendererCPU(Renderer):
 
 		Misc.raise_ifn(isinstance(drawlist, (int, str)), Exceptions.InvalidArgumentException(DearPyGuiRendererCPU.__init__, 'drawlist', type(drawlist), (int, str)))
 		self.__drawlist__: int | str = drawlist
-		self.__drawn__: list[int] = []
+		self.__drawn__: list[tuple[int, int]] = []
 		super().__init__()
 
 	def render(self) -> None:
 		Misc.raise_if(self.active_camera is None, ValueError('No active camera'))
-		triangles: tuple[Poly.Triangle3D, ...] = (*self.triangles, *Stream.LinqStream(self.meshes).transform_many(lambda shape: shape.get_triangles()).collect())
-		transformed: list[Poly.Triangle3D] = sorted(self.active_camera.triangles_world_to_screen(self.width, self.height, *triangles), key=lambda tri: self.active_camera.view.translation.distance_squared(tri.compute_center()), reverse=True)
+		triangles: tuple[Poly.Triangle3D, ...] = Stream.LinqStream(self.meshes).transform_many(lambda shape: shape.get_triangles()).merge(self.triangles).sort(lambda tri: self.active_camera.view.translation.distance_squared(tri.center), reverse=True).collect()
+		transformed: tuple[Poly.Triangle3D, ...] = self.active_camera.triangles_world_to_screen(self.width, self.height, *triangles)
+		last_drawn: int = 0
+		reverse: bool = self.active_camera.view.backward.angle(Math.Vector3.backward()) <= math.radians(90)
 
 		for i, triangle in enumerate(transformed):
 			if (uv := triangle.material) is None:
-				warnings.warn(f'Triangle @ {hex(id(triangle))} has no material and will not be visible')
 				continue
 			elif (material := uv.get_material(Material.SimpleMaterial)) is None:
-				raise TypeError('CPU only supports simple materials')
+				raise TypeError('CPU render only supports simple materials')
 
 			p1, p2, p3 = tuple((x, y) for x, y, z in triangle.points)
 
-			if i < len(self.__drawn__):
-				dpg.configure_item(self.__drawn__[i], p1=p1, p2=p2, p3=p3)
+			if last_drawn < len(self.__drawn__):
+				shape_id: int = self.__drawn__[last_drawn][0]
+				dpg.configure_item(shape_id, p1=p1, p2=p2, p3=p3, show=True)
+				self.__drawn__[last_drawn] = (shape_id, i)
 			else:
 				shape_id: int = dpg.draw_triangle(p1, p2, p3, color=material.outline.rgba, fill=material.fill.rgba, parent=self.__drawlist__)
-				self.__drawn__.append(shape_id)
+				self.__drawn__.append((shape_id, i))
+
+			last_drawn += 1
+
+		for i, pair in enumerate(self.__drawn__[last_drawn:]):
+			dpg.configure_item(pair[0], show=False)
+
+		z_order: list[tuple[int, int]] = sorted(self.__drawn__, key=lambda p: p[1], reverse=reverse)
+
+		for i in range(len(z_order) - 1):
+			dpg.move_item(z_order[i][0], before=z_order[i + 1][0])
 
 	@property
 	def width(self) -> int:

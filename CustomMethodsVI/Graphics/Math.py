@@ -653,10 +653,10 @@ class TransformMatrix3D:
 		:return: The rotation matrix
 		"""
 
-		cos_alpha: float = math.cos(rotation_y)
-		sin_alpha: float = math.sin(rotation_y)
-		cos_beta: float = math.cos(rotation_z)
-		sin_beta: float = math.sin(rotation_z)
+		cos_alpha: float = math.cos(rotation_z)
+		sin_alpha: float = math.sin(rotation_z)
+		cos_beta: float = math.cos(rotation_y)
+		sin_beta: float = math.sin(rotation_y)
 		cos_gamma: float = math.cos(rotation_x)
 		sin_gamma: float = math.sin(rotation_x)
 
@@ -1866,6 +1866,14 @@ class Vector4:
 	@property
 	def w(self) -> float:
 		return self[3]
+
+	@property
+	def xyz(self) -> Vector3:
+		"""
+		:return: The x, y, and z components
+		"""
+
+		return Vector3(*self.components[:3])
 
 	@property
 	def components(self) -> tuple[float, float, float, float]:
