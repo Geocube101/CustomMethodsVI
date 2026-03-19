@@ -1,6 +1,7 @@
 import math
 import time
 import typing
+import warnings
 
 from . import Exceptions
 
@@ -29,6 +30,32 @@ def raise_ifn(expression: bool, exception: BaseException = AssertionError('Asser
 		raise Exceptions.InvalidArgumentException(raise_if, 'exception', type(exception))
 	elif not expression:
 		raise exception
+
+
+def warn_if(expression: bool, warning: Warning = UserWarning('Assertion Failed')) -> None:
+	"""
+	Raises a warning if the expression evaluates to True
+	:param expression: The expression to evaluate
+	:param warning: The warning to raise
+	"""
+
+	if not isinstance(warning, Warning):
+		raise Exceptions.InvalidArgumentException(warn_if, 'warning', type(warning))
+	elif expression:
+		warnings.warn(warning)
+
+
+def warn_ifn(expression: bool, warning: Warning = UserWarning('Assertion Failed')) -> None:
+	"""
+	Raises a warning if the expression evaluates to False
+	:param expression: The expression to evaluate
+	:param warning: The warning to raise
+	"""
+
+	if not isinstance(warning, Warning):
+		raise Exceptions.InvalidArgumentException(warn_ifn, 'warning', type(warning))
+	elif not expression:
+		raise warning
 
 
 def sleep(seconds: float) -> None:

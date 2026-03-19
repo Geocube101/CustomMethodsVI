@@ -14,7 +14,7 @@ class Logger:
 	Class representing a log file writer
 	"""
 
-	def __init__(self, stream: io.IOBase, timezone: datetime.timezone = datetime.timezone.utc, header_format: str = '{%D} {%T} - [ {%TZ} ] [ {%C} ] -> Thread {%TID}: {%M}'):
+	def __init__(self, stream: io.IOBase, timezone: datetime.timezone | datetime.tzinfo = datetime.timezone.utc, header_format: str = '{%D} {%T} - [ {%TZ} ] [ {%C} ] -> Thread {%TID}: {%M}'):
 		"""
 		Class representing a log file writer\n
 		- Constructor -\n
@@ -34,7 +34,7 @@ class Logger:
 		if not isinstance(stream, io.IOBase):
 			raise Exceptions.InvalidArgumentException(Logger.__init__, 'stream', type(stream), (io.IOBase,))
 		elif not isinstance(timezone, datetime.timezone):
-			raise Exceptions.InvalidArgumentException(Logger.__init__, 'timezone', type(timezone), (datetime.timezone,))
+			raise Exceptions.InvalidArgumentException(Logger.__init__, 'timezone', type(timezone), (datetime.timezone, datetime.tzinfo))
 
 		if stream.closed:
 			raise IOError('Stream is closed')

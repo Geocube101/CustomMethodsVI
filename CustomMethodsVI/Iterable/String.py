@@ -175,6 +175,14 @@ class String(Sequence.MutableSequence[str], str):
 
 		return all(x == '0' or x == '1' for x in self)
 
+	def is_integer2_literal(self) -> bool:
+		"""
+		Checks if the string is a binary integer literal
+		:return: Whether all characters are 0 or 1 and the string starts with 0b or 0B
+		"""
+
+		return re.fullmatch(r'0[bB][01]+', self) is not None
+
 	def is_integer8(self) -> bool:
 		"""
 		Checks if the string is an octal integer
@@ -184,6 +192,14 @@ class String(Sequence.MutableSequence[str], str):
 		chars: tuple[str, ...] = tuple(map(str, range(8)))
 		return all(x in chars for x in self)
 
+	def is_integer8_literal(self) -> bool:
+		"""
+		Checks if the string is a binary integer literal
+		:return: Whether all characters are in the range 0-7 and the string starts with 0o or 0O
+		"""
+
+		return re.fullmatch(r'0[oO][01234567]+', self) is not None
+
 	def is_integer10(self) -> bool:
 		"""
 		Checks if the string is a decimal integer
@@ -191,6 +207,14 @@ class String(Sequence.MutableSequence[str], str):
 		"""
 
 		return self.isnumeric()
+
+	def is_integer10_literal(self) -> bool:
+		"""
+		Checks if the string is a binary integer literal
+		:return: Whether all characters are in the range 0-9 and the string starts with 0d or 0D
+		"""
+
+		return re.fullmatch(r'0[dD]\d+', self) is not None
 
 	def is_integer16(self) -> bool:
 		"""
@@ -200,6 +224,14 @@ class String(Sequence.MutableSequence[str], str):
 
 		chars: tuple[str, ...] = tuple('abcdefABCDEF')
 		return all(x.isnumeric() or x in chars for x in self)
+
+	def is_integer16_literal(self) -> bool:
+		"""
+		Checks if the string is a binary integer literal
+		:return: Whether all characters are in the range 0-9 and the string starts with 0x or OX
+		"""
+
+		return re.fullmatch(r'0[xX][\dabcdefABCDEF]+', self) is not None
 
 	def is_float(self) -> bool:
 		"""
@@ -237,6 +269,28 @@ class String(Sequence.MutableSequence[str], str):
 		left: float = float(sections[0])
 		right: float = float(sections[1]) if len(sections) > 0 else 1
 		return left * 10 ** right
+
+	def literal_to_number(self) -> int | float:
+		"""
+		Converts this literal number into an actual integer or float number
+		:return: The converted number
+		:raises ValueError: If this string is not an integer literal or floating point number
+		"""
+
+		if self.is_integer2_literal():
+			return int(self, 2)
+		elif self.is_integer8_literal():
+			return int(self, 8)
+		elif self.is_integer10_literal():
+			return int(self, 10)
+		elif self.is_integer16_literal():
+			return int(self, 16)
+		elif self.is_integer10():
+			return int(self, 10)
+		elif self.is_extended_float():
+			return self.to_extended_float()
+		else:
+			raise ValueError(f'Cannot convert \'{self}\' to a number')
 
 	def copy(self) -> String:
 		"""
@@ -464,6 +518,14 @@ class ByteString(Sequence.MutableSequence[int], bytearray):
 		one: int = ord('1')
 		return all(x == zero or x == one for x in self)
 
+	def is_integer2_literal(self) -> bool:
+		"""
+		Checks if the string is a binary integer literal
+		:return: Whether all characters are 0 or 1 and the string starts with 0b or 0B
+		"""
+
+		return re.fullmatch(rb'0[bB][01]+', bytes(self)) is not None
+
 	def is_integer8(self) -> bool:
 		"""
 		Checks if the string is an octal integer
@@ -472,6 +534,14 @@ class ByteString(Sequence.MutableSequence[int], bytearray):
 
 		chars: tuple[int, ...] = tuple(ord('0') + x for x in range(8))
 		return all(x in chars for x in self)
+
+	def is_integer8_literal(self) -> bool:
+		"""
+		Checks if the string is a binary integer literal
+		:return: Whether all characters are in the range 0-7 and the string starts with 0o or 0O
+		"""
+
+		return re.fullmatch(rb'0[oO][01234567]+', bytes(self)) is not None
 
 	def is_integer10(self) -> bool:
 		"""
@@ -482,6 +552,14 @@ class ByteString(Sequence.MutableSequence[int], bytearray):
 		chars: tuple[int, ...] = tuple(ord('0') + x for x in range(10))
 		return all(x in chars for x in self)
 
+	def is_integer10_literal(self) -> bool:
+		"""
+		Checks if the string is a binary integer literal
+		:return: Whether all characters are in the range 0-9 and the string starts with 0d or 0D
+		"""
+
+		return re.fullmatch(rb'0[dD]\d+', bytes(self)) is not None
+
 	def is_integer16(self) -> bool:
 		"""
 		Checks if the string is a hexadecimal integer
@@ -490,6 +568,14 @@ class ByteString(Sequence.MutableSequence[int], bytearray):
 
 		chars: tuple[int, ...] = (*[ord('0') + x for x in range(10)], *[ord(x) for x in 'abcdefABCDEF'])
 		return all(x in chars for x in self)
+
+	def is_integer16_literal(self) -> bool:
+		"""
+		Checks if the string is a binary integer literal
+		:return: Whether all characters are in the range 0-9 and the string starts with 0x or OX
+		"""
+
+		return re.fullmatch(rb'0[xX][\dabcdefABCDEF]+', bytes(self)) is not None
 
 	def is_float(self) -> bool:
 		"""
@@ -520,6 +606,28 @@ class ByteString(Sequence.MutableSequence[int], bytearray):
 		left: float = float(sections[0])
 		right: float = float(sections[1]) if len(sections) > 0 else 1
 		return left * 10 ** right
+
+	def literal_to_number(self) -> int | float:
+		"""
+		Converts this literal number into an actual integer or float number
+		:return: The converted number
+		:raises ValueError: If this string is not an integer literal or floating point number
+		"""
+
+		if self.is_integer2_literal():
+			return int(self, 2)
+		elif self.is_integer8_literal():
+			return int(self, 8)
+		elif self.is_integer10_literal():
+			return int(self, 10)
+		elif self.is_integer16_literal():
+			return int(self, 16)
+		elif self.is_integer10():
+			return int(self, 10)
+		elif self.is_extended_float():
+			return self.to_extended_float()
+		else:
+			raise ValueError(f'Cannot convert \'{self}\' to a number')
 
 	def index(self, item: int | bytes | bytearray | ByteString, start: typing.Optional[int] = ..., stop: typing.Optional[int] = ...) -> int:
 		"""

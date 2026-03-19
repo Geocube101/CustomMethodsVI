@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections.abc
 import math
 
 from . import Math
@@ -101,9 +102,10 @@ class Camera:
 		self.view = scale @ self.view
 		return self
 
-	def points_world_to_screen(self, screen_width: int, screen_height: int, point: Math.Vector3, *points: Math.Vector3) -> tuple[Math.Vector3, ...]:
+	def points_world_to_screen(self, screen_width: int, screen_height: int, point: Math.Vector3, *points: Math.Vector3) -> collections.abc.Iterator[Math.Vector3]:
 		"""
-		Converts the specified points from world space into screen space
+		Converts the specified points from world space into screen space\n
+		Points out of bounds will be '...'
 		:param screen_width: The screen width
 		:param screen_height: The screen height
 		:param point: The first point to transform
@@ -111,7 +113,6 @@ class Camera:
 		:return: All transformed points in front of the camera
 		"""
 
-		transformed: list[Math.Vector3] = []
 		points: tuple[Math.Vector3, ...] = (point, *points)
 		aspect: float = screen_width / screen_height / math.sqrt(2)
 
@@ -119,6 +120,7 @@ class Camera:
 			full_clip_space: Math.Vector4 = self.view_projection.transform_vector(Math.Vector4(*point, 1))
 
 			if full_clip_space.w <= 0:
+				yield ...
 				continue
 
 			ndc: Math.Vector3 = Math.Vector3(*full_clip_space[:3]) / full_clip_space.w / Math.Vector3(aspect, 1, 1)
@@ -128,41 +130,40 @@ class Camera:
 				(1 - (ndc.y + 1) / 2) * screen_height,
 				(ndc.z + 1) / 2
 			)
-			transformed.append(screen)
 
-		return tuple(transformed)
+			yield screen
 
-	def triangles_world_to_screen(self, screen_width: int, screen_height: int, triangle: Poly.Triangle3D, *triangles: Poly.Triangle3D) -> tuple[Poly.Triangle3D, ...]:
+	def polygons_world_to_screen(self, screen_width: int, screen_height: int, polygon: Poly.Polygon3D, *polygons: Poly.Polygon3D) -> collections.abc.Iterator[Poly.Polygon3D]:
 		"""
-		Converts the specified triangles from world space into screen space
+		Converts the specified triangles from world space into screen space\n
+		Polygons out of bounds will be '...'
 		:param screen_width: The screen width
 		:param screen_height: The screen height
-		:param triangle: The first triangle to transform
-		:param triangles: The remaining triangles to transform
+		:param polygon: The first polygon to transform
+		:param polygons: The remaining polygons to transform
 		:return: All transformed triangles fully in front of the camera
 		"""
 
-		transformed: list[Poly.Triangle3D] = []
-		triangles: tuple[Poly.Triangle3D, ...] = (triangle, *triangles)
-		theta90: float = math.radians(90)
+		polygons: tuple[Poly.Polygon3D, ...] = (polygon, *polygons)
+		view_direction: Math.Vector3 = self.view.backward * Math.Vector3(-1, 1, 1)
 
-		for triangle in triangles:
-			if self.view.backward.angle(triangle.normal) >= theta90:
+		for polygon in polygons:
+			if view_direction.dot(polygon.normal) >= 0:
+				yield ...
 				continue
 
-			points: tuple[Math.Vector3, ...] = self.points_world_to_screen(screen_width, screen_height, *triangle.points)
+			points: tuple[Math.Vector3, ...] = tuple(self.points_world_to_screen(screen_width, screen_height, *polygon.points))
 
-			if len(points) != 3:
+			if ... in points:
+				yield ...
 				continue
 
-			p1, p2, p3 = points
-			transformed.append(Poly.Triangle3D(p1, p2, p3, uv_mat=triangle.material, invert_normal=triangle.is_normal_inverted))
+			yield Poly.Polygon3D(*points, uv_mat=polygon.material, invert_normal=polygon.is_normal_inverted)
 
-		return tuple(transformed)
-
-	def shapes_world_to_screen(self, screen_width: int, screen_height: int, shape: Poly.PolyShape3D, *shapes: Poly.PolyShape3D) -> tuple[Poly.PolyShape3D, ...]:
+	def shapes_world_to_screen(self, screen_width: int, screen_height: int, shape: Poly.Mesh3D, *shapes: Poly.Mesh3D) -> collections.abc.Iterator[Poly.Mesh3D]:
 		"""
-		Converts the specified shapes from world space into screen space
+		Converts the specified shapes from world space into screen space\n
+		Shapes out of bounds will be '...'
 		:param screen_width: The screen width
 		:param screen_height: The screen height
 		:param shape: The first shape to transform
@@ -170,19 +171,17 @@ class Camera:
 		:return: All transformed shapes fully in front of the camera
 		"""
 
-		transformed: list[Poly.PolyShape3D] = []
-		shapes: tuple[Poly.PolyShape3D, ...] = (shape, *shapes)
+		shapes: tuple[Poly.Mesh3D, ...] = (shape, *shapes)
 
 		for shape in shapes:
-			shape_triangles: tuple[Poly.Triangle3D, ...] = tuple(shape.get_triangles())
-			triangles: tuple[Poly.Triangle3D, ...] = self.triangles_world_to_screen(screen_width, screen_height, *shape_triangles)
+			shape_polygons: tuple[Poly.Polygon3D, ...] = tuple(shape.get_polygons())
+			polygons: tuple[Poly.Polygon3D, ...] = tuple(self.polygons_world_to_screen(screen_width, screen_height, *shape_polygons))
 
-			if len(triangles) != len(shape_triangles):
+			if ... in polygons:
+				yield ...
 				continue
 
-			transformed.append(Poly.PolyShape3D(Math.TransformMatrix3D.identity(), triangles))
-
-		return tuple(transformed)
+			yield Poly.Mesh3D(Math.TransformMatrix3D.identity(), polygons)
 
 	@property
 	def view_projection(self) -> Math.TransformMatrix3D:

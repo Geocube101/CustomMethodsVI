@@ -1,22 +1,23 @@
 from __future__ import annotations
 
-import math
-
+import collections.abc
 import dearpygui.dearpygui as dpg
+import math
 import tkinter
 import typing
-import warnings
+import os
 
 from . import Camera
 from . import Material
 from . import Math
 from . import Poly
+from . import Util
 from .. import Exceptions
 from .. import Misc
 from .. import Stream
 
 
-class Renderer:
+class Renderer3D:
 	"""
 	Base class for a rendering queue
 	"""
@@ -26,12 +27,13 @@ class Renderer:
 		Base class for a rendering queue
 		"""
 
-		self.__meshes__: list[Poly.PolyShape3D] = []
-		self.__triangles__: list[Poly.Triangle3D] = []
+		self.__meshes__: list[Poly.Mesh3D] = []
+		self.__polygons__: list[Poly.Polygon3D] = []
 		self.__cameras__: list[Camera.Camera] = []
 		self.__active_camera__: Camera.Camera = ...
+		self.__sun__: typing.Optional[Math.Vector3] = None
 
-	def add_cameras[T: Renderer](self: T, camera: Camera.Camera, *cameras: Camera.Camera) -> T:
+	def add_cameras[T: Renderer3D](self: T, camera: Camera.Camera, *cameras: Camera.Camera) -> T:
 		"""
 		Adds one or more cameras to the rendering queue
 		:param camera: The first camera
@@ -49,7 +51,7 @@ class Renderer:
 		self.__cameras__.extend(cameras)
 		return self
 
-	def add_meshes[T: Renderer](self: T, mesh: Poly.PolyShape3D, *meshes: Poly.PolyShape3D) -> T:
+	def add_meshes[T: Renderer3D](self: T, mesh: Poly.Mesh3D, *meshes: Poly.Mesh3D) -> T:
 		"""
 		Adds one or more meshes to the rendering queue
 		:param mesh: The first mesh
@@ -58,31 +60,31 @@ class Renderer:
 		:return: This renderer
 		"""
 
-		meshes: tuple[Poly.PolyShape3D, ...] = (mesh, *meshes)
+		meshes: tuple[Poly.Mesh3D, ...] = (mesh, *meshes)
 
 		for mesh in meshes:
-			if not isinstance(mesh, Poly.PolyShape3D):
+			if not isinstance(mesh, Poly.Mesh3D):
 				raise TypeError('One or more meshes are invalid')
 
 		self.__meshes__.extend(meshes)
 		return self
 
-	def add_triangles[T: Renderer](self: T, triangle: Poly.Triangle3D, *triangles: Poly.Triangle3D) -> T:
+	def add_polygons[T: Renderer3D](self: T, polygon: Poly.Polygon3D, *polygons: Poly.Polygon3D) -> T:
 		"""
 		Adds one or more triangles to the rendering queue
-		:param triangle: The first triangle
-		:param triangles: The remaining triangles
+		:param polygon: The first triangle
+		:param polygons: The remaining triangles
 		:raises TypeError: If one or more triangles is not a Triangle3D instance
 		:return: This renderer
 		"""
 
-		triangles: tuple[Poly.Triangle3D, ...] = (triangle, *triangles)
+		polygons: tuple[Poly.Polygon3D, ...] = (polygon, *polygons)
 
-		for triangle in triangles:
-			if not isinstance(triangle, Poly.Triangle3D):
-				raise TypeError('One or more triangles are invalid')
+		for polygon in polygons:
+			if not isinstance(polygon, Poly.Polygon3D):
+				raise TypeError('One or more polygons are invalid')
 
-		self.__triangles__.extend(triangles)
+		self.__polygons__.extend(polygons)
 		return self
 
 	def render(self) -> None:
@@ -92,6 +94,14 @@ class Renderer:
 		"""
 
 		pass
+
+	@property
+	def is_sun_enabled(self) -> bool:
+		"""
+		:return: Whether this renderer has a sun normal
+		"""
+
+		return self.sun_normal is not None
 
 	@property
 	def width(self) -> int:
@@ -112,6 +122,24 @@ class Renderer:
 		return 0
 
 	@property
+	def sun_normal(self) -> typing.Optional[Math.Vector3]:
+		"""
+		:return: This renderer's sun normal
+		"""
+
+		return self.__sun__
+
+	@sun_normal.setter
+	def sun_normal(self, normal: typing.Optional[Math.Vector3]) -> None:
+		"""
+		Sets this renderer's sun normal
+		:param normal: The normal or None to clear
+		"""
+
+		Misc.raise_ifn(normal is None or isinstance(normal, Math.Vector3), Exceptions.InvalidArgumentException(Renderer3D.sun_normal.setter, 'normal', type(normal), (Math.Vector3,)))
+		self.__sun__ = None if normal is None else normal.normalized()
+
+	@property
 	def active_camera(self) -> typing.Optional[Camera.Camera]:
 		"""
 		:return: The rendering queue's active camera
@@ -128,7 +156,7 @@ class Renderer:
 		:raises ValueError: If camera is not a part of this queue
 		"""
 
-		Misc.raise_ifn(isinstance(camera, Camera.Camera), Exceptions.InvalidArgumentException(Renderer.active_camera.setter, 'camera', type(camera), (Camera.Camera,)))
+		Misc.raise_ifn(isinstance(camera, Camera.Camera), Exceptions.InvalidArgumentException(Renderer3D.active_camera.setter, 'camera', type(camera), (Camera.Camera,)))
 		Misc.raise_ifn(camera in self.cameras, ValueError('Camera not in renderer'))
 		self.__active_camera__ = camera
 
@@ -141,7 +169,7 @@ class Renderer:
 		return self.__cameras__
 
 	@property
-	def meshes(self) -> list[Poly.PolyShape3D]:
+	def meshes(self) -> list[Poly.Mesh3D]:
 		"""
 		:return: This renderer's queued meshes
 		"""
@@ -149,15 +177,15 @@ class Renderer:
 		return self.__meshes__
 
 	@property
-	def triangles(self) -> list[Poly.Triangle3D]:
+	def polygons(self) -> list[Poly.Polygon3D]:
 		"""
-		:return: This renderer's queued triangles
+		:return: This renderer's queued polygons
 		"""
 
-		return self.__triangles__
+		return self.__polygons__
 
 
-class TkinterRendererCPU(Renderer):
+class TkinterRenderer3DCPU(Renderer3D):
 	"""
 	Renderer rendering to a tkinter canvas
 	"""
@@ -169,33 +197,42 @@ class TkinterRendererCPU(Renderer):
 		:raises InvalidArgumentException: If 'canvas' is not a tkinter canvas
 		"""
 
-		Misc.raise_ifn(isinstance(canvas, tkinter.Canvas), Exceptions.InvalidArgumentException(TkinterRendererCPU.__init__, 'canvas', type(canvas), (tkinter.Canvas,)))
+		Misc.raise_ifn(isinstance(canvas, tkinter.Canvas), Exceptions.InvalidArgumentException(TkinterRenderer3DCPU.__init__, 'canvas', type(canvas), (tkinter.Canvas,)))
 		self.__canvas__: tkinter.Canvas = canvas
 		self.__drawn__: list[tuple[int, int]] = []
 		super().__init__()
 
 	def render(self) -> None:
 		Misc.raise_if(self.active_camera is None, ValueError('No active camera'))
-		triangles: tuple[Poly.Triangle3D, ...] = Stream.LinqStream(self.meshes).transform_many(lambda shape: shape.get_triangles()).merge(self.triangles).sort(lambda tri: self.active_camera.view.translation.distance_squared(tri.center), reverse=True).collect()
-		transformed: tuple[Poly.Triangle3D, ...] = self.active_camera.triangles_world_to_screen(self.width, self.height, *triangles)
+		polygons: tuple[Poly.Triangle3D, ...] = Stream.LinqStream(self.meshes).transform_many(lambda shape: shape.get_polygons()).merge(self.polygons).sort(lambda poly: self.active_camera.view.translation.distance_squared(poly.center), reverse=True).collect()
+		transformed: collections.abc.Iterator[Poly.Polygon3D] = self.active_camera.polygons_world_to_screen(self.width, self.height, *polygons)
 		last_drawn: int = 0
 		reverse: bool = self.active_camera.view.backward.angle(Math.Vector3.backward()) <= math.radians(90)
 
-		for i, triangle in enumerate(transformed):
-			if (uv := triangle.material) is None:
+		for i, polygon in enumerate(transformed):
+			if polygon is ...:
+				continue
+			elif (uv := polygon.material) is None:
 				continue
 			elif (material := uv.get_material(Material.SimpleMaterial)) is None:
 				raise TypeError('CPU render only supports simple materials')
 
-			points: tuple[tuple[float, float], ...] = tuple((x, y) for (x, y, z) in triangle.points)
+			points: tuple[tuple[float, float], ...] = tuple((x, y) for (x, y, z) in polygon.points)
+			fill: Util.Color = material.fill
+			outline: Util.Color = material.outline
+
+			if self.is_sun_enabled:
+				ratio: float = 1 - polygons[i].normal.angle(self.sun_normal * Math.Vector3(-1, 1, 1)) / math.pi
+				fill *= ratio
+				outline *= ratio
 
 			if last_drawn < len(self.__drawn__):
 				shape_id: int = self.__drawn__[last_drawn][0]
 				self.__canvas__.coords(shape_id, *points)
-				self.__canvas__.itemconfigure(shape_id, state='normal')
+				self.__canvas__.itemconfigure(shape_id, state='normal', outline=str(outline)[:7], fill=str(fill)[:7])
 				self.__drawn__[last_drawn] = (shape_id, i)
 			else:
-				shape_id: int = self.__canvas__.create_polygon(points, outline=str(material.outline)[:7], fill=str(material.fill)[:7])
+				shape_id: int = self.__canvas__.create_polygon(points, outline=str(outline)[:7], fill=str(fill)[:7])
 				self.__drawn__.append((shape_id, i))
 
 			last_drawn += 1
@@ -219,63 +256,75 @@ class TkinterRendererCPU(Renderer):
 		return int(self.__canvas__.cget('height')) if current_height <= 1 else current_height
 
 
-class DearPyGuiRendererCPU(Renderer):
-	"""
-	Renderer rendering to a dearpygui drawlist
-	"""
-
-	def __init__(self, drawlist: int | str):
+if os.name == 'nt':
+	class DearPyGuiRenderer3DCPU(Renderer3D):
 		"""
 		Renderer rendering to a dearpygui drawlist
-		:param drawlist: The dearpygui drawlist ID
-		:raises InvalidArgumentException: If 'drawlist' is not an integer or string
 		"""
 
-		Misc.raise_ifn(isinstance(drawlist, (int, str)), Exceptions.InvalidArgumentException(DearPyGuiRendererCPU.__init__, 'drawlist', type(drawlist), (int, str)))
-		self.__drawlist__: int | str = drawlist
-		self.__drawn__: list[tuple[int, int]] = []
-		super().__init__()
+		def __init__(self, drawlist: int | str):
+			"""
+			Renderer rendering to a dearpygui drawlist
+			:param drawlist: The dearpygui drawlist ID
+			:raises InvalidArgumentException: If 'drawlist' is not an integer or string
+			"""
 
-	def render(self) -> None:
-		Misc.raise_if(self.active_camera is None, ValueError('No active camera'))
-		triangles: tuple[Poly.Triangle3D, ...] = Stream.LinqStream(self.meshes).transform_many(lambda shape: shape.get_triangles()).merge(self.triangles).sort(lambda tri: self.active_camera.view.translation.distance_squared(tri.center), reverse=True).collect()
-		transformed: tuple[Poly.Triangle3D, ...] = self.active_camera.triangles_world_to_screen(self.width, self.height, *triangles)
-		last_drawn: int = 0
-		reverse: bool = self.active_camera.view.backward.angle(Math.Vector3.backward()) <= math.radians(90)
+			Misc.raise_ifn(isinstance(drawlist, (int, str)), Exceptions.InvalidArgumentException(DearPyGuiRenderer3DCPU.__init__, 'drawlist', type(drawlist), (int, str)))
+			self.__drawlist__: int | str = drawlist
+			self.__drawn__: list[tuple[int, int]] = []
+			super().__init__()
 
-		for i, triangle in enumerate(transformed):
-			if (uv := triangle.material) is None:
-				continue
-			elif (material := uv.get_material(Material.SimpleMaterial)) is None:
-				raise TypeError('CPU render only supports simple materials')
+		def render(self) -> None:
+			Misc.raise_if(self.active_camera is None, ValueError('No active camera'))
+			polygons: tuple[Poly.Polygon3D, ...] = Stream.LinqStream(self.meshes).transform_many(lambda shape: shape.get_polygons()).merge(self.polygons).sort(lambda poly: self.active_camera.view.translation.distance_squared(poly.center), reverse=True).collect()
+			transformed: collections.abc.Iterator[Poly.Polygon3D] = self.active_camera.polygons_world_to_screen(self.width, self.height, *polygons)
+			last_drawn: int = 0
+			reverse: bool = self.active_camera.view.backward.angle(Math.Vector3.backward()) <= math.radians(90)
 
-			p1, p2, p3 = tuple((x, y) for x, y, z in triangle.points)
+			for i, polygon in enumerate(transformed):
+				if polygon is ...:
+					continue
+				elif (uv := polygon.material) is None:
+					continue
+				elif (material := uv.get_material(Material.SimpleMaterial)) is None:
+					raise TypeError('CPU render only supports simple materials')
 
-			if last_drawn < len(self.__drawn__):
-				shape_id: int = self.__drawn__[last_drawn][0]
-				dpg.configure_item(shape_id, p1=p1, p2=p2, p3=p3, show=True)
-				self.__drawn__[last_drawn] = (shape_id, i)
-			else:
-				shape_id: int = dpg.draw_triangle(p1, p2, p3, color=material.outline.rgba, fill=material.fill.rgba, parent=self.__drawlist__)
-				self.__drawn__.append((shape_id, i))
+				points: tuple[tuple[float, float], ...] = tuple((x, y) for x, y, z in polygon.points)
+				fill: Util.Color = material.fill
+				outline: Util.Color = material.outline
 
-			last_drawn += 1
+				if self.is_sun_enabled:
+					ratio: float = 1 - polygons[i].normal.angle(self.sun_normal * Math.Vector3(-1, 1, 1)) / math.pi
+					fill *= ratio
+					outline *= ratio
 
-		for i, pair in enumerate(self.__drawn__[last_drawn:]):
-			dpg.configure_item(pair[0], show=False)
+				if last_drawn < len(self.__drawn__):
+					shape_id: int = self.__drawn__[last_drawn][0]
+					dpg.configure_item(shape_id, points=points, show=True, color=outline.rgba, fill=fill.rgba)
+					self.__drawn__[last_drawn] = (shape_id, i)
+				else:
+					shape_id: int = dpg.draw_polygon([[x, y] for x, y in points], color=outline.rgba, fill=fill.rgba, parent=self.__drawlist__)
+					self.__drawn__.append((shape_id, i))
 
-		z_order: list[tuple[int, int]] = sorted(self.__drawn__, key=lambda p: p[1], reverse=reverse)
+				last_drawn += 1
 
-		for i in range(len(z_order) - 1):
-			dpg.move_item(z_order[i][0], before=z_order[i + 1][0])
+			for i, pair in enumerate(self.__drawn__[last_drawn:]):
+				dpg.configure_item(pair[0], show=False)
 
-	@property
-	def width(self) -> int:
-		return dpg.get_item_width(self.__drawlist__)
+			z_order: list[tuple[int, int]] = sorted(self.__drawn__, key=lambda p: p[1], reverse=reverse)
 
-	@property
-	def height(self) -> int:
-		return dpg.get_item_height(self.__drawlist__)
+			for i in range(len(z_order) - 1):
+				dpg.move_item(z_order[i][0], before=z_order[i + 1][0])
+
+		@property
+		def width(self) -> int:
+			return dpg.get_item_width(self.__drawlist__)
+
+		@property
+		def height(self) -> int:
+			return dpg.get_item_height(self.__drawlist__)
 
 
-__all__: list[str] = ['Renderer', 'TkinterRendererCPU', 'DearPyGuiRendererCPU']
+	__all__: list[str] = ['Renderer3D', 'TkinterRenderer3DCPU', 'DearPyGuiRenderer3DCPU']
+else:
+	__all__: list[str] = ['Renderer3D', 'TkinterRenderer3DCPU']

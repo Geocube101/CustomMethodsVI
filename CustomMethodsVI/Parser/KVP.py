@@ -410,7 +410,7 @@ class KVP:
 			if type(value) is dict:
 				value = type(self)(key, value)
 
-			elif KVP.__is_iterable(value):
+			elif isinstance(value, collections.abc.Iterable):
 				value = tuple(value)
 				assert all((type(x) is KVP.__FormatMarker__ and x.valid()) or (isinstance(x, valid_types) and not isinstance(x, (type(self), dict))) for x in value)
 				value = [KVP.__mark_formatter__(x) for x in value]
@@ -502,7 +502,7 @@ class KVP:
 		if isinstance(value, collections.abc.Mapping):
 			self.__mapping__[key] = KVP(key, value)
 
-		elif not isinstance(value, str) and KVP.__is_iterable(value):
+		elif not isinstance(value, str) and isinstance(value, collections.abc.Iterable):
 			value: tuple = tuple(value)
 			assert all(isinstance(x, valid_types) and not isinstance(x, type(self)) for x in value), f'One or more list values are not one of {valid_types} - \'{value}\''
 			self.__mapping__[key] = [KVP.__mark_formatter__(x) for x in value]

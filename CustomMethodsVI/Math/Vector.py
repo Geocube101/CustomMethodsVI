@@ -693,6 +693,19 @@ class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable,
 		u1, u2 = Vector.gram_schmidt(subspace[0], subspace[1])
 		return self.dot(u1) * u1 + self.dot(u2) * u2
 
+	def project_on_vector(self, other: Vector) -> Vector:
+		"""
+		Projects this vector onto another vector
+		:param other: The second vector
+		:return: The projected vector
+		:raises InvalidArgumentException: If 'other' is not a vector
+		:raises ValueError: If vector dimensions are mismatched
+		"""
+
+		Misc.raise_ifn(isinstance(other, Vector), Exceptions.InvalidArgumentException(Vector.angle, 'other', type(other), (Vector,)))
+		Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
+		return self.dot(other) / other.length_squared() * self
+
 	def rounded(self) -> tuple[typing.Optional[int], ...]:
 		"""
 		:return: The components of this vector rounded

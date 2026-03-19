@@ -20,17 +20,32 @@ from ... import Misc
 from ... import Iterable
 
 
-class AxisPlot2D(object):
+class AxisPlot2D:
 	"""
 	Base class representing plots with axes
 	"""
+
+	class AxisLabel2D(Plotter.AxisLabel):
+		def __init__(self, labeller: collections.abc.Callable[[str, tuple[float, ...]], str] = str, spacing: Plotter.LabelSpacing = Plotter.LabelSpacing.MAJOR, alignment: Plotter.LabelAlignment = Plotter.LabelAlignment.LEFT, color: int | collections.abc.Callable[[str, tuple[float, ...]], int] = ..., font_scale: float = 1, font_thickness: int = 1, angle: float = 0):
+			assert isinstance(angle, (int, float))
+			super().__init__(labeller, spacing, alignment, color, font_scale, font_thickness)
+			self.__angle__: float = float(angle)
+
+		@property
+		def angle(self) -> float:
+			return self.__angle__
+
+		@angle.setter
+		def angle(self, angle: float) -> None:
+			assert isinstance(angle, (int, float))
+			self.__angle__ = float(angle)
 
 	class Axis:
 		"""
 		Class representing a single plot axis
 		"""
 
-		def __init__(self, name: str, center: tuple[float, float], angle: float, color: int, minor_spacing: float | None, major_spacing: int | None, tick_offset: int):
+		def __init__(self, name: str, center: tuple[float, float], angle: float, color: int, minor_spacing: float | None, major_spacing: int | None, tick_offset: int, label: AxisPlot2D.AxisLabel2D | None):
 			"""
 			Class representing a single plot axis
 			- Constructor -
@@ -41,6 +56,7 @@ class AxisPlot2D(object):
 			:param minor_spacing: The plot spacing between minor ticks or None to disable
 			:param major_spacing: The number of minor ticks between major ticks or None to disable
 			:param tick_offset: The amount of minor ticks to shift major ticks
+			:param label: The axis label info
 			"""
 
 			self.__axis_name__: str = str(name)
@@ -50,8 +66,9 @@ class AxisPlot2D(object):
 			self.__minor_spacing__: float | None = None if minor_spacing is None else float(minor_spacing)
 			self.__major_spacing__: int | None = None if major_spacing is None else int(major_spacing)
 			self.__tick_offset__: int = int(tick_offset)
+			self.__label__: AxisPlot2D.AxisLabel2D | None = label
 
-		def axis_info(self, *, center: tuple[float, float] = ..., angle: float = ..., color: int = ..., minor_spacing: float | None = ..., major_spacing: int | None = ..., tick_offset: int = ...) -> None:
+		def axis_info(self, *, center: tuple[float, float] = ..., angle: float = ..., color: int = ..., minor_spacing: float | None = ..., major_spacing: int | None = ..., tick_offset: int = ..., label: AxisPlot2D.AxisLabel2D | None = ...) -> None:
 			"""
 			Modifies this axis's attributes
 			Any attribute left blank will not be updated
@@ -61,6 +78,7 @@ class AxisPlot2D(object):
 			:param minor_spacing: The new plot spacing between minor ticks or None to disable
 			:param major_spacing: The new number of minor ticks between major ticks or None to disable
 			:param tick_offset: The new amount of minor ticks to shift major ticks
+			:param label: The new axis label info
 			"""
 
 			if center is not None and center is not ...:
@@ -69,9 +87,10 @@ class AxisPlot2D(object):
 			self.__color__ = self.__color__ if color is ... or color is None else (int(color) & 0xFFFFFFFF)
 			self.__angle__ = self.__angle__ if angle is ... or angle is None else float(angle) % 360
 			self.__position__ = self.__position__ if center is ... or center is None else center
-			self.__minor_spacing__: float | None = self.__minor_spacing__ if minor_spacing is ... else None if minor_spacing is None else float(minor_spacing)
-			self.__major_spacing__: int | None = self.__major_spacing__ if major_spacing is ... else None if major_spacing is None else int(major_spacing)
-			self.__tick_offset__: int = self.__tick_offset__ if tick_offset is ... or tick_offset is None else int(tick_offset)
+			self.__minor_spacing__ = self.__minor_spacing__ if minor_spacing is ... else None if minor_spacing is None else float(minor_spacing)
+			self.__major_spacing__ = self.__major_spacing__ if major_spacing is ... else None if major_spacing is None else int(major_spacing)
+			self.__tick_offset__ = self.__tick_offset__ if tick_offset is ... or tick_offset is None else int(tick_offset)
+			self.__label__ = self.__label__ if label is ... else None if label is None else label
 
 		@property
 		def name(self) -> str:
@@ -184,6 +203,24 @@ class AxisPlot2D(object):
 
 			self.__tick_offset__ = abs(int(offset))
 
+		@property
+		def label(self) -> AxisPlot2D.AxisLabel2D | None:
+			"""
+			:return: The axis label info
+			"""
+
+			return self.__label__
+
+		@label.setter
+		def label(self, label: AxisPlot2D.AxisLabel2D | None) -> None:
+			"""
+			The axis label info
+			:param label: The new label info
+			"""
+
+			assert label is None or isinstance(label, AxisPlot2D.AxisLabel2D)
+			self.__label__ = None
+
 	def __init__(self, plot: Plot2D | MultiPlot2D):
 		"""
 		Base class representing plots with axes
@@ -195,7 +232,7 @@ class AxisPlot2D(object):
 		self.__source__: Plot2D | MultiPlot2D = plot
 		self.__axes__: dict[str, AxisPlot2D.Axis] = {}
 
-	def add_axis(self, name: str, center: tuple[float, float], angle: float = 0, color: int = 0xEEEEEEFF, minor_spacing: float = 1, major_spacing: int | None = None, tick_offset: int = 0) -> AxisPlot2D.Axis:
+	def add_axis(self, name: str, center: tuple[float, float], angle: float = 0, color: int = 0xEEEEEEFF, minor_spacing: float = 1, major_spacing: int | None = None, tick_offset: int = 0, label: AxisLabel2D = None) -> AxisPlot2D.Axis:
 		"""
 		Adds a new axis to the plot
 		Must be called within the plot's __init__
@@ -206,6 +243,7 @@ class AxisPlot2D(object):
 		:param minor_spacing: The graph spacing between minor ticks or None to disable
 		:param major_spacing: The number of minor ticks between major ticks or None to disable
 		:param tick_offset: The amount by which to offset axis ticks
+		:param label: The axis label info
 		:return: The resulting axis
 		"""
 
@@ -214,21 +252,24 @@ class AxisPlot2D(object):
 		if name in self.__axes__:
 			raise KeyError(f'Axis \'{name}\' already defined')
 
-		axis: AxisPlot2D.Axis = AxisPlot2D.Axis(name, center, angle, color, minor_spacing, major_spacing, tick_offset)
+		if label is ...:
+			label = AxisPlot2D.AxisLabel2D(color=color, angle=angle + 90)
+
+		axis: AxisPlot2D.Axis = AxisPlot2D.Axis(name, center, angle, color, minor_spacing, major_spacing, tick_offset, label)
 		self.__axes__[name] = axis
 		return axis
 
-	def axes_info(self, *axes: str, center: tuple[float, float] = ..., angle: float = ..., color: int = ..., minor_spacing: float | None = ..., major_spacing: int | None = ..., tick_offset: int = ...) -> None:
+	def axes_info(self, *axes: str, center: tuple[float, float] = ..., angle: float = ..., color: int = ..., minor_spacing: float | None = ..., major_spacing: int | None = ..., tick_offset: int = ..., label: AxisPlot2D.AxisLabel2D | None = ...) -> None:
 		"""
 		Modifies attributes of the specified axes
 		:param axes: The axes to modify
 		:param center: The new graph local center
 		:param angle: The new angle in degrees
 		:param color: The color of the axis in hex encoded RGBA
-		:param minor_spacing: (float) The spacing between minor ticks or None to disable
-		:param major_spacing: (int) The number of minor ticks between major ticks or None to disable
-		:param tick_offset: (int) The amount by which to offset axis ticks
-		:return: (None)
+		:param minor_spacing: The spacing between minor ticks or None to disable
+		:param major_spacing: The number of minor ticks between major ticks or None to disable
+		:param tick_offset: The amount by which to offset axis ticks
+		:param label: The axes' label info
 		:raises KeyError: If the specified axis is not a part of this plot
 		"""
 
@@ -238,7 +279,7 @@ class AxisPlot2D(object):
 			elif axis not in self.__axes__:
 				raise KeyError(f'Axis \'{axis}\' is not a part of this plot')
 
-			self.__axes__[axis].axis_info(center=center, angle=angle, color=color, minor_spacing=minor_spacing, major_spacing=major_spacing, tick_offset=tick_offset)
+			self.__axes__[axis].axis_info(center=center, angle=angle, color=color, minor_spacing=minor_spacing, major_spacing=major_spacing, tick_offset=tick_offset, label=label)
 
 	def get_axis(self, axis: str) -> AxisPlot2D.Axis:
 		"""
@@ -255,22 +296,22 @@ class AxisPlot2D(object):
 		else:
 			return self.__axes__[axis]
 
-	def draw_linear_axis(self, image: numpy.ndarray, size: int, axis: str, *, center: typing.Optional[tuple[float, float]] = None) -> AxisPlot2D:
+	def draw_linear_axis(self, image: numpy.ndarray, size: int, axis_name: str, *, center: typing.Optional[tuple[float, float]] = None) -> AxisPlot2D:
 		"""
 		Draws a linear axis
 		:param image: The image to draw to
 		:param size: The square size of the image
-		:param axis: The axis name to draw
+		:param axis_name: The axis name to draw
 		:param center: The optional center to draw the axis at. Defaults to specified axis position
 		:return: This graph
 		"""
 
-		if not isinstance(axis, str):
-			raise TypeError(f'Axis name must be a string; got \'{type(axis)}\'')
-		elif axis not in self.__axes__:
-			raise KeyError(f'Axis \'{axis}\' is not a part of this plot')
+		if not isinstance(axis_name, str):
+			raise TypeError(f'Axis name must be a string; got \'{type(axis_name)}\'')
+		elif axis_name not in self.__axes__:
+			raise KeyError(f'Axis \'{axis_name}\' is not a part of this plot')
 
-		axis: AxisPlot2D.Axis = self.__axes__[axis]
+		axis: AxisPlot2D.Axis = self.__axes__[axis_name]
 		r: int = (axis.color >> 24) & 0xFF
 		g: int = (axis.color >> 16) & 0xFF
 		b: int = (axis.color >> 8) & 0xFF
@@ -297,6 +338,7 @@ class AxisPlot2D(object):
 		tick_direction: Vector.Vector = Vector.Vector(math.cos(theta90), math.sin(theta90))
 		forward_position: Vector.Vector = center + direction * min_distance
 		backward_position: Vector.Vector = center - direction * min_distance
+		image_center: Vector.Vector = Vector.Vector(size // 2, size // 2)
 
 		if forward_position[0] < minx and backward_position[0] < minx:
 			return self
@@ -308,7 +350,7 @@ class AxisPlot2D(object):
 			return self
 
 		for i in range(tick_index, tick_index + max_tick_index):
-			is_major: bool = False if axis.major_spacing <= 0 else tick_index % axis.major_spacing == 0
+			is_major: bool = False if axis.major_spacing <= 0 else i % axis.major_spacing == 0
 			tick_scale: float = 0.0125 if is_major else 0.00625
 			tick: Vector.Vector = tick_direction * size * tick_scale
 
@@ -317,10 +359,38 @@ class AxisPlot2D(object):
 			tick_pos_2: Vector.Vector = tick_position - tick
 			cv2.line(image, tick_pos_1.rounded(), tick_pos_2.rounded(), (b, g, r, a), 1, cv2.LINE_AA)
 
+			if axis.label is not None and (axis.label.spacing == Plotter.LabelSpacing.MINOR or axis.label.spacing == Plotter.LabelSpacing.MAJOR and is_major):
+				text: str = axis.label.get_text(axis_name, forward_position.components)
+				color: int = axis.label.get_color(axis_name, forward_position.components)
+				cr: int = (color >> 24) & 0xFF
+				cg: int = (color >> 16) & 0xFF
+				cb: int = (color >> 8) & 0xFF
+				ca: int = color & 0xFF
+				text_position: Vector.Vector = tick_pos_1 if tick_pos_1.distance_squared(image_center) < tick_pos_2.distance_squared(image_center) else tick_pos_2
+				(tw, th), tb = cv2.getTextSize(text, cv2.FONT_HERSHEY_SCRIPT_SIMPLEX, axis.label.font_scale, axis.label.font_thickness)
+
+				if axis.label.alignment == Plotter.LabelAlignment.MIDDLE:
+					raise NotImplementedError('Text alignment not implemented')
+				elif axis.label.alignment == Plotter.LabelAlignment.RIGHT:
+					raise NotImplementedError('Text alignment not implemented')
+
+				text_image: numpy.ndarray = numpy.zeros((size, size, 4), numpy.uint8)
+				text_image = cv2.rectangle(text_image, text_position.rounded(), (text_position + Vector.Vector(tw, -th)).rounded(), (0x22, 0x22, 0x22, 0xFF), -1)
+				cv2.putText(text_image, text, text_position.rounded(), cv2.FONT_HERSHEY_SCRIPT_SIMPLEX, axis.label.font_scale, (cr, cg, cb, ca), axis.label.font_thickness, cv2.LINE_AA)
+				matrix: numpy.ndarray = cv2.getRotationMatrix2D(text_position.rounded(), axis.label.angle, 1)
+				text_image = cv2.warpAffine(text_image, matrix, (size, size))
+				mask: numpy.ndarray = text_image[:, :, 3] > 0
+				image[mask] = text_image[mask]
+
 			tick_position = self.__source__.plot_point_to_image_point(backward_position, size)
 			tick_pos_1 = tick_position + tick
 			tick_pos_2 = tick_position - tick
 			cv2.line(image, tick_pos_1.rounded(), tick_pos_2.rounded(), (b, g, r, a), 1, cv2.LINE_AA)
+
+			if axis.label is not None and axis.label.spacing == Plotter.LabelSpacing.MINOR:
+				pass
+			elif axis.label is not None and axis.label.spacing == Plotter.LabelSpacing.MAJOR and is_major:
+				pass
 
 			forward_position += main_direction
 			backward_position -= main_direction

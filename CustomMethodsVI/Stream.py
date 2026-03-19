@@ -1445,7 +1445,7 @@ class LinqStream[T](typing.Reversible):
 		:raises InvalidArgumentException: If 'iterable' is not iterable
 		"""
 
-		Misc.raise_ifn(hasattr(iterable, '__iter__'), Exceptions.InvalidArgumentException(LinqStream.__init__, 'iterable', type(iterable)))
+		Misc.raise_ifn(isinstance(iterable, typing.Iterable), Exceptions.InvalidArgumentException(LinqStream.__init__, 'iterable', type(iterable)))
 		self.__source__: typing.Iterable[T] = iterable
 
 	def __contains__(self, item: T) -> bool:
@@ -1920,6 +1920,29 @@ class LinqStream[T](typing.Reversible):
 
 		Misc.raise_ifn(callable(filter_), Exceptions.InvalidArgumentException(LinqStream.filter, 'filter_', type(filter_)))
 		return LinqStream(x for x in self if filter_(x))
+
+	def split(self, filter_: typing.Callable[[T], collections.abc.Hashable], *groups: typing.Hashable) -> LinqStream[tuple[T, ...]]:
+		"""
+		Splits elements in this query based on the hashed result of the filter function
+		:param filter_: The filter function
+		:param groups: An optional set of groups to add to the internal mapping
+		:return: The modified query
+		:raises InvalidArgumentException: If 'filter_' is not callable
+		"""
+
+		Misc.raise_ifn(callable(filter_), Exceptions.InvalidArgumentException(LinqStream.filter, 'filter_', type(filter_)))
+
+		def __splitter__(linq: LinqStream[T]) -> typing.Iterator[tuple[T, ...]]:
+			splitter: collections.OrderedDict[int, list[T]] = collections.OrderedDict({hash(group): [] for group in groups})
+
+			for elem in linq:
+				bucket: int = hash(filter_(elem))
+				splitter.setdefault(bucket, []).append(elem)
+
+			for group in splitter.values():
+				yield tuple(group)
+
+		return LinqStream(__splitter__(self))
 
 	def assert_if(self, filter_: typing.Callable[[T], bool], exception: Exception = AssertionError('Assertion failed')):
 		"""

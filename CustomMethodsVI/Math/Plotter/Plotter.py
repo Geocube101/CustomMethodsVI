@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import collections.abc
 import cv2
+import enum
 import numpy
 import numpy.exceptions
 import numpy.polynomial.polyutils
@@ -90,6 +92,90 @@ class Plottable(object):
 		image: numpy.ndarray = Plottable.generate_image_plate(square_size, square_size)
 		self.__draw__(image, square_size)
 		return numpy.array(image)
+
+
+class LabelSpacing(enum.IntFlag):
+	MAJOR = 1
+	MINOR = 2
+
+
+class LabelAlignment(enum.IntEnum):
+	LEFT = 0
+	MIDDLE = 1
+	RIGHT = 2
+
+
+class AxisLabel:
+	def __init__(self, labeller: collections.abc.Callable[[str, tuple[float, ...]], str] = str, spacing: LabelSpacing = LabelSpacing.MAJOR, alignment: LabelAlignment = LabelAlignment.LEFT, color: int | collections.abc.Callable[[str, tuple[float, ...]], int] = ..., font_scale: float = 1, font_thickness: int = 1):
+		assert callable(labeller), 'Labeller not callable'
+		assert callable(color) or (isinstance(color, int) and 0x00 <= int(color) <= 0xFFFFFFFF)
+		assert isinstance(font_scale, (int, float)) and 0 <= (font_scale := float(font_scale))
+		assert isinstance(font_thickness, int) and (font_thickness := int(font_thickness)) > 0
+
+		self.__labeller__: collections.abc.Callable[[str, tuple[float, ...]], str] = labeller
+		self.__spacing__: LabelSpacing = LabelSpacing(spacing)
+		self.__alignment__: LabelAlignment = LabelAlignment(alignment)
+		self.__color__: int | collections.abc.Callable[[str, tuple[float, ...]], int] = color
+		self.__font_scale__: float = font_scale
+		self.__font_thickness__: int = font_thickness
+
+	def get_text(self, axis: str, point: tuple[float, ...]) -> str:
+		return str(self.labeller(axis, point))
+
+	def get_color(self, axis: str, point: tuple[float, ...]) -> int:
+		return int(self.color(axis, point) if callable(self.color) else self.color) & 0xFFFFFFFF
+
+	@property
+	def labeller(self) -> collections.abc.Callable[[str, tuple[float, ...]], str]:
+		return self.__labeller__
+
+	@labeller.setter
+	def labeller(self, labeller: collections.abc.Callable[[str, tuple[float, ...]], str]) -> None:
+		assert callable(labeller), 'Labeller not callable'
+		self.__labeller__ = labeller
+
+	@property
+	def spacing(self) -> LabelSpacing:
+		return self.__spacing__
+
+	@spacing.setter
+	def spacing(self, spacing: LabelSpacing) -> None:
+		self.__spacing__ = LabelSpacing(spacing)
+
+	@property
+	def alignment(self) -> LabelAlignment:
+		return self.__alignment__
+
+	@alignment.setter
+	def alignment(self, alignment: LabelAlignment) -> None:
+		self.__alignment__ = LabelAlignment(alignment)
+
+	@property
+	def color(self) -> int | collections.abc.Callable[[str, tuple[float, ...]], int]:
+		return self.__color__
+
+	@color.setter
+	def color(self, color: int | collections.abc.Callable[[str, tuple[float, ...]], int]) -> None:
+		assert callable(color) or (isinstance(color, int) and 0x00 <= int(color) <= 0xFFFFFFFF)
+		self.__color__ = color
+
+	@property
+	def font_scale(self) -> float:
+		return self.__font_scale__
+
+	@font_scale.setter
+	def font_scale(self, font_scale: float) -> None:
+		assert isinstance(font_scale, float) and 0 <= (font_scale := float(font_scale))
+		self.__font_scale__ = font_scale
+
+	@property
+	def font_thickness(self) -> int:
+		return self.__font_thickness__
+
+	@font_thickness.setter
+	def font_thickness(self, font_thickness: int) -> None:
+		assert isinstance(font_thickness, int) and (font_thickness := int(font_thickness)) > 0
+		self.__font_thickness__ = font_thickness
 
 
 class GridPlotDisplay:
@@ -207,4 +293,4 @@ class GridPlotDisplay:
 		return image
 
 
-__all__: list[str] = ['Plottable', 'GridPlotDisplay']
+__all__: list[str] = ['Plottable', 'GridPlotDisplay', 'LabelSpacing', 'LabelAlignment', 'AxisLabel']

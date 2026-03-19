@@ -460,6 +460,13 @@ class TransformMatrix2D:
 			self.m13, self.m23, self.m33
 		))
 
+	def to_numpy(self) -> numpy.ndarray:
+		"""
+		:return: This matrix as a numpy array
+		"""
+
+		return self.__matrix__.to_numpy()
+
 	@property
 	def m11(self) -> float:
 		return self[0, 0]
@@ -1029,7 +1036,7 @@ class TransformMatrix3D:
 			return Vector3(xt, yt, zt)
 		elif isinstance(vector, Vector2):
 			x, y = vector
-			z: float = 1
+			z: float = 0
 			w: float = 1
 			xt: float = x * m11 + y * m21 + z * m31 + w * m41
 			yt: float = x * m12 + y * m22 + z * m32 + w * m42
@@ -1051,6 +1058,13 @@ class TransformMatrix3D:
 			self.m13, self.m23, self.m33, self.m43,
 			self.m14, self.m24, self.m34, self.m44
 		))
+
+	def to_numpy(self) -> numpy.ndarray:
+		"""
+		:return: This matrix as a numpy array
+		"""
+
+		return self.__matrix__.to_numpy()
 
 	@property
 	def m11(self) -> float:
@@ -1232,6 +1246,48 @@ class Vector2:
 	@classmethod
 	def down(cls) -> Vector2:
 		return cls(0, -1)
+
+	@classmethod
+	def sum(cls, vector1: Vector2, vector2: Vector2, *vectors: Vector2) -> Vector2:
+		"""
+		Sums all vectors
+		:param vector1: The first vector
+		:param vector2: The second vector
+		:param vectors: The remaining vectors
+		:return: The sum of all vectors
+		"""
+
+		result: Vector2 = Vector2.zero()
+		vectors: tuple[Vector2, ...] = (vector1, vector2, *vectors)
+
+		for vector in vectors:
+			if not isinstance(vector, Vector2):
+				raise TypeError('One or more vectors is not a Vector2 instance')
+
+			result += vector
+
+		return result
+
+	@classmethod
+	def average(cls, vector1: Vector2, vector2: Vector2, *vectors: Vector2) -> Vector2:
+		"""
+		Averages all vectors
+		:param vector1: The first vector
+		:param vector2: The second vector
+		:param vectors: The remaining vectors
+		:return: The average of all vectors
+		"""
+
+		result: Vector2 = Vector2.zero()
+		vectors: tuple[Vector2, ...] = (vector1, vector2, *vectors)
+
+		for vector in vectors:
+			if not isinstance(vector, Vector2):
+				raise TypeError('One or more vectors is not a Vector2 instance')
+
+			result += vector
+
+		return result / len(vectors)
 
 	def __init__(self, x: float, y: float):
 		Misc.raise_ifn(isinstance(x, (int, float)), Exceptions.InvalidArgumentException(Vector2.__init__, 'x', type(x), (float,)))
@@ -1435,6 +1491,48 @@ class Vector3:
 	@classmethod
 	def left(cls) -> Vector3:
 		return cls(0, 0, -1)
+
+	@classmethod
+	def sum(cls, vector1: Vector3, vector2: Vector3, *vectors: Vector3) -> Vector3:
+		"""
+		Sums all vectors
+		:param vector1: The first vector
+		:param vector2: The second vector
+		:param vectors: The remaining vectors
+		:return: The sum of all vectors
+		"""
+
+		result: Vector3 = Vector3.zero()
+		vectors: tuple[Vector3, ...] = (vector1, vector2, *vectors)
+
+		for vector in vectors:
+			if not isinstance(vector, Vector3):
+				raise TypeError('One or more vectors is not a Vector3 instance')
+
+			result += vector
+
+		return result
+
+	@classmethod
+	def average(cls, vector1: Vector3, vector2: Vector3, *vectors: Vector3) -> Vector3:
+		"""
+		Averages all vectors
+		:param vector1: The first vector
+		:param vector2: The second vector
+		:param vectors: The remaining vectors
+		:return: The average of all vectors
+		"""
+
+		result: Vector3 = Vector3.zero()
+		vectors: tuple[Vector3, ...] = (vector1, vector2, *vectors)
+
+		for vector in vectors:
+			if not isinstance(vector, Vector3):
+				raise TypeError('One or more vectors is not a Vector2 instance')
+
+			result += vector
+
+		return result / len(vectors)
 
 	def __init__(self, x: float, y: float, z: float):
 		Misc.raise_ifn(isinstance(x, (int, float)), Exceptions.InvalidArgumentException(Vector3.__init__, 'x', type(x), (float,)))
@@ -1676,6 +1774,48 @@ class Vector4:
 	def past(cls) -> Vector4:
 		return cls(0, 0, 0, -1)
 
+	@classmethod
+	def sum(cls, vector1: Vector4, vector2: Vector4, *vectors: Vector4) -> Vector4:
+		"""
+		Sums all vectors
+		:param vector1: The first vector
+		:param vector2: The second vector
+		:param vectors: The remaining vectors
+		:return: The sum of all vectors
+		"""
+
+		result: Vector4 = Vector4.zero()
+		vectors: tuple[Vector4, ...] = (vector1, vector2, *vectors)
+
+		for vector in vectors:
+			if not isinstance(vector, Vector4):
+				raise TypeError('One or more vectors is not a Vector4 instance')
+
+			result += vector
+
+		return result
+
+	@classmethod
+	def average(cls, vector1: Vector4, vector2: Vector4, *vectors: Vector4) -> Vector4:
+		"""
+		Averages all vectors
+		:param vector1: The first vector
+		:param vector2: The second vector
+		:param vectors: The remaining vectors
+		:return: The average of all vectors
+		"""
+
+		result: Vector4 = Vector4.zero()
+		vectors: tuple[Vector4, ...] = (vector1, vector2, *vectors)
+
+		for vector in vectors:
+			if not isinstance(vector, Vector4):
+				raise TypeError('One or more vectors is not a Vector4 instance')
+
+			result += vector
+
+		return result / len(vectors)
+
 	def __init__(self, x: float, y: float, z: float, w: float):
 		Misc.raise_ifn(isinstance(x, (int, float)), Exceptions.InvalidArgumentException(Vector4.__init__, 'x', type(x), (float,)))
 		Misc.raise_ifn(isinstance(y, (int, float)), Exceptions.InvalidArgumentException(Vector4.__init__, 'y', type(y), (float,)))
@@ -1878,6 +2018,22 @@ class Vector4:
 	@property
 	def components(self) -> tuple[float, float, float, float]:
 		return self.__components__
+
+
+class Line3D:
+	def __init__(self, start: Vector3, end: Vector3):
+		Misc.raise_ifn(isinstance(start, Vector3), Exceptions.InvalidArgumentException(Line3D.__init__, 'start', type(start), (Vector3,)))
+		Misc.raise_ifn(isinstance(end, Vector3), Exceptions.InvalidArgumentException(Line3D.__init__, 'end', type(end), (Vector3,)))
+		self.__start__: Vector3 = start
+		self.__end__: Vector3 = end
+
+	@property
+	def start(self) -> Vector3:
+		return self.__start__
+
+	@property
+	def end(self) -> Vector3:
+		return self.__end__
 
 
 Vector_T = Vector2 | Vector3 | Vector4

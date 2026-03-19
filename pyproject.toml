@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "CustomMethodsVI"
 version = "1.0.3"
 dependencies = [
-    "dearpygui",
+    "dearpygui; os_name == 'nt'",
     "requests",
     "windows-curses; os_name == 'nt'",
     "pywin32; os_name == 'nt'",

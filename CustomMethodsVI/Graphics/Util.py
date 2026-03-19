@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import colorsys
+
 from . import Math
 
 from .. import Exceptions
@@ -189,6 +191,98 @@ class Color:
 	def __str__(self) -> str:
 		return f'#{self.r:02X}{self.g:02X}{self.b:02X}{self.a:02X}'
 
+	def __add__(self, other: Color | int) -> Color:
+		if isinstance(other, Color):
+			return Color(*[Misc.clamp(a + b, 0x00, 0xFF) for a, b in zip(self.rgba, other.rgba)])
+		elif isinstance(other, int):
+			return Color(*[Misc.clamp(a + other, 0x00, 0xFF) for a in self.rgba])
+		else:
+			return NotImplemented
+
+	def __sub__(self, other: Color | int) -> Color:
+		if isinstance(other, Color):
+			return Color(*[Misc.clamp(a - b, 0x00, 0xFF) for a, b in zip(self.rgba, other.rgba)])
+		elif isinstance(other, int):
+			return Color(*[Misc.clamp(a - other, 0x00, 0xFF) for a in self.rgba])
+		else:
+			return NotImplemented
+
+	def __mul__(self, other: Math.Vector4 | Math.Vector3 | int | float) -> Color:
+		if isinstance(other, Math.Vector4):
+			return Color(*[Misc.clamp(a * b, 0x00, 0xFF) for a, b in zip(self.rgba, other)])
+		elif isinstance(other, Math.Vector3):
+			return Color(*[Misc.clamp(a * b, 0x00, 0xFF) for a, b in zip(self.rgba, Math.Vector4(*other, 1))])
+		elif isinstance(other, (float, int)):
+			return Color(*[Misc.clamp(round(a * other), 0x00, 0xFF) for a in self.rgba])
+		else:
+			return NotImplemented
+
+	def __truediv__(self, other: Math.Vector4 | Math.Vector3 | int | float) -> Color:
+		if isinstance(other, Math.Vector4):
+			return Color(*[Misc.clamp(a / b, 0x00, 0xFF) for a, b in zip(self.rgba, other)])
+		elif isinstance(other, Math.Vector3):
+			return Color(*[Misc.clamp(a / b, 0x00, 0xFF) for a, b in zip(self.rgba, Math.Vector4(*other, 1))])
+		elif isinstance(other, (float, int)):
+			return Color(*[Misc.clamp(round(a / other), 0x00, 0xFF) for a in self.rgba])
+		else:
+			return NotImplemented
+
+	def __floordiv__(self, other: Math.Vector4 | Math.Vector3 | int | float) -> Color:
+		if isinstance(other, Math.Vector4):
+			return Color(*[Misc.clamp(a // b, 0x00, 0xFF) for a, b in zip(self.rgba, other)])
+		elif isinstance(other, Math.Vector3):
+			return Color(*[Misc.clamp(a // b, 0x00, 0xFF) for a, b in zip(self.rgba, Math.Vector4(*other, 1))])
+		elif isinstance(other, (float, int)):
+			return Color(*[Misc.clamp(int(a // other), 0x00, 0xFF) for a in self.rgba])
+		else:
+			return NotImplemented
+
+	def __radd__(self, other: Color | int) -> Color:
+		if isinstance(other, Color):
+			return Color(*[Misc.clamp(b + a, 0x00, 0xFF) for a, b in zip(self.rgba, other.rgba)])
+		elif isinstance(other, int):
+			return Color(*[Misc.clamp(other + a, 0x00, 0xFF) for a in self.rgba])
+		else:
+			return NotImplemented
+
+	def __rsub__(self, other: Color | int) -> Color:
+		if isinstance(other, Color):
+			return Color(*[Misc.clamp(b - a, 0x00, 0xFF) for a, b in zip(self.rgba, other.rgba)])
+		elif isinstance(other, int):
+			return Color(*[Misc.clamp(other - a, 0x00, 0xFF) for a in self.rgba])
+		else:
+			return NotImplemented
+
+	def __rmul__(self, other: Math.Vector4 | Math.Vector3 | int | float) -> Color:
+		if isinstance(other, Math.Vector4):
+			return Color(*[Misc.clamp(b * a, 0x00, 0xFF) for a, b in zip(self.rgba, other)])
+		elif isinstance(other, Math.Vector3):
+			return Color(*[Misc.clamp(b * a, 0x00, 0xFF) for a, b in zip(self.rgba, Math.Vector4(*other, 1))])
+		elif isinstance(other, (float, int)):
+			return Color(*[Misc.clamp(round(other * a), 0x00, 0xFF) for a in self.rgba])
+		else:
+			return NotImplemented
+
+	def __rtruediv__(self, other: Math.Vector4 | Math.Vector3 | int | float) -> Color:
+		if isinstance(other, Math.Vector4):
+			return Color(*[Misc.clamp(b / a, 0x00, 0xFF) for a, b in zip(self.rgba, other)])
+		elif isinstance(other, Math.Vector3):
+			return Color(*[Misc.clamp(b / a, 0x00, 0xFF) for a, b in zip(self.rgba, Math.Vector4(*other, 1))])
+		elif isinstance(other, (float, int)):
+			return Color(*[Misc.clamp(round(other / a), 0x00, 0xFF) for a in self.rgba])
+		else:
+			return NotImplemented
+
+	def __rfloordiv__(self, other: Math.Vector4 | Math.Vector3 | int | float) -> Color:
+		if isinstance(other, Math.Vector4):
+			return Color(*[Misc.clamp(b // a, 0x00, 0xFF) for a, b in zip(self.rgba, other)])
+		elif isinstance(other, Math.Vector3):
+			return Color(*[Misc.clamp(b // a, 0x00, 0xFF) for a, b in zip(self.rgba, Math.Vector4(*other, 1))])
+		elif isinstance(other, (float, int)):
+			return Color(*[Misc.clamp(int(other // a), 0x00, 0xFF) for a in self.rgba])
+		else:
+			return NotImplemented
+
 	def to_integer32(self) -> int:
 		"""
 		:return: This color packed into a 32-bit integer
@@ -202,6 +296,11 @@ class Color:
 		"""
 
 		return Math.Vector4(self.r / 0xFF, self.g / 0xFF, self.b / 0xFF, self.a / 0xFF)
+
+	def to_hsva(self) -> tuple[int, int, int, int]:
+		r, g, b, a = self.__color__
+		h, s, v = colorsys.rgb_to_hsv(r / 0xFF, g / 0xFF, b / 0xFF)
+		return round(h * 360), round(s * 100), round(v * 100), a
 
 	@property
 	def r(self) -> int:
@@ -234,6 +333,24 @@ class Color:
 		"""
 
 		return self.__color__[3]
+
+	@property
+	def rgb(self) -> tuple[int, int, int]:
+		"""
+		:return: This color as an RGB tuple
+		"""
+
+		r, g, b, a = self.__color__
+		return r, g, b
+
+	@property
+	def bgr(self) -> tuple[int, int, int]:
+		"""
+		:return: This color as a BGR tuple
+		"""
+
+		r, g, b, a = self.__color__
+		return b, g, r
 
 	@property
 	def rgba(self) -> tuple[int, int, int, int]:
