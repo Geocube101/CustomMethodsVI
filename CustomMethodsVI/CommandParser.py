@@ -1377,13 +1377,11 @@ class CommandParser:
 		if len(arguments) == 0:
 			return -1
 
-		command: typing.Optional[Command] = ...
-
 		try:
 			command_arguments: list[str] = shlex.split(arguments)
 			arguments: tuple[String.String, ...] = tuple(String.String(arg) for arg in command_arguments)
 			command = self.get_command_by_name(arguments[0])
-			command, tree = (command, None) if command is None else command.execute(arguments[1:], handle_override_arguments=False)
+			tree = None if command is None else command.execute(arguments[1:], handle_override_arguments=False)
 
 			if command is None:
 				sys.stderr.write(f'No such command - \'{command_arguments[0]}\'\n')
