@@ -48,10 +48,9 @@ class InvalidArgumentException(TypeError):
 				super().__init__(message if isinstance(message, str) else '')
 				return
 
-		caller_annotations: dict[str, ...] = caller.__annotations__
 		annotations: typing.Union | type
 
-		if parameter_types is None and (annotations := caller_annotations.get(parameter_name)) is not None:
+		if parameter_types is None and hasattr(caller, '__annotations__') and (annotations := caller.__annotations__.get(parameter_name)) is not None:
 			parameter_types: tuple[type | str, ...] = (f"'{annotations}'",) if isinstance(annotations, (type, type(typing.Type), str)) else tuple(f"'{x}'" for x in annotations.__args__)
 			type_list: str = f'either {", ".join(parameter_types[:-1])}{f" or {parameter_types[-1]}" if len(parameter_types) > 1 else ""}' if len(parameter_types) > 1 else parameter_types[0]
 		elif parameter_types is None:

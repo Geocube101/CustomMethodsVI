@@ -7660,7 +7660,7 @@ class MySubTerminal(MyActivatableWidget):
 		self.__scroll__: list[int] = [0, 0]
 		self.__cursor__: tuple[int, int, int, int] = (0, 0, 0, 0)
 		self.__last_mouse_info__: Terminal.Struct.MouseInfo = Terminal.Struct.MouseInfo(-1, 0, 0, 0, 0)
-		self.__event_queue__: Iterable.SpinQueue[int] = Iterable.SpinQueue(10)
+		self.__event_queue__: Iterable.Sequence.SpinQueue[int] = Iterable.Sequence.SpinQueue(10)
 		self.__auto_scroll__: int = 10
 		self.__tab_size__: int = 4
 		self.__active_page__: MySubTerminal | None = None

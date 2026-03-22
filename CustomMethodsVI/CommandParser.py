@@ -24,12 +24,47 @@ class ArgumentRequiredException(CommandException):
 	pass
 
 
+class ParserArgumentOverride(StopIteration):
+	def __init__(self, command: Command, parent: Command, group: CommandArgumentGroup, argument: CommandArgument, values: tuple[typing.Any, ...]):
+		Misc.raise_ifn(isinstance(command, Command), Exceptions.InvalidArgumentException(parameter_name='command'))
+		Misc.raise_ifn(isinstance(parent, Command), Exceptions.InvalidArgumentException(parameter_name='parent'))
+		Misc.raise_ifn(isinstance(group, CommandArgumentGroup), Exceptions.InvalidArgumentException(parameter_name='group'))
+		Misc.raise_ifn(isinstance(argument, CommandArgument), Exceptions.InvalidArgumentException(parameter_name='argument'))
+		Misc.raise_ifn(isinstance(values, tuple), Exceptions.InvalidArgumentException(parameter_name='values'))
+
+		self.__command__: Command = command
+		self.__parent__: Command = parent
+		self.__group__: CommandArgumentGroup = group
+		self.__argument__: CommandArgument = argument
+		self.__values__: tuple[typing.Any, ...] = tuple(values)
+
+	@property
+	def command(self) -> Command:
+		return self.__command__
+
+	@property
+	def parent(self) -> Command:
+		return self.__parent__
+
+	@property
+	def argument_group(self) -> CommandArgumentGroup:
+		return self.__group__
+
+	@property
+	def argument(self) -> CommandArgument:
+		return self.__argument__
+
+	@property
+	def values(self) -> tuple[typing.Any, ...]:
+		return self.__values__
+
+
 class NoCommandHandlerException(RuntimeError):
 	pass
 
 
 class CommandArgument:
-	def __init__(self, name: str, description: str, min_count: int, max_count: int, named: bool, aliases: typing.Iterable[str] = ..., default: typing.Any = ...):
+	def __init__(self, name: str, *, description: str = '', min_count: int = 0, max_count: int = None, named: bool = False, aliases: typing.Iterable[str] = ..., default: typing.Any = ..., override_parsing: bool = False, store: str = ...):
 		"""
 		Class representing a single command line argument
 		:param name: The argument name
@@ -39,6 +74,8 @@ class CommandArgument:
 		:param named: Whether the argument name must be explicitly supplied
 		:param aliases: The alternate names that can be used to trigger this argument
 		:param default: The default value if no command line value is supplied
+		:param override_parsing: If true, and this argument is supplied, it will be the only argument value returned (used for help arguments)
+		:param store: The name to store this argument's values as in the parsed CommandArguments object
 		"""
 
 		max_count = 0xFFFFFFFFFFFFFFFF if max_count is None else max_count
@@ -47,13 +84,16 @@ class CommandArgument:
 		Misc.raise_ifn(isinstance(min_count, int) and (min_count := int(min_count)) >= 0, Exceptions.InvalidArgumentException(parameter_name='min_count', message='\'min_count\' must be an integer >= 0'))
 		Misc.raise_ifn(isinstance(max_count, int) and (max_count := int(max_count)) >= min_count, Exceptions.InvalidArgumentException(parameter_name='max_count', message='\'max_count\' must be an integer >= \'min_count\''))
 		Misc.raise_ifn(aliases is ... or (isinstance(aliases, typing.Iterable) and len(aliases := tuple(aliases)) >= 0 and all(isinstance(x, str) for x in aliases)), Exceptions.InvalidArgumentException(parameter_name='aliases'))
+		Misc.raise_ifn(store is ... or (isinstance(store, str) and len(store := str(store)) > 0), Exceptions.InvalidArgumentException(parameter_name='store', message='\'store\' must be a non-empty string'))
 
 		self.__argument_name__: str = name
 		self.__description__: str = str(description)
 		self.__count__: tuple[int, int] = (min_count, max_count)
 		self.__named__: bool = bool(named)
+		self.__override__: bool = bool(override_parsing)
 		self.__aliases__: tuple[str, ...] = () if aliases is ... else aliases
 		self.__default__: typing.Any = default
+		self.__store__: str = store
 
 		for name in self.get_names():
 			if not self.is_name_valid(name):
@@ -162,6 +202,14 @@ class CommandArgument:
 
 		return values
 
+	def get_default(self) -> tuple[typing.Any, ...]:
+		"""
+		:return: This argument's default value as should be added to the tree
+		"""
+
+		default: typing.Any = self.default
+		return () if default is ... else tuple(default) if isinstance(default, tuple) else (default,)
+
 	@property
 	def name(self) -> str:
 		"""
@@ -169,6 +217,14 @@ class CommandArgument:
 		"""
 
 		return self.__argument_name__
+
+	@property
+	def store_name(self) -> str:
+		"""
+		:return: The name to store this argument's values as in the parsed CommandArguments object
+		"""
+
+		return self.name if self.__store__ is ... else self.__store__
 
 	@property
 	def description(self) -> str:
@@ -193,6 +249,14 @@ class CommandArgument:
 		"""
 
 		return self.__named__
+
+	@property
+	def override_parsing(self) -> bool:
+		"""
+		:return: If true, and this argument is supplied, it will be the only argument value returned (used for help arguments)
+		"""
+
+		return self.__override__
 
 	@property
 	def min_nargs(self) -> int:
@@ -287,7 +351,7 @@ class LiteralCommandArgument(CommandArgument):
 		else:
 			raise ValueError(f'Unsupported type: \'{argument_type.__name__}\'')
 
-	def __init__(self, name: str, description: str, min_count: int, max_count: int, named: bool, pattern: str, allowed_types: typing.Iterable[str | type], default: typing.Any = ..., aliases: typing.Iterable[str] = ...):
+	def __init__(self, name: str, *, description: str = '', min_count: int = 0, max_count: int = None, named: bool = False, pattern: str = '', allowed_types: typing.Iterable[str | type] = (), default: typing.Any = ..., aliases: typing.Iterable[str] = ..., override_parsing: bool = False, store: str = ...):
 		"""
 		Class representing a single literal command line argument
 		:param name: The argument name
@@ -299,9 +363,11 @@ class LiteralCommandArgument(CommandArgument):
 		:param allowed_types: A set of types the input must be convertable to
 		:param default: The default value if no command line value is supplied
 		:param aliases: The alternate names that can be used to trigger this argument
+		:param override_parsing: If true, and this argument is supplied, it will be the only argument value returned (used for help arguments)
+		:param store: The name to store this argument's values as in the parsed CommandArguments object
 		"""
 
-		super().__init__(name, description, min_count, max_count, named, aliases, default)
+		super().__init__(name, description=description, min_count=min_count, max_count=max_count, named=named, aliases=aliases, default=default, override_parsing=override_parsing, store=store)
 		Misc.raise_ifn(isinstance(pattern, str), Exceptions.InvalidArgumentException(parameter_name='pattern'))
 		Misc.raise_ifn(isinstance(allowed_types, typing.Iterable) and len(allowed_types := tuple(allowed_types)) >= 0 and all(isinstance(t, (str, type)) for t in allowed_types), Exceptions.InvalidArgumentException(parameter_name='allowed_types'))
 		types: tuple[type, ...] = tuple(LiteralCommandArgument.__convert_string_to_type(x) for x in allowed_types)
@@ -374,7 +440,7 @@ class LiteralCommandArgument(CommandArgument):
 
 
 class FlagCommandArgument(CommandArgument):
-	def __init__(self, name: str, description: str, min_count: int, max_count: int, aliases: typing.Iterable[str] = ...):
+	def __init__(self, name: str, *, description: str = '', min_count: int = 0, max_count: int = None, aliases: typing.Iterable[str] = ..., override_parsing: bool = False, store: str = ...):
 		"""
 		Class representing a single command line flag
 		:param name: The flag name
@@ -382,9 +448,11 @@ class FlagCommandArgument(CommandArgument):
 		:param min_count: The minimum number of flags that must be supplied
 		:param max_count:The maximum number of flags that must be supplied
 		:param aliases: The alternate names that can be used to trigger this flag
+		:param override_parsing: If true, and this argument is supplied, it will be the only argument value returned (used for help arguments)
+		:param store: The name to store this argument's values as in the parsed CommandArguments object
 		"""
 
-		super().__init__(name, description, min_count, max_count, False, aliases)
+		super().__init__(name, description=description, min_count=min_count, max_count=max_count, named=False, aliases=aliases, override_parsing=override_parsing, store=store)
 
 	def is_name_valid(self, name: str) -> bool:
 		return re.fullmatch(r'-[a-zA-Z]', name) is not None or re.fullmatch(r'--[a-zA-Z]+', name) is not None
@@ -400,30 +468,60 @@ class FlagCommandArgument(CommandArgument):
 		return ()
 
 
-class HelpCommandArgument(FlagCommandArgument):
+class BooleanFlagCommandArgument(FlagCommandArgument):
+	def __init__(self, name: str, *, description: str = '', inverted: bool = False, aliases: typing.Iterable[str] = ..., override_parsing: bool = False, store: str = ...):
+		"""
+		Class representing a single command line boolean flag
+		:param name: The flag name
+		:param description: The flag description
+		:param inverted: Whether the stored value is inverted (false when applied instead of true)
+		:param aliases: The alternate names that can be used to trigger this flag
+		:param override_parsing: If true, and this argument is supplied, it will be the only argument value returned (used for help arguments)
+		:param store: The name to store this argument's values as in the parsed CommandArguments object
+		"""
+
+		super().__init__(name, description=description, min_count=0, max_count=1, aliases=aliases, override_parsing=override_parsing, store=store)
+		self.__inverted__: bool = bool(inverted)
+
+	def resolve(self, values: typing.Iterable[typing.Any]) -> typing.Any:
+		result: bool = Stream.LinqStream(values).any()
+		return not result if self.is_inverted else result
+
+	@property
+	def is_inverted(self) -> bool:
+		"""
+		:return: Whether the stored value is inverted (false when applied instead of true)
+		"""
+
+		return self.__inverted__
+
+
+class HelpCommandArgument(BooleanFlagCommandArgument):
 	def __init__(self):
 		"""
 		Class representing a single help command line argument (--help, -h)
 		"""
 
-		super().__init__('--help', 'Displays help and exits', 0, 1, ('-h',))
+		super().__init__('--help', description='Displays help and exits', inverted=False, aliases=('-h',), override_parsing=True, store='help')
 
 
 class ChoicesCommandArgument(CommandArgument):
-	def __init__(self, name: str, description: str, min_count: int, max_count: int, named: bool, choices: typing.Iterable[str], default: typing.Any = ..., aliases: typing.Iterable[str] = ...):
+	def __init__(self, name: str, choices: typing.Iterable[str], *, description: str = '', min_count: int = 0, max_count: int = None, named: bool = False, default: typing.Any = ..., aliases: typing.Iterable[str] = ..., override_parsing: bool = False, store: str = ...):
 		"""
 		Class representing a single choice command line argument
 		:param name: The argument name
+		:param choices: The allowed choices an input can be
 		:param description: The argument description
 		:param min_count: The minimum number of arguments that must be supplied
 		:param max_count:The maximum number of arguments that must be supplied
 		:param named: Whether the argument name must be explicitly supplied
-		:param choices: The allowed choices an input can be
 		:param default: The default value if no command line value is supplied
 		:param aliases: The alternate names that can be used to trigger this argument
+		:param override_parsing: If true, and this argument is supplied, it will be the only argument value returned (used for help arguments)
+		:param store: The name to store this argument's values as in the parsed CommandArguments object
 		"""
 
-		super().__init__(name, description, min_count, max_count, named, aliases)
+		super().__init__(name, description=description, min_count=min_count, max_count=max_count, named=named, aliases=aliases, default=default, override_parsing=override_parsing, store=store)
 		Misc.raise_ifn(isinstance(choices, typing.Iterable) and len(choices := tuple(choices)) > 0 and all(isinstance(x, str) for x in choices), Exceptions.InvalidArgumentException(parameter_name='choices', message='Choices must be an iterable of strings with a length above 0'))
 		self.__choices__: tuple[str, ...] = choices
 
@@ -547,7 +645,7 @@ class CommandArgumentGroup:
 		Misc.warn_if(argument.is_required and self.is_mutually_exclusive, RuntimeWarning('Use of required argument in mutually exclusive argument group - If an argument must be supplied, set the parent group \'required\' attribute to \'True\''))
 		self.__arguments__.append(argument)
 
-	def create_literal_argument(self, name: str, *, description: str = '', min_count: int = 0, max_count: int = None, named: bool = False, pattern: str = '', allowed_types: typing.Iterable[str | type] = (), aliases: typing.Iterable[str] = ..., default: typing.Any = ...) -> LiteralCommandArgument:
+	def create_literal_argument(self, name: str, *, description: str = '', min_count: int = 0, max_count: int = None, named: bool = False, pattern: str = '', allowed_types: typing.Iterable[str | type] = (), aliases: typing.Iterable[str] = ..., default: typing.Any = ..., override_parsing: bool = False, store: str = ...) -> LiteralCommandArgument:
 		"""
 		Creates a literal argument and adds it to this argument group
 		:param name: The argument name
@@ -559,15 +657,17 @@ class CommandArgumentGroup:
 		:param allowed_types: The allowed types a command line argument must be convertible to or an empty iterable to allow all
 		:param aliases: The argument aliases
 		:param default: The default value if no command line value is supplied
+		:param override_parsing: If true, and this argument is supplied, it will be the only argument value returned (used for help arguments)
+		:param store: The name to store this argument's values as in the parsed CommandArguments object
 		:return: The new argument
 		:raise NameError: If a subgroup or argument with this name already exists
 		"""
 
-		argument: LiteralCommandArgument = LiteralCommandArgument(name, description, min_count, max_count, named, pattern, allowed_types, aliases)
+		argument: LiteralCommandArgument = LiteralCommandArgument(name, description=description, min_count=min_count, max_count=max_count, named=named, pattern=pattern, allowed_types=allowed_types, aliases=aliases, default=default, override_parsing=override_parsing, store=store)
 		self.add_argument(argument)
 		return argument
 
-	def create_flag(self, name: str, *, description: str = '', min_count: int = 0, max_count: int = None, aliases: typing.Iterable[str] = ...) -> FlagCommandArgument:
+	def create_flag(self, name: str, *, description: str = '', min_count: int = 0, max_count: int = None, aliases: typing.Iterable[str] = ..., override_parsing: bool = False, store: str = ...) -> FlagCommandArgument:
 		"""
 		Creates a flag argument and adds it to this argument group
 		:param name: The argument name
@@ -575,15 +675,34 @@ class CommandArgumentGroup:
 		:param min_count: The minimum number of accepted command line arguments
 		:param max_count: The maximum number of accepted command line arguments
 		:param aliases: The argument aliases
+		:param override_parsing: If true, and this argument is supplied, it will be the only argument value returned (used for help arguments)
+		:param store: The name to store this argument's values as in the parsed CommandArguments object
 		:return: The new argument
 		:raise NameError: If a subgroup or argument with this name already exists
 		"""
 
-		argument: FlagCommandArgument = FlagCommandArgument(name, description, min_count, max_count, aliases)
+		argument: FlagCommandArgument = FlagCommandArgument(name, description=description, min_count=min_count, max_count=max_count, aliases=aliases, override_parsing=override_parsing, store=store)
 		self.add_argument(argument)
 		return argument
 
-	def create_choices_argument(self, name: str, choices: typing.Iterable[str], *, description: str = '', min_count: int = 0, max_count: int = None, named: bool = False, aliases: typing.Iterable[str] = ..., default: typing.Any = ...) -> ChoicesCommandArgument:
+	def create_boolean_flag(self, name: str, *, description: str = '', inverted: bool = False, aliases: typing.Iterable[str] = ..., override_parsing: bool = False, store: str = ...) -> FlagCommandArgument:
+		"""
+		Creates a boolean flag argument and adds it to this argument group
+		:param name: The argument name
+		:param description: The argument description
+		:param inverted: Whether the stored value is inverted (false when applied instead of true)
+		:param aliases: The argument aliases
+		:param override_parsing: If true, and this argument is supplied, it will be the only argument value returned (used for help arguments)
+		:param store: The name to store this argument's values as in the parsed CommandArguments object
+		:return: The new argument
+		:raise NameError: If a subgroup or argument with this name already exists
+		"""
+
+		argument: BooleanFlagCommandArgument = BooleanFlagCommandArgument(name, description=description, inverted=inverted, aliases=aliases, override_parsing=override_parsing, store=store)
+		self.add_argument(argument)
+		return argument
+
+	def create_choices_argument(self, name: str, choices: typing.Iterable[str], *, description: str = '', min_count: int = 0, max_count: int = None, named: bool = False, aliases: typing.Iterable[str] = ..., default: typing.Any = ..., override_parsing: bool = False, store: str = ...) -> ChoicesCommandArgument:
 		"""
 		Creates a choices argument and adds it to this argument group
 		:param name: The argument name
@@ -594,11 +713,13 @@ class CommandArgumentGroup:
 		:param choices: The list of allowed choices a command line argument must be in
 		:param aliases: The argument aliases
 		:param default: The default value if no command line value is supplied
+		:param override_parsing: If true, and this argument is supplied, it will be the only argument value returned (used for help arguments)
+		:param store: The name to store this argument's values as in the parsed CommandArguments object
 		:return: The new argument
 		:raise NameError: If a subgroup or argument with this name already exists
 		"""
 
-		argument: ChoicesCommandArgument = ChoicesCommandArgument(name, description, min_count, max_count, named, choices, aliases)
+		argument: ChoicesCommandArgument = ChoicesCommandArgument(name, choices, description=description, min_count=min_count, max_count=max_count, named=named, default=default, aliases=aliases, override_parsing=override_parsing, store=store)
 		self.add_argument(argument)
 		return argument
 
@@ -700,6 +821,7 @@ class CommandArgumentGroup:
 
 		toplevel: Command = caller[0]
 		parent: CommandArgumentGroup = ... if len(caller) == 1 else self
+		command_parent: Command = Stream.LinqStream(reversed(caller)).instance_of(Command).first()
 
 		if self.is_mutually_exclusive:
 			matched: str = ...
@@ -739,7 +861,7 @@ class CommandArgumentGroup:
 			matching_args: list[String.String] = ...
 			named, remaining = Stream.LinqStream(self.get_command_arguments()).split(lambda arg: arg.is_named, True, False).collect()
 
-			for arg in named:
+			for arg in sorted(named, reverse=True, key=lambda a: a.override_parsing):
 				while any(arg.is_name(a) for a in arguments):
 					for i, cmd in enumerate(arguments):
 						if arg.is_name(cmd):
@@ -749,24 +871,31 @@ class CommandArgumentGroup:
 								return None
 							elif used_count == 0 or values is None:
 								continue
+							elif arg.override_parsing:
+								raise ParserArgumentOverride(caller[0], command_parent, self, arg, values)
 
 							tree.add_filled_argument(arg, values)
 							del arguments[i:i + used_count + 1]
 
-				if arg.is_required and arg not in tree:
+				if arg.is_required and arg not in tree and (default := arg.get_default()) is not ...:
+					tree.add_filled_argument(arg, default)
+				elif arg.is_required and arg not in tree:
 					raise ArgumentRequiredException(f'{".".join(cmd.name for cmd in caller)}: Named argument \'{arg.name}\' is required')
 				elif (count := Stream.LinqStream(tree[arg]).count()) > arg.max_nargs:
 					raise CommandException(f'{".".join(cmd.name for cmd in caller)}: Named argument \'{arg.name}\' accepts no more than {arg.max_nargs} value{"" if arg.max_nargs == 1 else "s"}, got {count}')
 
-			for arg in remaining:
+			for arg in sorted(remaining, reverse=True, key=lambda a: a.override_parsing):
 				used_count, values = arg.match(arguments)
 
-				if (used_count == 0 or values is None) and arg.is_required:
+				if (used_count == 0 or values is None) and (default := arg.get_default()) is not ...:
+					tree.add_filled_argument(arg, default)
+					continue
+				elif (used_count == 0 or values is None) and arg.is_required:
 					return None
-				elif (used_count == 0 or values is None) and (default := arg.default) is not ...:
-					tree.add_filled_argument(arg, (default,))
 				elif used_count == 0 or values is None:
 					continue
+				elif arg.override_parsing:
+					raise ParserArgumentOverride(caller[0], command_parent, self, arg, values)
 
 				tree.add_filled_argument(arg, values)
 				del arguments[:used_count]
@@ -893,7 +1022,7 @@ class Command:
 
 		self.get_argument_group().add_argument(argument)
 
-	def create_literal_argument(self, name: str, *, description: str = '', min_count: int = 0, max_count: int = None, named: bool = False, pattern: str = '', allowed_types: typing.Iterable[str | type] = (), aliases: typing.Iterable[str] = ..., default: typing.Any = ...) -> LiteralCommandArgument:
+	def create_literal_argument(self, name: str, *, description: str = '', min_count: int = 0, max_count: int = None, named: bool = False, pattern: str = '', allowed_types: typing.Iterable[str | type] = (), aliases: typing.Iterable[str] = ..., default: typing.Any = ..., override_parsing: bool = False, store: str = ...) -> LiteralCommandArgument:
 		"""
 		Creates a literal argument and adds it to this argument group
 		:param name: The argument name
@@ -905,13 +1034,15 @@ class Command:
 		:param allowed_types: The allowed types a command line argument must be convertible to or an empty iterable to allow all
 		:param aliases: The argument aliases
 		:param default: The default value if no command line value is supplied
+		:param override_parsing: If true, and this argument is supplied, it will be the only argument value returned (used for help arguments)
+		:param store: The name to store this argument's values as in the parsed CommandArguments object
 		:return: The new argument
 		:raise NameError: If a subgroup or argument with this name already exists
 		"""
 
-		return self.get_argument_group().create_literal_argument(name, description=description, min_count=min_count, max_count=max_count, named=named, pattern=pattern, allowed_types=allowed_types, aliases=aliases)
+		return self.get_argument_group().create_literal_argument(name, description=description, min_count=min_count, max_count=max_count, named=named, pattern=pattern, allowed_types=allowed_types, aliases=aliases, default=default, override_parsing=override_parsing, store=store)
 
-	def create_flag(self, name: str, *, description: str = '', min_count: int = 0, max_count: int = None, aliases: typing.Iterable[str] = ...) -> FlagCommandArgument:
+	def create_flag(self, name: str, *, description: str = '', min_count: int = 0, max_count: int = None, aliases: typing.Iterable[str] = ..., override_parsing: bool = False, store: str = ...) -> FlagCommandArgument:
 		"""
 		Creates a flag argument and adds it to this argument group
 		:param name: The argument name
@@ -919,13 +1050,30 @@ class Command:
 		:param min_count: The minimum number of accepted command line arguments
 		:param max_count: The maximum number of accepted command line arguments
 		:param aliases: The argument aliases
+		:param override_parsing: If true, and this argument is supplied, it will be the only argument value returned (used for help arguments)
+		:param store: The name to store this argument's values as in the parsed CommandArguments object
 		:return: The new argument
 		:raise NameError: If a subgroup or argument with this name already exists
 		"""
 
-		return self.get_argument_group().create_flag(name, description=description, min_count=min_count, max_count=max_count, aliases=aliases)
+		return self.get_argument_group().create_flag(name, description=description, min_count=min_count, max_count=max_count, aliases=aliases, override_parsing=override_parsing, store=store)
 
-	def create_choices_argument(self, name: str, choices: typing.Iterable[str], *, description: str = '', min_count: int = 0, max_count: int = None, named: bool = False, aliases: typing.Iterable[str] = ..., default: typing.Any = ...) -> ChoicesCommandArgument:
+	def create_boolean_flag(self, name: str, *, description: str = '', inverted: bool = False, aliases: typing.Iterable[str] = ..., override_parsing: bool = False, store: str = ...) -> FlagCommandArgument:
+		"""
+		Creates a boolean flag argument and adds it to this argument group
+		:param name: The argument name
+		:param description: The argument description
+		:param inverted: Whether the stored value is inverted (false when applied instead of true)
+		:param aliases: The argument aliases
+		:param override_parsing: If true, and this argument is supplied, it will be the only argument value returned (used for help arguments)
+		:param store: The name to store this argument's values as in the parsed CommandArguments object
+		:return: The new argument
+		:raise NameError: If a subgroup or argument with this name already exists
+		"""
+
+		return self.get_argument_group().create_boolean_flag(name, description=description, inverted=inverted, aliases=aliases, override_parsing=override_parsing, store=store)
+
+	def create_choices_argument(self, name: str, choices: typing.Iterable[str], *, description: str = '', min_count: int = 0, max_count: int = None, named: bool = False, aliases: typing.Iterable[str] = ..., default: typing.Any = ..., override_parsing: bool = False, store: str = ...) -> ChoicesCommandArgument:
 		"""
 		Creates a choices argument and adds it to this argument group
 		:param name: The argument name
@@ -936,11 +1084,13 @@ class Command:
 		:param choices: The list of allowed choices a command line argument must be in
 		:param aliases: The argument aliases
 		:param default: The default value if no command line value is supplied
+		:param override_parsing: If true, and this argument is supplied, it will be the only argument value returned (used for help arguments)
+		:param store: The name to store this argument's values as in the parsed CommandArguments object
 		:return: The new argument
 		:raise NameError: If a subgroup or argument with this name already exists
 		"""
 
-		return self.get_argument_group().create_choices_argument(name, choices, description=description, min_count=min_count, max_count=max_count, named=named, aliases=aliases)
+		return self.get_argument_group().create_choices_argument(name, choices, description=description, min_count=min_count, max_count=max_count, named=named, aliases=aliases, default=default, override_parsing=override_parsing, store=store)
 
 	def add_sub_command(self, command: Command) -> None:
 		"""
@@ -1050,17 +1200,28 @@ class Command:
 
 		return self.__arguments__
 
-	def execute(self, arguments: typing.Iterable[str], *, caller: tuple[Command, ...] = None) -> typing.Optional[CommandTree | CommandArguments]:
+	def execute(self, arguments: typing.Iterable[str], *, caller: tuple[Command, ...] = None, handle_override_arguments: bool = True) -> typing.Optional[CommandTree | CommandArguments]:
 		"""
 		Attempts to match the command line arguments with this command
 		:param arguments: The command line arguments
 		:param caller: The calling command
+		:param handle_override_arguments: Whether this command should handle argument overrides
 		:return: The resulting tree or None if match failed
 		"""
 
 		subcommands: tuple[Command, ...] = tuple(self.get_sub_commands())
 		arguments: list[String.String] = [String.String(argument) for argument in arguments]
-		path: typing.Optional[CommandTree] = self.get_argument_group().match((self,), arguments, allow_argument_overflow=len(subcommands) > 0)
+
+		try:
+			path: typing.Optional[CommandTree] = self.get_argument_group().match((self,), arguments, allow_argument_overflow=len(subcommands) > 0)
+		except ParserArgumentOverride as override:
+			if handle_override_arguments:
+				tree: CommandTree = CommandTree(self, override.argument_group)
+				tree.add_filled_argument(override.argument, override.values)
+				return CommandArguments(tree)
+			else:
+				raise override
+
 		caller = (self,) if caller is None else caller
 
 		if path is None:
@@ -1216,12 +1377,16 @@ class CommandParser:
 		if len(arguments) == 0:
 			return -1
 
+		command: typing.Optional[Command] = ...
+
 		try:
 			command_arguments: list[str] = shlex.split(arguments)
-			command, tree = self.execute(command_arguments)
+			arguments: tuple[String.String, ...] = tuple(String.String(arg) for arg in command_arguments)
+			command = self.get_command_by_name(arguments[0])
+			command, tree = (command, None) if command is None else command.execute(arguments[1:], handle_override_arguments=False)
 
 			if command is None:
-				sys.stderr.write(f'No such command - \'{command_arguments[0]}\'')
+				sys.stderr.write(f'No such command - \'{command_arguments[0]}\'\n')
 				return 1
 			elif tree is None:
 				sys.stderr.write('One or more command line arguments are incorrect\n')
@@ -1239,6 +1404,9 @@ class CommandParser:
 			except Exception as err:
 				sys.stderr.write(f'Unknown error executing command: {err}\n')
 				return -hash(type(err))
+		except ParserArgumentOverride as override:
+			sys.stdout.write(f'{override.parent.get_help_string()}\n')
+			return -1
 		except (NameError, MutualExclusionException, ArgumentRequiredException, CommandException) as err:
 			sys.stderr.write(f'{err}\n')
 			return 3
@@ -1388,7 +1556,7 @@ class CommandArguments:
 
 			for argument, values in source.get_arguments():
 				resolved: typing.Any = argument.resolve(values)
-				self.__namespace__[argument.name] = resolved[0] if isinstance(resolved, collections.abc.Sequence) and argument.max_nargs == 1 and len(resolved) > 0 else resolved
+				self.__namespace__[argument.store_name] = resolved[0] if isinstance(resolved, collections.abc.Sequence) and argument.max_nargs == 1 and len(resolved) > 0 else resolved
 
 			for subtree in source.get_children():
 				if isinstance(subtree.parent, Command):
@@ -1411,7 +1579,7 @@ class CommandArguments:
 
 			return iter(self.__namespace__.items())
 
-		def __getitem__(self, key: str) -> typing.Any | CommandArguments.NamespaceWrapper:
+		def __getitem__(self, key: str) -> typing.Any | CommandArguments | CommandArguments.NamespaceWrapper:
 			"""
 			Gets an argument value or subspace by name
 			:param key: The argument name
@@ -1419,6 +1587,7 @@ class CommandArguments:
 			"""
 
 			paths: list[str] = re.split(r'[/\\.]', key)
+			*paths, target = paths
 			source: dict[str, typing.Any] = self.__namespace__
 
 			for i, path in enumerate(paths):
@@ -1427,9 +1596,12 @@ class CommandArguments:
 				else:
 					raise NameError(f'Command arguments \'{".".join(paths[:i])}\' has no argument or subspace \'{path}\'')
 
-			return source
+			if target not in source:
+				raise NameError(f'Command arguments \'{".".join(paths)}\' has no argument or subspace \'{target}\'')
 
-		def __getattr__(self, item: str) -> typing.Any:
+			return source[target]
+
+		def __getattr__(self, item: str) -> typing.Any | CommandArguments | CommandArguments.NamespaceWrapper:
 			"""
 			Gets an argument value or subspace by name
 			:param item: The argument name
@@ -1447,6 +1619,32 @@ class CommandArguments:
 			"""
 
 			return self.__namespace__.get(key, default)
+
+	@classmethod
+	def get_command_path(cls, arguments: CommandArguments) -> tuple[Command, ...]:
+		"""
+		Gets the path of command and subcommands for a given set of command arguments
+		:param arguments: The arguments whose command path to get
+		:return: The path of commands
+		"""
+
+		Misc.raise_ifn(isinstance(arguments, cls), Exceptions.InvalidArgumentException(parameter_name='arguments'))
+		path: list[Command] = [arguments.__command__]
+
+		while True:
+			changed: bool = False
+
+			for name, value in arguments:
+				if isinstance(value, cls):
+					path.append(value.__command__)
+					arguments = value
+					changed = True
+					break
+
+			if not changed:
+				break
+
+		return tuple(path)
 
 	def __init__(self, tree: CommandTree):
 		"""
@@ -1493,7 +1691,7 @@ class CommandArguments:
 
 		return iter(self.__toplevel__)
 
-	def __getitem__(self, key: str) -> typing.Any | CommandArguments.NamespaceWrapper:
+	def __getitem__(self, key: str) -> typing.Any | CommandArguments | CommandArguments.NamespaceWrapper:
 		"""
 		Gets an argument value or subspace by name
 		:param key: The argument name
@@ -1502,7 +1700,7 @@ class CommandArguments:
 
 		return self.__toplevel__[key]
 
-	def __getattr__(self, item: str) -> typing.Any | CommandArguments.NamespaceWrapper:
+	def __getattr__(self, item: str) -> typing.Any | CommandArguments | CommandArguments.NamespaceWrapper:
 		"""
 		Gets an argument value or subspace by name
 		:param item: The argument name

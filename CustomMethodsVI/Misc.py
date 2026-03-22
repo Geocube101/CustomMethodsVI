@@ -1,5 +1,6 @@
 import math
 import time
+import types
 import typing
 import warnings
 
@@ -194,6 +195,24 @@ def clamp(value: float, lower: float, upper: float) -> float:
 	"""
 
 	return min(upper, max(lower, value))
+
+
+def fullname(variable: typing.Any) -> str:
+	"""
+	Gets the fully qualified name of a variable
+	:param variable: The variable
+	:return: Full name
+	"""
+
+	if callable(variable) and hasattr(variable, '__module__') and hasattr(variable, '__qualname__'):
+		module: str = variable.__module__
+		qualname: str = variable.__qualname__
+		return qualname if module is None or module == 'builtins' or module == '__builtin__' else f'{module}.{qualname}'
+	else:
+		cls: type = type(variable)
+		module: str = cls.__module__
+		qualname: str = cls.__qualname__
+		return qualname if module is None or module == 'builtins' or module == '__builtin__' else f'{module}.{qualname}'
 
 
 __all__: list[str] = ['raise_if', 'raise_ifn', 'sleep', 'busy_sleep', 'get_ratio', 'get_value', 'convert_metric', 'convert_scientific', 'convert_ddhhmmss', 'minmax', 'clamp']

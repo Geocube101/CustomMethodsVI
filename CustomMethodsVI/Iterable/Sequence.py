@@ -1493,7 +1493,7 @@ class SpinQueue[T](SortableSequence[T]):
 		self.__buffer__[position] = item
 		# print(overwrite, item)
 		self.__count__ += not overwrite
-		self.__offset__ += overwrite
+		self.__offset__ = (self.__offset__ + overwrite) % self.__max_size__
 		return overwrite, old_elem
 
 	def clear(self) -> None:
@@ -1519,13 +1519,13 @@ class SpinQueue[T](SortableSequence[T]):
 		if self.__count__ == 0:
 			raise Exceptions.IterableEmptyException('Pop from empty queue')
 
-		index = index if (index := int(index)) >= 0 else (self.__max_size__ + index)
-		Misc.raise_if(index >= self.__max_size__, IndexError(f'Specified index \'{index}\' is out of bounds for SpinQueue of count \'{self.__count__}\''))
+		index = index if (index := int(index)) >= 0 else (self.__count__ + index)
+		Misc.raise_if(index >= self.__count__, IndexError(f'Specified index \'{index}\' is out of bounds for SpinQueue of count \'{self.__count__}\''))
 		elem: T = self.__buffer__[(self.__offset__ + index) % self.__max_size__]
 		self.__count__ -= 1
 
 		for i in range(self.__offset__ + index, self.__offset__ + self.__count__):
-			self.__buffer__[i % self.__max_size__] = self.__buffer__[(i + 1) % self.__max_size__]
+			self.__buffer__[i % self.__count__] = self.__buffer__[(i + 1) % self.__count__]
 
 		self.__buffer__[(self.__offset__ + self.__count__) % self.__max_size__] = None
 		return elem

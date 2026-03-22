@@ -1049,7 +1049,7 @@ class FlaskServerAPI:
 		except (ValueError, TypeError):
 			return None
 	
-	def __init__(self, app: flask.Flask, route: str = '/api', *, requires_auth: bool = False, methods: tuple[typing.Literal['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE', 'HEAD', 'PATCH', 'CONNECT', 'TRACE'], ...] = ('GET', 'OPTIONS'), session_timeout: float = 300):
+	def __init__(self, app: flask.Flask, route: str = '/api', *, requires_auth: bool = False, methods: tuple[typing.Literal['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE', 'HEAD', 'PATCH', 'CONNECT', 'TRACE'], ...] = ('GET', 'OPTIONS'), session_timeout: float = 300, global_response_headers: dict[str, typing.Any] = ...):
 		"""
 		Class wrapping generic functionality for flask API endpoints\n
 		- Constructor -
@@ -1068,7 +1068,8 @@ class FlaskServerAPI:
 		Misc.raise_ifn(isinstance(route, str), Exceptions.InvalidArgumentException(FlaskServerAPI.__init__, 'route', type(route), (str,)))
 		Misc.raise_ifn(isinstance(requires_auth, bool), Exceptions.InvalidArgumentException(FlaskServerAPI.__init__, 'requires_auth', type(requires_auth), (bool,)))
 		Misc.raise_if(not (route := str(route).strip('/\\')).isalnum() or any(x in ('\b', '\n', '\t') for x in route), ValueError('Route contains invalid characters'))
-		Misc.raise_ifn(isinstance(session_timeout, float) and (session_timeout := float(session_timeout)) >= 0, Exceptions.InvalidArgumentException(FlaskServerAPI.__init__, 'session_timeout', type(session_timeout), (int,)))
+		Misc.raise_ifn(isinstance(session_timeout, (int, float)) and (session_timeout := float(session_timeout)) >= 0, Exceptions.InvalidArgumentException(FlaskServerAPI.__init__, 'session_timeout', type(session_timeout), (int, float)))
+		Misc.raise_ifn(global_response_headers is ... or isinstance(global_response_headers, dict), Exceptions.InvalidArgumentException(FlaskServerAPI.__init__, 'global_response_headers', type(global_response_headers), (dict,)))
 
 		super().__init__()
 		self.__app__: flask.Flask = app
@@ -1084,6 +1085,7 @@ class FlaskServerAPI:
 		self.__state__: bool = True
 		self.__timeout_thread__: typing.Optional[threading.Thread] = None if self.session_timeout == 0 or not self.__auth__ else threading.Thread(target=self.__begin_timeout_loop__)
 		self.__app__.add_url_rule(f'{self.__route__}/<path:route>', view_func=self.__flask_route__, provide_automatic_options=False, methods=methods, endpoint=f'{self.__route__.replace('/', '_')}_flaskroute')
+		self.__global_response_headers__: dict[str, typing.Any] = {} if global_response_headers is ... else global_response_headers
 
 		if self.__timeout_thread__ is not None:
 			self.__timeout_thread__.start()
@@ -1101,11 +1103,11 @@ class FlaskServerAPI:
 		@self.__app__.route(f'{self.__route__}/connect', methods=methods, endpoint=f'{self.__route__.replace('/', '_')}_connect')
 		def connect():
 			if not self.is_running:
-				return flask.Response(json.dumps({'error': 'offline'}), status=503, content_type='application/json')
+				return flask.Response(json.dumps({'error': 'offline'}), status=503, content_type='application/json', headers=self.global_response_headers)
 			elif flask.request.content_type != 'application/json':
-				return flask.Response(json.dumps({'error': 'invalid-content-type'}), status=415, content_type='application/json')
+				return flask.Response(json.dumps({'error': 'invalid-content-type'}), status=415, content_type='application/json', headers=self.global_response_headers)
 			elif self.__connector__ is None:
-				return flask.Response(json.dumps({'auth': 0}), content_type='application/json')
+				return flask.Response(json.dumps({'auth': 0}), content_type='application/json', headers=self.global_response_headers)
 
 			token: uuid.UUID = self.__next_token__()
 			session: FlaskServerAPI.APISessionInfo = FlaskServerAPI.APISessionInfo(flask.request.remote_addr, token, datetime.datetime.now(datetime.timezone.utc))
@@ -1139,20 +1141,20 @@ class FlaskServerAPI:
 					if isinstance(res, dict):
 						content['body'] = res
 
-					return flask.Response(json.dumps(content), content_type='application/json')
+					return flask.Response(json.dumps(content), content_type='application/json', headers=self.global_response_headers)
 				else:
-					return flask.Response(json.dumps({'auth': None}), status=200 if isinstance(ok, bool) and ok else int(ok), content_type='application/json')
+					return flask.Response(json.dumps({'auth': None}), status=200 if isinstance(ok, bool) and ok else int(ok), content_type='application/json', headers=self.global_response_headers)
 			elif response is not None:
 				raise TypeError('Unexpected response type from connector callback - Expected either a boolean, integer, JSON dictionary, or None')
 			else:
-				return flask.Response(json.dumps({'auth': None}), status=401, content_type='application/json')
+				return flask.Response(json.dumps({'auth': None}), status=401, content_type='application/json', headers=self.global_response_headers)
 		
 		@self.__app__.route(f'{self.__route__}/disconnect', methods=methods, endpoint=f'{self.__route__.replace('/', '_')}_disconnect')
 		def disconnect():
 			if not self.is_running:
-				return flask.Response(json.dumps({'error': 'offline'}), status=503, content_type='application/json')
+				return flask.Response(json.dumps({'error': 'offline'}), status=503, content_type='application/json', headers=self.global_response_headers)
 			elif flask.request.content_type != 'application/json':
-				return flask.Response(response=json.dumps({'error': 'invalid-content-type'}), status=415, content_type='application/json')
+				return flask.Response(response=json.dumps({'error': 'invalid-content-type'}), status=415, content_type='application/json', headers=self.global_response_headers)
 			elif (session := self.__sessions__.get(auth := FlaskServerAPI.__parse_auth_token__(flask.request.json.get('auth')))) is not None and not session.closed:
 				with self.__session_lock__:
 					del self.__sessions__[auth]
@@ -1170,9 +1172,9 @@ class FlaskServerAPI:
 				if not isinstance(content, dict):
 					raise TypeError('Unexpected response type from disconnector callback - Expected either a JSON dictionary or None')
 
-				return flask.Response(json.dumps(content), content_type='application/json')
+				return flask.Response(json.dumps(content), content_type='application/json', headers=self.global_response_headers)
 			else:
-				return flask.Response(response=json.dumps({'error': 'not-authenticated'}), status=401, content_type='application/json')
+				return flask.Response(response=json.dumps({'error': 'not-authenticated'}), status=401, content_type='application/json', headers=self.global_response_headers)
 
 	def __begin_timeout_loop__(self) -> None:
 		"""
@@ -1206,19 +1208,19 @@ class FlaskServerAPI:
 		"""
 
 		if not self.is_running:
-			return flask.Response(json.dumps({'error': 'offline'}), status=503, content_type='application/json')
+			return flask.Response(json.dumps({'error': 'offline'}), status=503, content_type='application/json', headers=self.global_response_headers)
 		elif route not in self.__callbacks__:
-			return flask.Response(json.dumps({'error': 'no-api-endpoint'}), status=404, content_type='application/json')
+			return flask.Response(json.dumps({'error': 'no-api-endpoint'}), status=404, content_type='application/json', headers=self.global_response_headers)
 		elif flask.request.content_type != 'application/json':
-			return flask.Response(json.dumps({'error': 'invalid-content-type'}), status=415, content_type='application/json')
+			return flask.Response(json.dumps({'error': 'invalid-content-type'}), status=415, content_type='application/json', headers=self.global_response_headers)
 		elif (auth := FlaskServerAPI.__parse_auth_token__(flask.request.json.get('auth'))) is None and self.__auth__:
-			return flask.Response(json.dumps({'error': 'not-authenticated'}), status=401, content_type='application/json')
+			return flask.Response(json.dumps({'error': 'not-authenticated'}), status=401, content_type='application/json', headers=self.global_response_headers)
 		else:
 			callback, requires_auth = self.__callbacks__[route]
 			session: typing.Optional[FlaskServerAPI.APISessionInfo] = self.__sessions__.get(auth)
 
 			if self.__auth__ and requires_auth and (session is None or session.closed):
-				return flask.Response(json.dumps({'error': 'not-authenticated'}), status=401, content_type='application/json')
+				return flask.Response(json.dumps({'error': 'not-authenticated'}), status=401, content_type='application/json', headers=self.global_response_headers)
 
 			try:
 				response: collections.abc.Mapping[str, typing.Any] | collections.abc.Sequence[typing.Any] | int | None = callback(session, flask.request.json)
@@ -1226,17 +1228,17 @@ class FlaskServerAPI:
 				if response is None or response is ...:
 					return flask.Response(json.dumps({}), status=200, content_type='application/json')
 				elif response is NotImplemented:
-					return flask.Response(json.dumps({'error': 'NotImplemented'}), status=501, content_type='application/json')
+					return flask.Response(json.dumps({'error': 'NotImplemented'}), status=501, content_type='application/json', headers=self.global_response_headers)
 				elif isinstance(response, int):
-					return flask.Response(json.dumps({'error': f'HTTP/{response}'}), status=int(response), content_type='application/json')
+					return flask.Response(json.dumps({'error': f'HTTP/{response}'}), status=int(response), content_type='application/json', headers=self.global_response_headers)
 				elif isinstance(response, (collections.abc.Mapping, collections.abc.Sequence)):
-					return flask.Response(json.dumps(response), status=200, content_type='application/json')
+					return flask.Response(json.dumps(response), status=200, content_type='application/json', headers=self.global_response_headers)
 				else:
 					raise TypeError(f'Unexpected response type from API callback \'{route}\' - Expected either a JSON dictionary or None')
 
 			except Exception as e:
 				sys.stderr.write(''.join(traceback.format_exception(e)))
-				return flask.Response(json.dumps({'error': 'An internal error has occurred'}), status=500, content_type='application/json')
+				return flask.Response(json.dumps({'error': 'An internal error has occurred'}), status=500, content_type='application/json', headers=self.global_response_headers)
 
 	def __next_token__(self) -> uuid.UUID:
 		"""
@@ -1476,6 +1478,14 @@ class FlaskServerAPI:
 
 		Misc.raise_ifn(isinstance(timeout, float) and (timeout := float(timeout)) >= 0, Exceptions.InvalidArgumentException(FlaskServerAPI.session_timeout.setter, 'timeout', type(timeout), (int,)))
 		self.__timeout__ = timeout
+
+	@property
+	def global_response_headers(self) -> dict[str, typing.Any]:
+		"""
+		:return: The response headers applied to all responses from this API
+		"""
+
+		return self.__global_response_headers__
 
 
 if sys.platform == 'win32':

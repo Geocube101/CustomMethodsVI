@@ -128,8 +128,8 @@ class Terminal:
 		self.__root__ = curses.initscr()
 		self.__scroll__: list[int] = [0, 0]
 		self.__last_mouse_info__: Struct.MouseInfo = Struct.MouseInfo(-1, 0, 0, 0, 0)
-		self.__event_queue__: Iterable.SpinQueue[int] = Iterable.SpinQueue(10)
-		self.__global_event_queue__: Iterable.SpinQueue[int] = Iterable.SpinQueue(10)
+		self.__event_queue__: Iterable.Sequence.SpinQueue[int] = Iterable.Sequence.SpinQueue(10)
+		self.__global_event_queue__: Iterable.Sequence.SpinQueue[int] = Iterable.Sequence.SpinQueue(10)
 		self.__colors__: dict[int, int] = {}
 		self.__color_usage__: dict[int, int] = {}
 		self.__color_times__: dict[int, float] = {}
@@ -137,7 +137,7 @@ class Terminal:
 		self.__color_pair_usage__: dict[int, int] = {}
 		self.__color_pair_times__: dict[int, float] = {}
 		self.__max_workers__: int = 10
-		self.__update_times__: Iterable.SpinQueue[tuple[float, float]] = Iterable.SpinQueue(50)
+		self.__update_times__: Iterable.Sequence.SpinQueue[tuple[float, float]] = Iterable.Sequence.SpinQueue(50)
 		self.__tick__: int = 0
 		self.__auto_scroll__: int = 10
 		self.__tab_size__: int = 4
@@ -464,7 +464,6 @@ class Terminal:
 		"""
 
 		ch: int = self.__root__.getch()
-		active: Widgets.MySubTerminal = ...
 
 		if ch == curses.KEY_MOUSE:
 			lx, ly, lz = self.__last_mouse_info__.position
