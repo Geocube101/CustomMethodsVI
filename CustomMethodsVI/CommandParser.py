@@ -1719,8 +1719,8 @@ class CommandArguments:
 
 
 __all__: list[str] = [
-	'CommandException', 'MutualExclusionException', 'ArgumentRequiredException', 'NoCommandHandlerException',
-	'CommandArgument', 'LiteralCommandArgument', 'FlagCommandArgument', 'HelpCommandArgument', 'ChoicesCommandArgument',
+	'CommandException', 'MutualExclusionException', 'ArgumentRequiredException', 'ParserArgumentOverride', 'NoCommandHandlerException',
+	'CommandArgument', 'LiteralCommandArgument', 'FlagCommandArgument', 'BooleanFlagCommandArgument', 'HelpCommandArgument', 'ChoicesCommandArgument',
 	'CommandArgumentGroup', 'Command',
 	'CommandParser', 'CommandTree', 'CommandArguments'
 ]

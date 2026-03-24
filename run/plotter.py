@@ -2,7 +2,7 @@ import datetime
 import math
 import json
 
-from CustomMethodsVI.Math.Plotter.Plotter import GridPlotDisplay
+from CustomMethodsVI.Math.Plotter.Plotter import GridPlotDisplay, LabelSpacing, LabelAlignment
 from CustomMethodsVI.Math.Plotter.Plot2D import *
 
 
@@ -77,6 +77,10 @@ def boxplot():
 
 
 def candlestick():
+	def axis_label(axis: str, point: tuple[float, ...]) -> str:
+		x, y = point
+		return datetime.datetime.fromtimestamp(x).strftime('%m/%d/%Y (%H:%M)') if axis == 'time' else f'${y:,.2f}'
+
 	candle = CandlestickPlot2D()
 	candle.add_points(
 		CandlestickPlot2D.CandleFrame(datetime.datetime.now(), 0, 550, -25, 500),
@@ -86,19 +90,13 @@ def candlestick():
 		CandlestickPlot2D.CandleFrame(datetime.datetime.now() + datetime.timedelta(days=4), 2420, 3000, 2210, 2800),
 		CandlestickPlot2D.CandleFrame(datetime.datetime.now() + datetime.timedelta(days=5), 2800, 2950, -10, 0),
 	)
-	candle.axes_info('time')
+	candle.axes_info('price', minor_spacing=100, major_spacing=10, label=AxisPlot2D.AxisLabel2D(labeller=axis_label, color=0xEEEEEEFF, angle=0, spacing=LabelSpacing.MAJOR))
+	candle.axes_info('time', label=AxisPlot2D.AxisLabel2D(labeller=axis_label, spacing=LabelSpacing.MINOR, color=0xEEEEEEFF, angle=15))
 	return candle
 
 
 def main():
-	with open('stock.json', 'r') as f:
-		stock: list[dict[str, float]] = json.loads(f.read())['frames']
-		plot = CandlestickPlot2D()
-		plot.add_points(*[CandlestickPlot2D.CandleFrame(datetime.datetime.fromtimestamp(frame['TimeStamp']), frame['OpenPrice'], frame['MomentHigh'], frame['MomentLow'], frame['ClosePrice']) for frame in stock])
-		plot.set_bounds(None, None, 0, plot.bounds[3] * 1.5)
-		plot.axes_info('price', minor_spacing=(plot.bounds[3] - plot.bounds[2]) / 10)
-		plot.show(square_size=1024)
-
+	candlestick().show(square_size=1024)
 	return
 
 	display = GridPlotDisplay()

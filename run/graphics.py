@@ -18,7 +18,18 @@ def dearpygui():
 		rotation += 1
 		theta: float = math.radians(rotation)
 		camera.view = Camera.create_lookat_view(Vector3(math.cos(theta) * -10, 0, math.sin(theta) * -10), Vector3.zero(), Vector3.up())
+		# renderer.sun_normal = TransformMatrix3D.create_rotation(0, 0, math.radians(0)).transform_vector(camera.view.forward)
 		renderer.render()
+		#return
+
+		for i, face in enumerate(renderer.meshes[0].get_polygons()):
+			p1, p2 = camera.points_world_to_screen(width, height, face.center, face.center + face.normal)
+
+			if (existing := normals.get(i)) is not None:
+				dpg.configure_item(existing, p1=p1.components[:2], p2=p2.components[:2])
+			else:
+				lid: int = dpg.draw_line(p1.components[:2], p2.components[:2], color=Lime.rgba, parent=drawlist)
+				normals[i] = lid
 
 	# Setup TK
 	width: int = 1024
@@ -41,18 +52,17 @@ def dearpygui():
 		Camera.create_fov_perspective_projection(70, width / height)
 	)
 
-	renderer: DearPyGuiRendererCPU = DearPyGuiRendererCPU(drawlist)
+	renderer: DearPyGuiRenderer3DCPU = DearPyGuiRenderer3DCPU(drawlist)
 	renderer.add_cameras(camera)
 
 	renderer.add_meshes(
-		PolyShape3D.create_cube(Vector3(0, 0, 0), Vector3.one(), UVMap.simple(Red, Blue)),
-		PolyShape3D.create_cube(Vector3(1, 0, 0), Vector3.one(), UVMap.simple(Red, Blue)),
-		#PolyShape3D.create_cube(Vector3(0, 1, 0), Vector3.one(), UVMap.simple(Red, Blue)),
-		#PolyShape3D.create_cube(Vector3(0, 0, 1), Vector3.one(), UVMap.simple(Red, Blue))
+		Mesh3D.create_octahedron(Vector3(0, 0, 0), UVMap.simple(Red, Blue)).rotate(0, math.radians(0), math.radians(0))
 	)
 
 	renderer.active_camera = camera
-
+	renderer.sun_normal = Vector3(0, 0, -1)
+	normals: dict[int, int] = {}
+	
 	while dpg.is_dearpygui_running():
 		animate()
 		dpg.render_dearpygui_frame()
@@ -67,6 +77,7 @@ def tkinter():
 		rotation += 1
 		theta: float = math.radians(rotation)
 		camera.view = Camera.create_lookat_view(Vector3(math.cos(theta) * -10, 0, math.sin(theta) * -10), Vector3.zero(), Vector3.up())
+		renderer.sun_normal = camera.view.forward
 		renderer.render()
 		root.after(16, animate)
 
@@ -89,14 +100,11 @@ def tkinter():
 		Camera.create_fov_perspective_projection(70, width / height)
 	)
 
-	renderer: TkinterRendererCPU = TkinterRendererCPU(canvas)
+	renderer: TkinterRenderer3DCPU = TkinterRenderer3DCPU(canvas)
 	renderer.add_cameras(camera)
 
 	renderer.add_meshes(
-		PolyShape3D.create_cube(Vector3(0, 0, 0), Vector3.one(), UVMap.simple(Red, Blue)),
-		PolyShape3D.create_cube(Vector3(1, 0, 0), Vector3.one(), UVMap.simple(Red, Blue)),
-		#PolyShape3D.create_cube(Vector3(0, 1, 0), Vector3.one(), UVMap.simple(Red, Blue)),
-		#PolyShape3D.create_cube(Vector3(0, 0, 1), Vector3.one(), UVMap.simple(Red, Blue))
+		Mesh3D.create_octahedron(Vector3(0, 0, 0), UVMap.simple(Red, Blue))
 	)
 
 	renderer.active_camera = camera

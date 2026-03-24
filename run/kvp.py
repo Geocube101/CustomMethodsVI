@@ -41,7 +41,7 @@ KEYMAP: str = '''
 543=hydra&S;zamilloz&S;7&S;7&S
 544=cancer&S;zeo&S;8&S;8&S
 545=sextans&S;;9&S;9&S
-536=leo_minor&S;;;0&S
+536=leo_minor&S;;;
 598=leo&S;;;-&S
 '''
 
