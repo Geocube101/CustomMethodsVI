@@ -79,6 +79,42 @@ class Sequence[T](Iterable.Iterable[list[T], T], collections.abc.Sequence[T]):
 		else:
 			raise TypeError(f'TypeError: list indices must be integers or slices, not {type(item).__name__}')
 
+	def __add__(self, other: collections.abc.Iterable[T]) -> Sequence[T]:
+		"""
+		Appends an iterable to the end of this sequence
+		:param other: The other iterable to append
+		:return: The extended sequence
+		"""
+
+		return type(self)([*self, *other]) if isinstance(other, collections.abc.Iterable) else NotImplemented
+
+	def __radd__(self, other: collections.abc.Iterable[T]) -> Sequence[T]:
+		"""
+		Appends this sequence to the end of an iterable
+		:param other: The other iterable to append to
+		:return: The extended sequence
+		"""
+
+		return type(self)([*other, *self]) if isinstance(other, collections.abc.Iterable) else NotImplemented
+
+	def __mul__(self, other: int) -> Sequence[T]:
+		"""
+		Multiplies this sequence 'n' times
+		:param other: The amount of times to multiply
+		:return: The multiplied sequence
+		"""
+
+		return type(self)(self.__buffer__ * int(other)) if isinstance(other, int) else NotImplemented
+
+	def __rmul__(self, other: int) -> Sequence[T]:
+		"""
+		Multiplies this sequence 'n' times
+		:param other: The amount of times to multiply
+		:return: The multiplied sequence
+		"""
+
+		return type(self)(self.__buffer__ * int(other)) if isinstance(other, int) else NotImplemented
+
 	def __reversed__(self) -> reversed[T]:
 		"""
 		:return: A reverse iterator
@@ -213,45 +249,18 @@ class MutableSequence[T](Sequence[T], collections.abc.MutableSequence[T]):
 		else:
 			raise TypeError(f'TypeError: list indices must be integers or slices, not {type(key).__name__}')
 
-	def __add__(self, other: typing.Iterable[T]) -> MutableSequence[T]:
-		"""
-		Appends an iterable to the end of this sequence
-		:param other: The other iterable to append
-		:return: The extended sequence
-		"""
-
-		return type(self)([*self, *other]) if isinstance(other, typing.Iterable) else NotImplemented
-
-	def __iadd__(self, other: typing.Iterable[T]) -> MutableSequence[T]:
+	def __iadd__(self, other: collections.abc.Iterable[T]) -> MutableSequence[T]:
 		"""
 		Appends an iterable to the end of this sequence in-place
 		:param other: The other iterable to append
 		:return: This sequence
 		"""
 
-		if not isinstance(other, typing.Iterable):
+		if not isinstance(other, collections.abc.Iterable):
 			return NotImplemented
 
 		self.__buffer__.extend(other)
 		return self
-
-	def __radd__(self, other: typing.Iterable[T]) -> MutableSequence[T]:
-		"""
-		Appends this sequence to the end of an iterable
-		:param other: The other iterable to append to
-		:return: The extended sequence
-		"""
-
-		return type(self)([*other, *self]) if isinstance(other, typing.Iterable) else NotImplemented
-
-	def __mul__(self, other: int) -> MutableSequence[T]:
-		"""
-		Multiplies this sequence 'n' times
-		:param other: The amount of times to multiply
-		:return: The multiplied sequence
-		"""
-
-		return type(self)(self.__buffer__ * int(other)) if isinstance(other, int) else NotImplemented
 
 	def __imul__(self, other: int) -> MutableSequence[T]:
 		"""
@@ -262,29 +271,6 @@ class MutableSequence[T](Sequence[T], collections.abc.MutableSequence[T]):
 
 		self.__buffer__ *= int(other)
 		return self
-
-	def __rmul__(self, other: int) -> MutableSequence[T]:
-		"""
-		Multiplies this sequence 'n' times
-		:param other: The amount of times to multiply
-		:return: The multiplied sequence
-		"""
-
-		return type(self)(self.__buffer__ * int(other)) if isinstance(other, int) else NotImplemented
-
-	def clear(self) -> None:
-		"""
-		Clears the sequence
-		"""
-
-		self.__buffer__.clear()
-
-	def reverse(self) -> None:
-		"""
-		Reverses the sequence in-place
-		"""
-
-		self.__buffer__.reverse()
 
 	def remove(self, element: T, count: int = -1) -> int:
 		"""
@@ -314,6 +300,24 @@ class MutableSequence[T](Sequence[T], collections.abc.MutableSequence[T]):
 		"""
 
 		return self.__buffer__.pop(index)
+
+	def clear(self) -> MutableSequence[T]:
+		"""
+		Clears the sequence
+		:return: This sequence
+		"""
+
+		self.__buffer__.clear()
+		return self
+
+	def reverse(self) -> MutableSequence[T]:
+		"""
+		Reverses the sequence in-place
+		:return: This sequence
+		"""
+
+		self.__buffer__.reverse()
+		return self
 
 	def append(self, element: T) -> MutableSequence[T]:
 		"""
@@ -525,19 +529,20 @@ class SortedList[T](SortableSequence[T]):
 		warnings.warn('\\\\\\\nDirect insertion in binary-sorted collection\nUse \'SortedList::append\' instead \\\\\\', UserWarning, stacklevel=2)
 		self.append(value)
 
-	def append(self, item: T) -> None:
+	def append(self, item: T) -> SortedList[T]:
 		"""
 		Appends an item to this collection
 		:param item: The item to append
 		:raises TypeError: If the item cannot be compared
 		:raises ValueError: If an error occurred during binary search
+		:return: This list
 		"""
 
 		length: int = len(self)
 
 		if length == 0:
 			self.__buffer__.append(item)
-			return
+			return self
 
 		start: int = 0
 		end: int = length
@@ -545,10 +550,10 @@ class SortedList[T](SortableSequence[T]):
 		try:
 			if item >= self.__buffer__[-1]:
 				self.__buffer__.append(item)
-				return
+				return self
 			elif item <= self.__buffer__[0]:
 				self.__buffer__.insert(0, item)
-				return
+				return self
 
 			while True:
 				mid: int = round((start + end) / 2)
@@ -557,7 +562,7 @@ class SortedList[T](SortableSequence[T]):
 					raise ValueError(f'Unexpected error during binary-reduction - MIDPOINT={mid}')
 				elif item == self.__buffer__[mid]:
 					self.__buffer__.insert(mid, item)
-					return
+					return self
 				elif item > self.__buffer__[mid]:
 					start = mid
 				elif item < self.__buffer__[mid]:
@@ -568,11 +573,12 @@ class SortedList[T](SortableSequence[T]):
 		except TypeError:
 			raise TypeError(f'Incomparable object of type \'{type(item)}\' is not storable')
 
-	def resort(self, *iterables: typing.Iterable[T]) -> None:
+	def resort(self, *iterables: typing.Iterable[T]) -> SortedList[T]:
 		"""
 		Resorts the entire collection, appending the supplied values from '*iterables' if provided
 		:param iterables: The extra collections to append before resort
 		:raises TypeError: If the item cannot be compared or one of the arguments is not an iterable
+		:return: This list
 		"""
 
 		for i in iterables:
@@ -582,12 +588,14 @@ class SortedList[T](SortableSequence[T]):
 				self.__buffer__.extend(i)
 
 		self.__buffer__.sort()
+		return self
 
-	def set_resort(self, *iterables: typing.Iterable[T]) -> None:
+	def set_resort(self, *iterables: typing.Iterable[T]) -> SortedList[T]:
 		"""
 		Resorts the entire collection using a set, appending the supplied values from '*iterables' if provided and removing duplicates
 		:param iterables: The extra collections to append before resort
 		:raises TypeError: If the item cannot be compared or one of the arguments is not an iterable
+		:return: This list
 		"""
 
 		buffer = set(self.__buffer__)
@@ -599,6 +607,7 @@ class SortedList[T](SortableSequence[T]):
 				buffer.update(i)
 
 		self.__buffer__ = list(sorted(buffer))
+		return self
 
 	def bin_search(self, item: T, lower: typing.Optional[int] = ..., upper: typing.Optional[int] = ...) -> int:
 		"""
@@ -907,19 +916,20 @@ class ReverseSortedList[T](SortableSequence[T]):
 		warnings.warn('\\\\\\\nDirect insertion in binary-sorted collection\nUse \'ReverseSortedList::append\' instead \\\\\\', UserWarning, stacklevel=2)
 		self.append(value)
 
-	def append(self, item: T) -> None:
+	def append(self, item: T) -> ReverseSortedList[T]:
 		"""
 		Appends an item to this collection
 		:param item: The item to append
 		:raises TypeError: If the item cannot be compared
 		:raises ValueError: If an error occurred during binary search
+		:return: This list
 		"""
 
 		length: int = len(self)
 
 		if length == 0:
 			self.__buffer__.append(item)
-			return
+			return self
 
 		start: int = 0
 		end: int = length
@@ -927,10 +937,10 @@ class ReverseSortedList[T](SortableSequence[T]):
 		try:
 			if item >= self.__buffer__[0]:
 				self.__buffer__.insert(0, item)
-				return
+				return self
 			elif item <= self.__buffer__[-1]:
 				self.__buffer__.append(item)
-				return
+				return self
 
 			while True:
 				mid: int = round((start + end) / 2)
@@ -939,7 +949,7 @@ class ReverseSortedList[T](SortableSequence[T]):
 					raise ValueError(f'Unexpected error during binary-reduction - MIDPOINT={mid}')
 				elif item == self.__buffer__[mid]:
 					self.__buffer__.insert(mid, item)
-					return
+					return self
 				elif item < self.__buffer__[mid]:
 					start = mid
 				elif item > self.__buffer__[mid]:
@@ -950,11 +960,12 @@ class ReverseSortedList[T](SortableSequence[T]):
 		except TypeError:
 			raise TypeError(f'Incomparable object of type \'{type(item)}\' is not storable')
 
-	def resort(self, *iterables: typing.Iterable[T]) -> None:
+	def resort(self, *iterables: typing.Iterable[T]) -> ReverseSortedList[T]:
 		"""
 		Resorts the entire collection, appending the supplied values from '*iterables' if provided
 		:param iterables: The extra collections to append before resort
 		:raises TypeError: If the item cannot be compared or one of the arguments is not an iterable
+		:return: This list
 		"""
 
 		for i in iterables:
@@ -964,12 +975,14 @@ class ReverseSortedList[T](SortableSequence[T]):
 				self.__buffer__.extend(i)
 
 		self.__buffer__.sort(reverse=True)
+		return self
 
-	def set_resort(self, *iterables: typing.Iterable[T]) -> None:
+	def set_resort(self, *iterables: typing.Iterable[T]) -> ReverseSortedList[T]:
 		"""
 		Resorts the entire collection, appending the supplied values from '*iterables' if provided and removing duplicates
 		:param iterables: The extra collections to append before resort
 		:raises TypeError: If the item cannot be compared or one of the arguments is not an iterable
+		:return: This list
 		"""
 
 		buffer = set(self.__buffer__)
@@ -981,6 +994,7 @@ class ReverseSortedList[T](SortableSequence[T]):
 				buffer.update(i)
 
 		self.__buffer__ = list(sorted(buffer, reverse=True))
+		return self
 
 	def bin_search(self, item: T, lower: typing.Optional[int] = ..., upper: typing.Optional[int] = ...) -> int:
 		"""
@@ -1130,7 +1144,7 @@ class ReverseSortedList[T](SortableSequence[T]):
 		return SortedList(self)
 
 
-class LockedSequence[T](SortableSequence[T]):
+class LockedSequence[T](SortableSequence[T], Synchronization.LockUser):
 	"""
 	Thread safe sequence using locks
 	"""
@@ -1173,7 +1187,7 @@ class LockedSequence[T](SortableSequence[T]):
 					self.__int_index__ += 1
 					return value
 
-	def __init__(self, sequence: collections.abc.Iterable[T] = ..., *, lock: threading.Lock | Synchronization.SynchronizationPrimitive = Synchronization.SpinLock()):
+	def __init__(self, sequence: collections.abc.Iterable[T] = ..., *, lock: Synchronization.LockType_T = Synchronization.SpinLock()):
 		"""
 		Thread safe sequence using locks\n
 		- Constructor -
@@ -1181,9 +1195,8 @@ class LockedSequence[T](SortableSequence[T]):
 		:param lock: The lock to use for operations
 		"""
 
-		Misc.raise_ifn(isinstance(lock, (threading.Lock, Synchronization.SynchronizationPrimitive)), Exceptions.InvalidArgumentException(LockedSequence.__init__, 'lock', type(lock), (threading.Lock, Synchronization.SynchronizationPrimitive)))
-		super().__init__(sequence)
-		self.__lock__: threading.Lock | Synchronization.SpinLock | Synchronization.ReaderWriterLock = lock
+		SortableSequence.__init__(self, sequence)
+		Synchronization.LockUser.__init__(self, lock)
 
 	def __contains__(self, item: T) -> bool:
 		with self.read_lock():
@@ -1247,13 +1260,51 @@ class LockedSequence[T](SortableSequence[T]):
 	def __reversed__(self) -> ReversedLockedIterator[T]:
 		return LockedSequence.ReversedLockedIterator(self)
 
-	def clear(self) -> None:
-		with self.write_lock():
-			super().clear()
+	def __iadd__(self, other: collections.abc.Iterable[T]) -> LockedSequence[T]:
+		if not isinstance(other, collections.abc.Iterable):
+			return NotImplemented
 
-	def reverse(self) -> None:
 		with self.write_lock():
-			super().reverse()
+			self.__buffer__.extend(other)
+
+		return self
+
+	def remove(self, element: T, count: int = -1) -> int:
+		matches: int = 0
+
+		with self.write_lock():
+			for i in range(len(self)):
+				if i < len(self) and self.__buffer__[i] == element:
+					del self.__buffer__[i]
+					matches += 1
+
+				if 0 <= count <= matches:
+					break
+
+		return matches
+
+	def pop(self, index: int = -1) -> T:
+		"""
+		Removes and returns the element at the specified index
+		:param index: The index or last element if not specified
+		:return: The removed element
+		"""
+
+		with self.write_lock():
+			return self.__buffer__.pop(index)
+
+	def pop_or_default(self, index: int = -1, default: T = None) -> T:
+		"""
+		Removes and returns the element at the specified index or returns 'default' if index is out of range or collection is empty
+		:param index: The index or last element if not specified
+		:param default: The default value to return
+		:return: The removed element or 'default'
+		"""
+
+		with self.write_lock():
+			if (length := len(self)) == 0 or (index >= 0 and index >= length) or -index > length:
+				return default
+			return self.__buffer__.pop(index)
 
 	def count(self, item: T) -> int:
 		with self.read_lock():
@@ -1278,58 +1329,12 @@ class LockedSequence[T](SortableSequence[T]):
 
 		return Stream.LinqStream(LockedSequence.LockedIterator(self))
 
-	def acquire_read_lock(self) -> bool:
-		"""
-		Acquires the reader lock if an RW lock, otherwise acquires the lock\n
-		Blocks until lock is acquired
-		:return: Whether the lock was acquired
-		"""
-
-		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
-			return self.__lock__.acquire()
-		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
-			return self.__lock__.acquire_reader()
-
-	def acquire_write_lock(self) -> bool:
-		"""
-		Acquires the writer lock if an RW lock, otherwise acquires the lock\n
-		Blocks until lock is acquired
-		:return: Whether the lock was acquired
-		"""
-
-		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
-			return self.__lock__.acquire()
-		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
-			return self.__lock__.acquire_writer()
-
-	def read_lock(self) -> threading.Lock | Synchronization.SynchronizationPrimitive | Synchronization.ReaderWriterLock.Lock:
-		"""
-		Returns the reader lock if an RW lock, otherwise the lock
-		:return: The lock object for context management
-		"""
-
-		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
-			return self.__lock__
-		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
-			return self.__lock__.reader()
-
-	def write_lock(self) -> threading.Lock | Synchronization.SynchronizationPrimitive | Synchronization.ReaderWriterLock.Lock:
-		"""
-		Returns the reader lock if an RW lock, otherwise the lock
-		:return: The lock object for context management
-		"""
-
-		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
-			return self.__lock__
-		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
-			return self.__lock__.writer()
-
 	def get_or_wait(self, index: int, timeout: float = None, default: T = ...) -> T:
 		"""
 		Gets the item at the specified index\n
 		If the index does not exist, waits at most 'timeout' seconds until it does
 		:param index: The index to retrieve
-		:param timeout: The maximum amout of seconds to wait or None for infinite
+		:param timeout: The maximum amount of seconds to wait or None for infinite
 		:param default: The default value to return if timed out
 		:return: The item or 'default'
 		:raises TimeoutError: If 'default' is not supplied and the operation times out
@@ -1350,6 +1355,24 @@ class LockedSequence[T](SortableSequence[T]):
 					return default
 
 				time.sleep(1e-6)
+
+	def insert(self, index: int, element: T) -> LockedSequence[T]:
+		with self.write_lock():
+			self.__buffer__.insert(index, element)
+
+		return self
+
+	def clear(self) -> LockedSequence[T]:
+		with self.write_lock():
+			super().clear()
+
+		return self
+
+	def reverse(self) -> LockedSequence[T]:
+		with self.write_lock():
+			super().reverse()
+
+		return self
 
 
 class FixedArray[T](SortableSequence[T]):
@@ -1390,13 +1413,16 @@ class FixedArray[T](SortableSequence[T]):
 
 		self[key] = None
 
-	def clear(self) -> None:
+	def clear(self) -> FixedArray[T]:
 		"""
 		Clears the list, setting all elements to 'None'
+		:return: This array
 		"""
 
 		for i in range(len(self)):
 			self.__buffer__[i] = None
+
+		return self
 
 	def copy(self) -> FixedArray[T]:
 		return FixedArray(self)
@@ -1496,18 +1522,6 @@ class SpinQueue[T](SortableSequence[T]):
 		self.__offset__ = (self.__offset__ + overwrite) % self.__max_size__
 		return overwrite, old_elem
 
-	def clear(self) -> None:
-		"""
-		Clears the collection
-		All elements are set to 'None'
-		"""
-
-		self.__count__ = 0
-		self.__offset__ = 0
-
-		for i in range(self.__max_size__):
-			self.__buffer__[i] = None
-
 	def pop(self, index: int = -1) -> T:
 		"""
 		Pops an item from the queue
@@ -1551,6 +1565,21 @@ class SpinQueue[T](SortableSequence[T]):
 				break
 
 		return matches
+
+	def clear(self) -> SpinQueue[T]:
+		"""
+		Clears the collection
+		All elements are set to 'None'
+		:return: This spin queue
+		"""
+
+		self.__count__ = 0
+		self.__offset__ = 0
+
+		for i in range(self.__max_size__):
+			self.__buffer__[i] = None
+
+		return self
 
 	@property
 	def size(self) -> int:

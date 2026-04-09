@@ -605,6 +605,22 @@ class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable,
 		Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 		return float('nan') if None in self.__components__ or None in other.__components__ else math.acos(round(self.dot(other) / (self.length() * other.length()), 7))
 
+	def rectangular_area(self) -> float:
+		"""
+		:return: The area of a cuboid bounded by this vector
+		"""
+
+		return math.prod(self)
+
+	def elliptical_area(self) -> float:
+		"""
+		:return: The area of an ellipsoid bounded by this vector
+		"""
+
+		radii: Vector = self / 2
+		n: int = radii.dimension
+		return (math.pi ** (n / 2)) / math.gamma(n / 2 + 1) * math.prod(radii)
+
 	def normalized(self) -> Vector:
 		"""
 		:return: This vector normalized
@@ -702,7 +718,7 @@ class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable,
 		:raises ValueError: If vector dimensions are mismatched
 		"""
 
-		Misc.raise_ifn(isinstance(other, Vector), Exceptions.InvalidArgumentException(Vector.angle, 'other', type(other), (Vector,)))
+		Misc.raise_ifn(isinstance(other, Vector), Exceptions.InvalidArgumentException(Vector.project_on_vector, 'other', type(other), (Vector,)))
 		Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
 		return self.dot(other) / other.length_squared() * self
 

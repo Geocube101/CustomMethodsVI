@@ -10,6 +10,7 @@ import typing
 from .. import Exceptions
 from .. import Misc
 from .. import Stream
+from .. import Synchronization
 
 
 class Iterable[IterType, ElemType](collections.abc.Collection[ElemType]):
@@ -102,6 +103,18 @@ class Iterable[IterType, ElemType](collections.abc.Collection[ElemType]):
 		"""
 
 		return len(self.__buffer__)
+
+	def __hash__(self) -> int:
+		"""
+		:return: The hashcode for this iterable
+		"""
+
+		result: int = 0
+
+		for item in self:
+			result ^= hash(item) & 0xFFFFFFFFFFFFFFFF
+
+		return result
 
 	def __iter__(self) -> typing.Iterator[ElemType]:
 		"""

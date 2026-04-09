@@ -1716,6 +1716,22 @@ class Vector3:
 		c3: typing.Optional[float] = None if a1 is None or b2 is None else (a1 * b2 - a2 * b1)
 		return Vector3(c1, c2, c3)
 
+	def project(self, other: Vector3 | Plane3D) -> Vector3:
+		"""
+		Projects this vector onto another vector
+		:param other: The second vector
+		:return: The projected vector
+		:raises InvalidArgumentException: If 'other' is not a vector
+		:raises ValueError: If vector dimensions are mismatched
+		"""
+
+		if isinstance(other, Vector3):
+			return self.dot(other) / other.length_squared() * self
+		elif isinstance(other, Plane3D):
+			return other.projected_vector(self)
+		else:
+			raise Exceptions.InvalidArgumentException(Vector3.project, 'other', type(other), (Vector3, Plane3D))
+
 	@property
 	def x(self) -> float:
 		return self[0]
@@ -2034,6 +2050,26 @@ class Line3D:
 	@property
 	def end(self) -> Vector3:
 		return self.__end__
+
+
+class Plane3D:
+	@classmethod
+	def create_from_normal(cls, normal: Vector3, position: Vector3 = Vector3.zero()) -> Plane3D:
+		Misc.raise_ifn(isinstance(normal, Vector3), Exceptions.InvalidArgumentException(Plane3D.create_from_normal, 'normal', type(normal), (Vector3,)))
+		Misc.raise_ifn(isinstance(position, Vector3), Exceptions.InvalidArgumentException(Plane3D.create_from_normal, 'position', type(position), (Vector3,)))
+		return cls(Line3D(position, position + normal))
+
+	def __init__(self, normal: Line3D):
+		Misc.raise_ifn(isinstance(normal, Line3D), Exceptions.InvalidArgumentException(Plane3D.__init__, 'normal', type(normal), (Line3D,)))
+		self.__line__: Line3D = normal
+
+	def projected_vector(self, vector: Vector3) -> Vector3:
+		first: Vector3 = self.normal.project(vector)
+		return self.normal - first
+
+	@property
+	def normal(self) -> Vector3:
+		return self.__line__.end - self.__line__.start
 
 
 Vector_T = Vector2 | Vector3 | Vector4

@@ -1040,6 +1040,62 @@ class FlaskServerAPI:
 
 			return self.__session_data__
 
+	class APIEndpoint:
+		def __init__(self, route: str, callback: collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], collections.abc.Mapping[str, typing.Any] | collections.abc.Sequence[typing.Any] | int | bool | None], requires_auth: bool, allowed_methods: tuple[str, ...], response_headers: dict[str, typing.Any]):
+			Misc.raise_ifn(isinstance(route, str) and len(route := str(route)) > 0, Exceptions.InvalidArgumentException(FlaskServerAPI.APIEndpoint.__init__, 'route', type(route), (str,)))
+			Misc.raise_ifn(callable(callback), Exceptions.InvalidArgumentException(FlaskServerAPI.APIEndpoint.__init__, 'callback', type(callback), (collections.abc.Callable,)))
+			Misc.raise_ifn(isinstance(requires_auth, bool), Exceptions.InvalidArgumentException(FlaskServerAPI.APIEndpoint.__init__, 'requires_auth', type(requires_auth), (bool,)))
+			Misc.raise_ifn(response_headers is ... or isinstance(response_headers, dict), Exceptions.InvalidArgumentException(FlaskServerAPI.APIEndpoint.__init__, 'response_headers', type(response_headers), (dict,)))
+			Misc.raise_ifn(allowed_methods is ... or isinstance(allowed_methods, tuple), Exceptions.InvalidArgumentException(FlaskServerAPI.APIEndpoint.__init__, 'allowed_methods', type(allowed_methods), (tuple,)))
+
+			self.__route__: str = str(route)
+			self.__callback__: collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], collections.abc.Mapping[str, typing.Any] | collections.abc.Sequence[typing.Any] | int | bool | None] = callback
+			self.__auth_required__: bool = bool(requires_auth)
+			self.__headers__: dict[str, typing.Any] = ... if response_headers is ... else dict(response_headers)
+			self.__methods__: tuple[str, ...] = ... if allowed_methods is ... else tuple(allowed_methods)
+
+		def __call__(self, api: FlaskServerAPI, session: FlaskServerAPI.APISessionInfo, request: flask.Request) -> flask.Response:
+			response_headers: dict[str, typing.Any] = api.global_response_headers if self.response_headers is ... else (self.response_headers | api.global_response_headers)
+
+			if api.requires_auth and self.requires_auth and (session is None or session.closed):
+				return flask.Response(json.dumps({'error': 'not-authenticated'}), status=401, content_type='application/json', headers=response_headers)
+			elif self.allowed_methods is not ... and request.method not in self.allowed_methods:
+				return flask.Response(json.dumps({'error': 'invalid-http-method'}), status=405, content_type='application/json', headers={'Allow': ','.join(self.allowed_methods)} | response_headers)
+
+			try:
+				response: collections.abc.Mapping[str, typing.Any] | collections.abc.Sequence[typing.Any] | int | bool | None = self.__callback__(session, request.json)
+
+				if response is None or response is ...:
+					return flask.Response(json.dumps({}), status=200, content_type='application/json')
+				elif response is NotImplemented:
+					return flask.Response(json.dumps({'error': 'NotImplemented'}), status=501, content_type='application/json', headers=response_headers)
+				elif isinstance(response, int):
+					return flask.Response(json.dumps({'error': f'HTTP/{response}'}), status=int(response), content_type='application/json', headers=response_headers)
+				elif isinstance(response, (collections.abc.Mapping, collections.abc.Sequence)):
+					return flask.Response(json.dumps(response), status=200, content_type='application/json', headers=response_headers)
+				else:
+					raise TypeError(f'Unexpected response type from API callback \'{self.route}\' - Expected either a JSON dictionary or None')
+
+			except Exception as e:
+				sys.stderr.write(''.join(traceback.format_exception(e)))
+				return flask.Response(json.dumps({'error': 'An internal error has occurred'}), status=500, content_type='application/json', headers=response_headers)
+
+		@property
+		def route(self) -> str:
+			return self.__route__
+
+		@property
+		def requires_auth(self) -> bool:
+			return self.__auth_required__
+
+		@property
+		def response_headers(self) -> dict[str, typing.Any]:
+			return self.__headers__
+
+		@property
+		def allowed_methods(self) -> tuple[str, ...]:
+			return self.__methods__
+
 	__RESTRICTED_EIDS: tuple[str, ...] = ('connect', 'disconnect')
 
 	@staticmethod
@@ -1049,7 +1105,7 @@ class FlaskServerAPI:
 		except (ValueError, TypeError):
 			return None
 	
-	def __init__(self, app: flask.Flask, route: str = '/api', *, requires_auth: bool = False, methods: tuple[typing.Literal['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE', 'HEAD', 'PATCH', 'CONNECT', 'TRACE'], ...] = ('GET', 'OPTIONS'), session_timeout: float = 300, global_response_headers: dict[str, typing.Any] = ...):
+	def __init__(self, app: flask.Flask, route: str = '/api', *, requires_auth: bool = False, methods: tuple[typing.Literal['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE', 'HEAD', 'PATCH', 'CONNECT', 'TRACE'], ...] = ('POST', 'OPTIONS'), session_timeout: float = 300, global_response_headers: dict[str, typing.Any] = ..., is_timeout_daemon: bool = False):
 		"""
 		Class wrapping generic functionality for flask API endpoints\n
 		- Constructor -
@@ -1058,6 +1114,8 @@ class FlaskServerAPI:
 		:param requires_auth: Whether clients need authentication. If true, see 'FlaskServerAPI.connector' and 'FlaskServerAPI.disconnector' to control session authentication
 		:param methods: The HTTP methods allowed for any request to this API
 		:param session_timeout: The amount of seconds after the last request a session will be de-authenticated (will spawn a manager thread, 0 is no timeout, must be greater than or equal to 0)
+		:param global_response_headers: The response headers to apply globally to all responses
+		:param is_timeout_daemon: Whether the timeout thread is a daemon
 		:raises InvalidArgumentException: If 'app' is not a Flask instance
 		:raises InvalidArgumentException: If 'route' is not a string
 		:raises InvalidArgumentException: If 'requires_auth' is not a boolean
@@ -1070,20 +1128,22 @@ class FlaskServerAPI:
 		Misc.raise_if(not (route := str(route).strip('/\\')).isalnum() or any(x in ('\b', '\n', '\t') for x in route), ValueError('Route contains invalid characters'))
 		Misc.raise_ifn(isinstance(session_timeout, (int, float)) and (session_timeout := float(session_timeout)) >= 0, Exceptions.InvalidArgumentException(FlaskServerAPI.__init__, 'session_timeout', type(session_timeout), (int, float)))
 		Misc.raise_ifn(global_response_headers is ... or isinstance(global_response_headers, dict), Exceptions.InvalidArgumentException(FlaskServerAPI.__init__, 'global_response_headers', type(global_response_headers), (dict,)))
+		Misc.raise_ifn(isinstance(is_timeout_daemon, bool), Exceptions.InvalidArgumentException(FlaskServerAPI.__init__, 'is_timeout_daemon', type(is_timeout_daemon), (bool,)))
 
 		super().__init__()
 		self.__app__: flask.Flask = app
 		self.__route__: str = f'/{route}'
 		self.__sessions__: dict[uuid.UUID, FlaskServerAPI.APISessionInfo] = {}
 		self.__session_lock__: threading.Lock = threading.Lock()
-		self.__callbacks__: dict[str, tuple[collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], collections.abc.Mapping[str, typing.Any] | collections.abc.Sequence[typing.Any]], bool]] = {}
+		self.__callbacks__: dict[str, FlaskServerAPI.APIEndpoint] = {}
 		self.__auth__: bool = bool(requires_auth)
 		self.__connector__: typing.Optional[collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], bool | int | typing.Mapping[str, typing.Any] | None] | tuple[bool | int, collections.abc.Mapping[str, typing.Any]]] = None
 		self.__disconnector__: typing.Optional[collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], collections.abc.Mapping[str, typing.Any] | None]] = None
 		self.__setup_auth_channels__(methods := tuple(methods))
 		self.__timeout__: float = session_timeout
 		self.__state__: bool = True
-		self.__timeout_thread__: typing.Optional[threading.Thread] = None if self.session_timeout == 0 or not self.__auth__ else threading.Thread(target=self.__begin_timeout_loop__)
+		self.__is_timeout_daemon__: bool = bool(is_timeout_daemon)
+		self.__timeout_thread__: typing.Optional[threading.Thread] = None if self.session_timeout == 0 or not self.__auth__ else threading.Thread(target=self.__begin_timeout_loop__, daemon=self.__is_timeout_daemon__)
 		self.__app__.add_url_rule(f'{self.__route__}/<path:route>', view_func=self.__flask_route__, provide_automatic_options=False, methods=methods, endpoint=f'{self.__route__.replace('/', '_')}_flaskroute')
 		self.__global_response_headers__: dict[str, typing.Any] = {} if global_response_headers is ... else global_response_headers
 
@@ -1182,22 +1242,25 @@ class FlaskServerAPI:
 		Begins a thread to manage session timeouts
 		"""
 
-		while self.is_running:
-			with self.__session_lock__:
-				uids: tuple[uuid.UUID, ...] = tuple(self.__sessions__.keys())
-
-			now: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
-
-			for uid in uids:
+		try:
+			while self.is_running:
 				with self.__session_lock__:
-					session: typing.Optional[FlaskServerAPI.APISessionInfo] = self.__sessions__.get(uid)
+					uids: tuple[uuid.UUID, ...] = tuple(self.__sessions__.keys())
 
-				if session is None:
-					continue
-				elif (now - session.last_request_time).total_seconds() >= self.session_timeout:
-					self.close_session(uid)
+				now: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
 
-			time.sleep(1)
+				for uid in uids:
+					with self.__session_lock__:
+						session: typing.Optional[FlaskServerAPI.APISessionInfo] = self.__sessions__.get(uid)
+
+					if session is None:
+						continue
+					elif (now - session.last_request_time).total_seconds() >= self.session_timeout:
+						self.close_session(uid)
+
+				time.sleep(1)
+		except KeyboardInterrupt:
+			self.close()
 
 	def __flask_route__(self, route: str) -> flask.Response:
 		"""
@@ -1212,33 +1275,13 @@ class FlaskServerAPI:
 		elif route not in self.__callbacks__:
 			return flask.Response(json.dumps({'error': 'no-api-endpoint'}), status=404, content_type='application/json', headers=self.global_response_headers)
 		elif flask.request.content_type != 'application/json':
-			return flask.Response(json.dumps({'error': 'invalid-content-type'}), status=415, content_type='application/json', headers=self.global_response_headers)
+			return flask.Response(json.dumps({'error': 'invalid-content-type'}), status=415, content_type='application/json', headers={'Accept-Post': 'application/json'} | self.global_response_headers)
 		elif (auth := FlaskServerAPI.__parse_auth_token__(flask.request.json.get('auth'))) is None and self.__auth__:
 			return flask.Response(json.dumps({'error': 'not-authenticated'}), status=401, content_type='application/json', headers=self.global_response_headers)
 		else:
-			callback, requires_auth = self.__callbacks__[route]
+			endpoint: FlaskServerAPI.APIEndpoint = self.__callbacks__[route]
 			session: typing.Optional[FlaskServerAPI.APISessionInfo] = self.__sessions__.get(auth)
-
-			if self.__auth__ and requires_auth and (session is None or session.closed):
-				return flask.Response(json.dumps({'error': 'not-authenticated'}), status=401, content_type='application/json', headers=self.global_response_headers)
-
-			try:
-				response: collections.abc.Mapping[str, typing.Any] | collections.abc.Sequence[typing.Any] | int | None = callback(session, flask.request.json)
-
-				if response is None or response is ...:
-					return flask.Response(json.dumps({}), status=200, content_type='application/json')
-				elif response is NotImplemented:
-					return flask.Response(json.dumps({'error': 'NotImplemented'}), status=501, content_type='application/json', headers=self.global_response_headers)
-				elif isinstance(response, int):
-					return flask.Response(json.dumps({'error': f'HTTP/{response}'}), status=int(response), content_type='application/json', headers=self.global_response_headers)
-				elif isinstance(response, (collections.abc.Mapping, collections.abc.Sequence)):
-					return flask.Response(json.dumps(response), status=200, content_type='application/json', headers=self.global_response_headers)
-				else:
-					raise TypeError(f'Unexpected response type from API callback \'{route}\' - Expected either a JSON dictionary or None')
-
-			except Exception as e:
-				sys.stderr.write(''.join(traceback.format_exception(e)))
-				return flask.Response(json.dumps({'error': 'An internal error has occurred'}), status=500, content_type='application/json', headers=self.global_response_headers)
+			return endpoint(self, session, flask.request)
 
 	def __next_token__(self) -> uuid.UUID:
 		"""
@@ -1358,12 +1401,14 @@ class FlaskServerAPI:
 
 		return matches[0] if len(matches) == 1 else None
 
-	def endpoint(self, route: str, callback: typing.Optional[collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], typing.Mapping[str, typing.Any] | typing.Sequence[typing.Any]]] = ..., *, requires_auth: bool = True) -> typing.Optional[collections.abc.Callable[[collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], collections.abc.Mapping[str, typing.Any] | collections.abc.Sequence[typing.Any]]], None]]:
+	def endpoint(self, route: str, callback: typing.Optional[collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], typing.Mapping[str, typing.Any] | typing.Sequence[typing.Any]]] = ..., *, requires_auth: bool = True, response_headers: dict[str, typing.Any] = ..., allowed_methods: tuple[str, ...] = ...) -> typing.Optional[collections.abc.Callable[[collections.abc.Callable[[FlaskServerAPI.APISessionInfo, collections.abc.Mapping[str, typing.Any]], collections.abc.Mapping[str, typing.Any] | collections.abc.Sequence[typing.Any]]], None]]:
 		"""
 		Binds a callback to the specified API endpoint
 		:param route: The API endpoint
 		:param callback: The callback
 		:param requires_auth: Whether this endpoint requires an authenticated session
+		:param response_headers: The endpoint specific response headers to set (dictionary or'ed with global response headers)
+		:param allowed_methods: The allowed HTTP methods this endpoint accepts (overrides global settings)
 		:return: None or a binder if used as a decorator
 		:raises InvalidArgumentException: If 'route' is not a string
 		:raises InvalidArgumentException: If 'requires_auth' is not a boolean
@@ -1380,13 +1425,13 @@ class FlaskServerAPI:
 
 		if callback is None or callback is ...:
 			def binder(func: typing.Callable[[FlaskServerAPI.APISessionInfo, typing.Mapping[str, typing.Any]], typing.Mapping[str, typing.Any] | typing.Sequence[typing.Any]]) -> None:
-				self.endpoint(route, func, requires_auth=requires_auth)
+				self.endpoint(route, func, requires_auth=requires_auth, allowed_methods=allowed_methods, response_headers=response_headers)
 
 			return binder
 		elif callable(callback) and route in self.__callbacks__:
 			raise ValueError('Specified API route is already bound')
 		elif callable(callback):
-			self.__callbacks__[route] = (callback, bool(requires_auth))
+			self.__callbacks__[route] = FlaskServerAPI.APIEndpoint(route, callback, requires_auth, allowed_methods, response_headers)
 		else:
 			raise ValueError('Callback is not callable')
 
@@ -1460,6 +1505,14 @@ class FlaskServerAPI:
 		"""
 
 		return self.__state__
+
+	@property
+	def requires_auth(self) -> bool:
+		"""
+		:return: Whether this API requires authentication
+		"""
+
+		return self.__auth__
 
 	@property
 	def session_timeout(self) -> float:

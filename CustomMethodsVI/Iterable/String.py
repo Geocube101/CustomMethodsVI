@@ -181,7 +181,7 @@ class String(Sequence.MutableSequence[str], str):
 		:return: Whether all characters are 0 or 1 and the string starts with 0b or 0B
 		"""
 
-		return re.fullmatch(r'0[bB][01]+', self) is not None
+		return re.fullmatch(r'^0[bB][01]+$', self) is not None
 
 	def is_integer8(self) -> bool:
 		"""
@@ -198,7 +198,7 @@ class String(Sequence.MutableSequence[str], str):
 		:return: Whether all characters are in the range 0-7 and the string starts with 0o or 0O
 		"""
 
-		return re.fullmatch(r'0[oO][01234567]+', self) is not None
+		return re.fullmatch(r'^0[oO][01234567]+$', self) is not None
 
 	def is_integer10(self) -> bool:
 		"""
@@ -214,7 +214,7 @@ class String(Sequence.MutableSequence[str], str):
 		:return: Whether all characters are in the range 0-9 and the string starts with 0d or 0D
 		"""
 
-		return re.fullmatch(r'0[dD]\d+', self) is not None
+		return re.fullmatch(r'^0[dD]\d+$', self) is not None
 
 	def is_integer16(self) -> bool:
 		"""
@@ -231,14 +231,28 @@ class String(Sequence.MutableSequence[str], str):
 		:return: Whether all characters are in the range 0-9 and the string starts with 0x or OX
 		"""
 
-		return re.fullmatch(r'0[xX][\dabcdefABCDEF]+', self) is not None
+		return re.fullmatch(r'^0[xX][\dabcdefABCDEF]+$', self) is not None
 
 	def is_float(self) -> bool:
 		"""
 		:return: Whether the string is a valid float representation
 		"""
 
-		return re.fullmatch(r'\d+(\.\d*(([eE])\d*)?)?', self) is not None
+		return re.fullmatch(r'^\d+(\.\d*(([eE])\d*)?)?$', self) is not None
+
+	def is_snake_case(self) -> bool:
+		"""
+		:return: Whether the string is snake case
+		"""
+
+		return re.fullmatch(r'^_*[a-z]+[_*[a-z|\d]+]*_*$', self) is not None
+
+	def is_camel_case(self) -> bool:
+		"""
+		:return: Whether the string is camel case
+		"""
+
+		return re.fullmatch(r'^_*[a-z]+([A-Z\d][a-z\d]*)*_*$', self) is not None
 
 	def is_extended_float(self) -> bool:
 		"""
@@ -248,14 +262,14 @@ class String(Sequence.MutableSequence[str], str):
 		:return: Whether the string is a valid float representation
 		"""
 
-		return re.fullmatch(r'\d+(\.\d*(([e|E])\d*(\.\d*)?)?)?', self) is not None
+		return re.fullmatch(r'^\d+(\.\d*(([e|E])\d*(\.\d*)?)?)?$', self) is not None
 
 	def is_complex(self) -> bool:
 		"""
 		:return: Whether the string is a valid complex number representation
 		"""
 
-		return re.fullmatch(r'\(?\d*(\.\d*)?(e|E\d*)?(\+\d*(\.\d*)?(e|E\d*)?j)?\)?', self) is not None
+		return re.fullmatch(r'^\(?\d*(\.\d*)?(e|E\d*)?(\+\d*(\.\d*)?(e|E\d*)?j)?\)?$', self) is not None
 
 	def to_extended_float(self) -> float:
 		"""
@@ -337,6 +351,33 @@ class String(Sequence.MutableSequence[str], str):
 			raise TypeError('String elements must be a string or String instance')
 
 		return self
+
+	def to_camel_case(self) -> String:
+		result: list[str] = []
+		match: re.Match[str] = re.match(r'^(_*)(.*)(_*)$', self)
+		center: str = match.group(2)
+
+		for c in center:
+			if c == '_':
+				result.append(c)
+			elif len(result) > 0 and result[-1] == '_':
+				result.append(c.upper())
+			else:
+				result.append(c)
+
+		return String(f'{match.group(1)}{''.join(c for c in result if c != '_')}{match.group(3)}')
+
+	def to_snake_case(self) -> String:
+		result: list[str] = []
+
+		for c in self:
+			if len(result) > 0 and c.isupper() and not result[-1].isupper():
+				result.append('_')
+				result.append(c.lower())
+			else:
+				result.append(c)
+
+		return String(''.join(result))
 
 	def multisplit(self, sep: typing.Optional[typing.Iterable[str]] = ..., maxsplit: int = -1) -> list[String]:
 		"""
@@ -524,7 +565,7 @@ class ByteString(Sequence.MutableSequence[int], bytearray):
 		:return: Whether all characters are 0 or 1 and the string starts with 0b or 0B
 		"""
 
-		return re.fullmatch(rb'0[bB][01]+', bytes(self)) is not None
+		return re.fullmatch(rb'^0[bB][01]+$', bytes(self)) is not None
 
 	def is_integer8(self) -> bool:
 		"""
@@ -541,7 +582,7 @@ class ByteString(Sequence.MutableSequence[int], bytearray):
 		:return: Whether all characters are in the range 0-7 and the string starts with 0o or 0O
 		"""
 
-		return re.fullmatch(rb'0[oO][01234567]+', bytes(self)) is not None
+		return re.fullmatch(rb'^0[oO][01234567]+$', bytes(self)) is not None
 
 	def is_integer10(self) -> bool:
 		"""
@@ -558,7 +599,7 @@ class ByteString(Sequence.MutableSequence[int], bytearray):
 		:return: Whether all characters are in the range 0-9 and the string starts with 0d or 0D
 		"""
 
-		return re.fullmatch(rb'0[dD]\d+', bytes(self)) is not None
+		return re.fullmatch(rb'^0[dD]\d+$', bytes(self)) is not None
 
 	def is_integer16(self) -> bool:
 		"""
@@ -575,14 +616,28 @@ class ByteString(Sequence.MutableSequence[int], bytearray):
 		:return: Whether all characters are in the range 0-9 and the string starts with 0x or OX
 		"""
 
-		return re.fullmatch(rb'0[xX][\dabcdefABCDEF]+', bytes(self)) is not None
+		return re.fullmatch(rb'^0[xX][\dabcdefABCDEF]+$', bytes(self)) is not None
 
 	def is_float(self) -> bool:
 		"""
 		:return: Whether the string is a valid float representation
 		"""
 
-		return re.fullmatch(rb'\d+(\.\d*(([e|E])\d*)?)?', bytes(self)) is not None
+		return re.fullmatch(rb'^\d+(\.\d*(([e|E])\d*)?)?$', bytes(self)) is not None
+
+	def is_snake_case(self) -> bool:
+		"""
+		:return: Whether the string is snake case
+		"""
+
+		return re.fullmatch(rb'^_*[a-z]+[_*[a-z|\d]+]*_*$', bytes(self)) is not None
+
+	def is_camel_case(self) -> bool:
+		"""
+		:return: Whether the string is camel case
+		"""
+
+		return re.fullmatch(rb'^_*[a-z]+([A-Z\d][a-z\d]*)*_*$', bytes(self)) is not None
 
 	def is_extended_float(self) -> bool:
 		"""
@@ -592,7 +647,7 @@ class ByteString(Sequence.MutableSequence[int], bytearray):
 		:return: Whether the string is a valid float representation
 		"""
 
-		return re.fullmatch(rb'\d+(\.\d*(([e|E])\d*(\.\d*)?)?)?', bytes(self)) is not None
+		return re.fullmatch(rb'^\d+(\.\d*(([e|E])\d*(\.\d*)?)?)?$', bytes(self)) is not None
 
 	def to_extended_float(self) -> float:
 		"""
@@ -700,6 +755,35 @@ class ByteString(Sequence.MutableSequence[int], bytearray):
 			raise TypeError('Bytestring elements must be a bytes object, bytearray object, ByteString instance, or integer in the range 0-255')
 
 		return self
+
+	def to_camel_case(self) -> ByteString:
+		result: list[int] = []
+		match: re.Match[bytes] = re.match(rb'^(_*)(.*)(_*)$', bytes(self))
+		center: bytes = match.group(2)
+		under: int = ord('_')
+
+		for c in center:
+			if c == under:
+				result.append(c)
+			elif len(result) > 0 and result[-1] == under:
+				result.append(ord(chr(c).upper()))
+			else:
+				result.append(c)
+
+		output: list[int] = [*match.group(1), *result, *match.group(3)]
+		return ByteString(bytes(output))
+
+	def to_snake_case(self) -> ByteString:
+		result: list[int] = []
+
+		for c in self:
+			if len(result) > 0 and chr(c).isupper() and not chr(result[-1]).isupper():
+				result.append(ord('_'))
+				result.append(ord(chr(c).lower()))
+			else:
+				result.append(c)
+
+		return ByteString(bytes(result))
 
 	def multisplit(self, sep: typing.Optional[typing.Iterable[int | bytes | bytearray | ByteString]] = ..., maxsplit: int = -1) -> list[ByteString]:
 		"""

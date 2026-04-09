@@ -4,6 +4,7 @@ import collections.abc
 import multiprocessing
 import multiprocessing.connection
 import os
+import pickle
 import psutil
 import signal
 import sys
@@ -12,9 +13,10 @@ import time
 import traceback
 import typing
 
-from . import Misc
 from . import Exceptions
-from . import Decorators
+from . import FileSystem
+from . import Misc
+from . import Synchronization
 
 
 class Promise[T]:
@@ -579,8 +581,7 @@ class ThreadPool:
 		except (Exception, KeyboardInterrupt, SystemExit):
 			err_flag.set()
 
-	@Decorators.Overload
-	def __init__(self, function: collections.abc.Callable, workers: int, *, synchronous_start: bool = True, daemon: bool = False):
+	def __init__(self, function: collections.abc.Callable, workers: int, *, synchronous_start: bool = True, daemon: bool = False, supply_index: bool = False):
 		"""
 		Class for managing a pool of worker threading.Thread threads
 		- Constructor -
@@ -600,13 +601,15 @@ class ThreadPool:
 		self.__workers__: int = int(workers)
 		self.__synchronous_start__: bool = bool(synchronous_start)
 		self.__daemon__: bool = bool(daemon)
+		self.__supply_index: bool = bool(supply_index)
 
-	def __call__(self, *args, **kwargs) -> None:
+	def __call__(self, *args, **kwargs) -> ThreadPool:
 		"""
 		Starts the pool
 		:param args: Positional arguments to call the function with
 		:param kwargs: Keyword arguments to call the function with
 		:raises ChildProcessError: If the pool is still running
+		:return: This pool
 		"""
 
 		if any(x[0].is_alive() for x in self.__processes__):
@@ -615,14 +618,17 @@ class ThreadPool:
 		event: threading.Event = threading.Event()
 		event.clear()
 
-		for _ in range(self.__workers__):
+		for i in range(self.__workers__):
 			err_flag: threading.Event = threading.Event()
-			process: threading.Thread = threading.Thread(target=ThreadPool.__wrapper__, args=(self.__function__, event if self.__synchronous_start__ else None, err_flag, args, kwargs), daemon=self.__daemon__)
+			pargs: tuple = (i, *args) if self.__supply_index else args
+			process: threading.Thread = threading.Thread(target=ThreadPool.__wrapper__, args=(self.__function__, event if self.__synchronous_start__ else None, err_flag, pargs, kwargs), daemon=self.__daemon__)
 			process.start()
 			self.__processes__.append((process, err_flag))
 
 		if self.__synchronous_start__:
 			event.set()
+
+		return self
 
 	def __await__(self) -> collections.abc.Iterator[None]:
 		while any(p[0].is_alive() for p in self.__processes__):
@@ -707,8 +713,7 @@ class ProcessPool:
 	Class for managing a pool of worker multiprocessing.Process processes
 	"""
 
-	@Decorators.Overload
-	def __init__(self, function: collections.abc.Callable, workers: int, *, synchronous_start: bool = True, daemon: bool = False):
+	def __init__(self, function: collections.abc.Callable, workers: int, *, synchronous_start: bool = True, daemon: bool = False, supply_index: bool = False):
 		"""
 		Class for managing a pool of worker multiprocessing.Process processes
 		- Constructor -
@@ -728,20 +733,23 @@ class ProcessPool:
 		self.__workers__: int = int(workers)
 		self.__synchronous_start__: bool = bool(synchronous_start)
 		self.__daemon__: bool = bool(daemon)
+		self.__supply_index: bool = bool(supply_index)
 
-	def __call__(self, *args, **kwargs) -> None:
+	def __call__(self, *args, **kwargs) -> ProcessPool:
 		"""
 		Starts the pool
 		:param args: Positional arguments to call the function with
 		:param kwargs: Keyword arguments to call the function with
 		:raises ChildProcessError: If the pool is still running
+		:return: This pool
 		"""
 
 		if any(x.is_alive() for x in self.__processes__):
 			raise ChildProcessError('Process pool already active')
 
-		for _ in range(self.__workers__):
-			process: multiprocessing.Process = multiprocessing.Process(target=self.__function__, args=args, kwargs=kwargs, daemon=self.__daemon__)
+		for i in range(self.__workers__):
+			pargs: tuple = (i, *args) if self.__supply_index else args
+			process: multiprocessing.Process = multiprocessing.Process(target=self.__function__, args=pargs, kwargs=kwargs, daemon=self.__daemon__)
 			process.start()
 
 			if self.__synchronous_start__:
@@ -752,6 +760,8 @@ class ProcessPool:
 		if self.__synchronous_start__:
 			for worker in self.__processes__:
 				psutil.Process(worker.pid).resume()
+
+		return self
 
 	def __await__(self) -> collections.abc.Iterator[None]:
 		while any(p.is_alive() for p in self.__processes__):
@@ -1025,4 +1035,97 @@ class PhysicalThread(Thread):
 		PhysicalThread.__next_core = (PhysicalThread.__next_core + 1) % psutil.cpu_count(False)
 
 
-__all__: list[str] = ['Promise', 'ConcurrentPromise', 'ThreadedPromise', 'ThreadedFunction', 'ConcurrentFunction', 'ThreadPool', 'ProcessPool', 'Thread', 'LogicalThread', 'PhysicalThread']
+class FileLockedValue[T](Synchronization.LockUser):
+	def __init__(self, initial_value: T, *, lock: Synchronization.LockType_T = ...):
+		"""
+		Class representing a thread-safe value stored on disk
+		:param initial_value: The initial value
+		:param lock: The lock used for mutual exclusion
+		"""
+
+		super().__init__(Synchronization.ReaderWriterLock() if lock is ... else lock)
+		self.__filesocket__: FileSystem.File = FileSystem.File(f'{hex(id(self))}.flv')
+		self.__value__: T = initial_value
+
+		if not self.__filesocket__.exists():
+			with self.__filesocket__.open('wb') as fstream:
+				pickle.dump(initial_value, fstream)
+				os.fsync(fstream)
+
+	def __del__(self):
+		with self.write_lock():
+			self.__filesocket__.delete()
+
+	def set(self, value: T) -> None:
+		"""
+		Sets the value and updates file
+		:param value: The value to set
+		:raise BrokenPipeError: If the pipe is closed
+		"""
+
+		with self.write_lock():
+			if self.closed:
+				raise BrokenPipeError('The pipe has been closed')
+
+			with self.__filesocket__.open('wb') as fstream:
+				pickle.dump(value, fstream)
+				os.fsync(fstream)
+				self.__value__ = value
+
+	def get(self) -> T:
+		"""
+		Gets the value from file
+		:raise BrokenPipeError: If the pipe is closed
+		:return: The new value
+		"""
+
+		with self.read_lock():
+			if self.closed:
+				raise BrokenPipeError('The pipe has been closed')
+
+			with self.__filesocket__.open('rb') as fstream:
+				self.__value__ = pickle.load(fstream)
+
+		return self.__value__
+
+	def get_or_default(self, default: T) -> T:
+		"""
+		Gets the value from file
+		:param default: The default value if pipe is closed
+		:raise BrokenPipeError: If the pipe is closed
+		:return: The new value or 'default'
+		"""
+
+		with self.read_lock():
+			if self.closed:
+				return default
+
+			with self.__filesocket__.open('rb') as fstream:
+				self.__value__ = pickle.load(fstream)
+
+		return self.__value__
+
+	@property
+	def closed(self) -> bool:
+		"""
+		:return: Whether the pipe is closed
+		"""
+
+		return not self.__filesocket__.exists()
+
+	@property
+	def value(self) -> T:
+		"""
+		:return: The value as last retrieved from file - (call 'get' or 'get_or_default' to update from file)
+		"""
+
+		return self.__value__
+
+
+__all__: list[str] = [
+	'Promise', 'ConcurrentPromise', 'ThreadedPromise',
+	'ThreadedFunction', 'ConcurrentFunction',
+	'ThreadPool', 'ProcessPool',
+	'Thread', 'LogicalThread', 'PhysicalThread',
+	'FileLockedValue'
+]

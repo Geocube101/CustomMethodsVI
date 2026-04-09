@@ -411,6 +411,13 @@ class FileStream(Stream[str | bytes]):
 		self.seek(cursor, 0)
 		return size
 
+	def fileno(self) -> int:
+		"""
+		:return: This stream's file descriptor
+		"""
+
+		return self.__stream__.fileno()
+
 	def read(self, __size: typing.Optional[int] = ...) -> bytes | str:
 		"""
 		Reads '__size' characters from the file
@@ -424,7 +431,7 @@ class FileStream(Stream[str | bytes]):
 		elif not self.readable():
 			raise StreamError('Stream is not readable')
 
-		return self.__stream__.read(None if __size is None or __size is ... else int(__size))
+		return self.__stream__.read(-1 if __size is None or __size is ... else int(__size))
 
 	def peek(self, __size: typing.Optional[int] = ...) -> bytes | str:
 		"""
@@ -440,7 +447,7 @@ class FileStream(Stream[str | bytes]):
 			raise StreamError('Stream is not readable')
 
 		cursor: int = self.tell()
-		data: bytes | str = self.__stream__.read(None if __size is None or __size is ... else int(__size))
+		data: bytes | str = self.__stream__.read(-1 if __size is None or __size is ... else int(__size))
 		self.seek(cursor, 0)
 		return data
 
@@ -457,7 +464,7 @@ class FileStream(Stream[str | bytes]):
 		elif not self.readable():
 			raise StreamError('Stream is not readable')
 
-		return self.__stream__.readline(None if __size is None or __size is ... else int(__size))
+		return self.__stream__.readline(-1 if __size is None or __size is ... else int(__size))
 
 	def peekline(self, __size: typing.Optional[int] = ...) -> bytes | str:
 		"""
@@ -473,7 +480,7 @@ class FileStream(Stream[str | bytes]):
 			raise StreamError('Stream is not readable')
 
 		cursor: int = self.tell()
-		data: bytes | str = self.__stream__.readline(None if __size is None or __size is ... else int(__size))
+		data: bytes | str = self.__stream__.readline(-1 if __size is None or __size is ... else int(__size))
 		self.seek(cursor, 0)
 		return data
 
@@ -490,7 +497,7 @@ class FileStream(Stream[str | bytes]):
 		elif not self.readable():
 			raise StreamError('Stream is not readable')
 
-		return self.__stream__.readlines(None if __hint is None or __hint is ... else int(__hint))
+		return self.__stream__.readlines(-1 if __hint is None or __hint is ... else int(__hint))
 
 	def write(self, __buffer: str | bytes) -> FileStream:
 		"""

@@ -137,12 +137,14 @@ class MutableMapping[K, V](Mapping[K, V], collections.abc.MutableMapping):
 		self.update(other)
 		return self
 
-	def clear(self) -> None:
+	def clear(self) -> MutableMapping[K, V]:
 		"""
 		Clears the mapping
+		:return: This mapping
 		"""
 
 		self.__buffer__.clear()
+		return self
 
 	def get_or_insert(self, key: K, default: typing.Optional[V] = None) -> V:
 		"""
@@ -184,12 +186,12 @@ class MutableMapping[K, V](Mapping[K, V], collections.abc.MutableMapping):
 		return self
 
 
-class LockedMapping[K, V](MutableMapping[K, V]):
+class LockedMapping[K, V](MutableMapping[K, V], Synchronization.LockUser):
 	"""
 	Thread safe mapping using locks
 	"""
 
-	def __init__(self, mapping: collections.abc.Mapping[K, V] = ..., *, lock: threading.Lock | Synchronization.SynchronizationPrimitive = Synchronization.SpinLock()):
+	def __init__(self, mapping: collections.abc.Mapping[K, V] = ..., *, lock: Synchronization.LockType_T = Synchronization.SpinLock()):
 		"""
 		Thread safe mapping using locks\n
 		- Constructor -
@@ -197,9 +199,8 @@ class LockedMapping[K, V](MutableMapping[K, V]):
 		:param lock: The lock to use for operations
 		"""
 
-		Misc.raise_ifn(isinstance(lock, (threading.Lock, Synchronization.SynchronizationPrimitive)), Exceptions.InvalidArgumentException(LockedMapping.__init__, 'lock', type(lock), (threading.Lock, Synchronization.SynchronizationPrimitive)))
-		super().__init__(mapping)
-		self.__lock__: threading.Lock | Synchronization.SpinLock | Synchronization.ReaderWriterLock = lock
+		MutableMapping.__init__(self, mapping)
+		Synchronization.LockUser.__init__(self, lock)
 
 	def __contains__(self, key: K) -> bool:
 		with self.read_lock():
@@ -267,9 +268,11 @@ class LockedMapping[K, V](MutableMapping[K, V]):
 		with self.read_lock():
 			return type(self)(self.__buffer__ | dict(other))
 
-	def clear(self) -> None:
+	def clear(self) -> LockedMapping[K, V]:
 		with self.write_lock():
 			self.__buffer__.clear()
+
+		return self
 
 	def copy[I: LockedMapping](self: I) -> I:
 		with self.read_lock():
@@ -303,52 +306,6 @@ class LockedMapping[K, V](MutableMapping[K, V]):
 	def values(self) -> collections.abc.ValuesView[V]:
 		with self.read_lock():
 			return self.__buffer__.values()
-
-	def acquire_read_lock(self) -> bool:
-		"""
-		Acquires the reader lock if an RW lock, otherwise acquires the lock\n
-		Blocks until lock is acquired
-		:return: Whether the lock was acquired
-		"""
-
-		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
-			return self.__lock__.acquire()
-		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
-			return self.__lock__.acquire_reader()
-
-	def acquire_write_lock(self) -> bool:
-		"""
-		Acquires the writer lock if an RW lock, otherwise acquires the lock\n
-		Blocks until lock is acquired
-		:return: Whether the lock was acquired
-		"""
-
-		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
-			return self.__lock__.acquire()
-		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
-			return self.__lock__.acquire_writer()
-
-	def read_lock(self) -> threading.Lock | Synchronization.SynchronizationPrimitive | Synchronization.ReaderWriterLock.Lock:
-		"""
-		Returns the reader lock if an RW lock, otherwise the lock
-		:return: The lock object for context management
-		"""
-
-		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
-			return self.__lock__
-		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
-			return self.__lock__.reader()
-
-	def write_lock(self) -> threading.Lock | Synchronization.SynchronizationPrimitive | Synchronization.ReaderWriterLock.Lock:
-		"""
-		Returns the reader lock if an RW lock, otherwise the lock
-		:return: The lock object for context management
-		"""
-
-		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
-			return self.__lock__
-		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
-			return self.__lock__.writer()
 
 
 class MultiMapping[K: typing.Hashable, V](Iterable.Iterable[dict[K, list[V]], tuple[K, tuple[V, ...]]], collections.abc.Mapping):
@@ -494,18 +451,21 @@ class MutableMultiMapping[K, V](MultiMapping[K, V], collections.abc.MutableMappi
 		self.update(other)
 		return self
 
-	def clear(self) -> None:
+	def clear(self) -> MutableMultiMapping[K, V]:
 		"""
 		Clears the mapping
+		:return: This mapping
 		"""
 
 		self.__buffer__.clear()
+		return self
 
-	def delete(self, key: K, value: V) -> None:
+	def delete(self, key: K, value: V) -> MutableMultiMapping[K, V]:
 		"""
 		Removes the specific value from this mapping
 		:param key: The key to remove
 		:param value: The value to remove
+		:return: This mapping
 		"""
 
 		values: typing.Optional[list[V]] = self.__buffer__.get(key)
@@ -514,6 +474,8 @@ class MutableMultiMapping[K, V](MultiMapping[K, V], collections.abc.MutableMappi
 
 		if len(values) == 0:
 			del self.__buffer__[key]
+
+		return self
 
 	def get_or_insert(self, key: K, default: typing.Optional[V] = None) -> V:
 		"""
@@ -573,12 +535,12 @@ class MutableMultiMapping[K, V](MultiMapping[K, V], collections.abc.MutableMappi
 		return self
 
 
-class LockedMultiMapping[K, V](MutableMultiMapping[K, V]):
+class LockedMultiMapping[K, V](MutableMultiMapping[K, V], Synchronization.LockUser):
 	"""
 	Thread safe multi-mapping using locks
 	"""
 
-	def __init__(self, mapping: collections.abc.Mapping[K, V] = ..., *, lock: threading.Lock | Synchronization.SynchronizationPrimitive = Synchronization.SpinLock()):
+	def __init__(self, mapping: collections.abc.Mapping[K, V] = ..., *, lock: Synchronization.LockType_T = Synchronization.SpinLock()):
 		"""
 		Thread safe multi-mapping using locks\n
 		- Constructor -
@@ -586,9 +548,8 @@ class LockedMultiMapping[K, V](MutableMultiMapping[K, V]):
 		:param lock: The lock to use for operations
 		"""
 
-		Misc.raise_ifn(isinstance(lock, (threading.Lock, Synchronization.SynchronizationPrimitive)), Exceptions.InvalidArgumentException(LockedMapping.__init__, 'lock', type(lock), (threading.Lock, Synchronization.SynchronizationPrimitive)))
-		super().__init__(mapping)
-		self.__lock__: threading.Lock | Synchronization.SpinLock | Synchronization.ReaderWriterLock = lock
+		MutableMultiMapping.__init__(self, mapping)
+		Synchronization.LockUser.__init__(self, lock)
 
 	def __contains__(self, key: K) -> bool:
 		with self.read_lock():
@@ -656,9 +617,11 @@ class LockedMultiMapping[K, V](MutableMultiMapping[K, V]):
 		with self.read_lock():
 			return type(self)(self.__buffer__ | dict(other))
 
-	def clear(self) -> None:
+	def clear(self) -> LockedMultiMapping[K, V]:
 		with self.write_lock():
 			self.__buffer__.clear()
+
+		return self
 
 	def copy[I: LockedMapping](self: I) -> I:
 		with self.read_lock():
