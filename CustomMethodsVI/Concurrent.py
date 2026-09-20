@@ -3,11 +3,14 @@ from __future__ import annotations
 import collections.abc
 import multiprocessing
 import multiprocessing.connection
+import multiprocessing.shared_memory
 import os
 import pickle
 import psutil
 import signal
+import struct
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -1035,26 +1038,74 @@ class PhysicalThread(Thread):
 		PhysicalThread.__next_core = (PhysicalThread.__next_core + 1) % psutil.cpu_count(False)
 
 
-class FileLockedValue[T](Synchronization.LockUser):
-	def __init__(self, initial_value: T, *, lock: Synchronization.LockType_T = ...):
+class FileLockedValue[T](Synchronization.Synchronization.LockUser):
+	def __init__(self, initial_value: T, *, lock: Synchronization.Synchronization.LockType_T = ...):
 		"""
-		Class representing a thread-safe value stored on disk
+		Class representing a thread-safe value stored on disk\n
+		*Unexpected crashes may prevent the file from being deleted automatically*
 		:param initial_value: The initial value
 		:param lock: The lock used for mutual exclusion
 		"""
 
-		super().__init__(Synchronization.ReaderWriterLock() if lock is ... else lock)
-		self.__filesocket__: FileSystem.File = FileSystem.File(f'{hex(id(self))}.flv')
+		super().__init__(Synchronization.Multiprocessing.ReaderWriterLock() if lock is ... else lock)
+		temp_dir: FileSystem.Directory = FileSystem.Directory(tempfile.gettempdir())
+		self.__filesocket__: FileSystem.File = temp_dir.file(f'{hex(id(self))}.flv')
 		self.__value__: T = initial_value
 
 		if not self.__filesocket__.exists():
 			with self.__filesocket__.open('wb') as fstream:
 				pickle.dump(initial_value, fstream)
+				fstream.write(struct.pack('Q', 1))
 				os.fsync(fstream)
 
 	def __del__(self):
 		with self.write_lock():
 			self.__filesocket__.delete()
+
+	def __enter__(self) -> FileLockedValue[T]:
+		return self
+
+	def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+		self.close()
+
+	def __setstate__(self, state: dict[str, ...]) -> None:
+		self.__filesocket__ = FileSystem.File(state['file'])
+		self.__lock__ = state['lock']
+
+		if self.closed:
+			raise BrokenPipeError('The pipe has been closed')
+
+		with self.read_lock():
+			with self.__filesocket__.open('rb+') as f:
+				self.__value__ = pickle.load(f)
+				f.seek(-8, 2)
+				counter: int = struct.unpack('Q', f.read(8))[0] + 1
+				f.seek(-8, 2)
+				f.truncate()
+				f.write(struct.pack('Q', counter))
+
+	def __getstate__(self) -> dict[str, ...]:
+		return {'file': self.__filesocket__.abspath, 'lock': self.lock}
+
+	def close(self) -> None:
+		"""
+		Closes the file
+		"""
+
+		if self.closed:
+			return
+
+		with self.write_lock():
+			count: int = self.counter - 1
+
+			if count == 0:
+				self.__filesocket__.delete()
+				return
+
+			with self.__filesocket__.open('ab') as f:
+				f.seek(8, 2)
+				f.truncate()
+				f.write(struct.pack('Q', count))
 
 	def set(self, value: T) -> None:
 		"""
@@ -1067,10 +1118,17 @@ class FileLockedValue[T](Synchronization.LockUser):
 			if self.closed:
 				raise BrokenPipeError('The pipe has been closed')
 
-			with self.__filesocket__.open('wb') as fstream:
+			with self.__filesocket__.open('rb+') as fstream:
+				fstream.seek(-8, 2)
+				count: bytes = fstream.read(8)
+				fstream.seek(0, 0)
+				fstream.truncate()
 				pickle.dump(value, fstream)
+				fstream.seek(0, 2)
+				fstream.write(count)
 				os.fsync(fstream)
-				self.__value__ = value
+
+			self.__value__ = value
 
 	def get(self) -> T:
 		"""
@@ -1083,9 +1141,9 @@ class FileLockedValue[T](Synchronization.LockUser):
 			if self.closed:
 				raise BrokenPipeError('The pipe has been closed')
 
-			with self.__filesocket__.open('rb') as fstream:
-				self.__value__ = pickle.load(fstream)
+			data: bytes = self.__filesocket__.single_read(True)[:-8]
 
+		self.__value__ = pickle.loads(data)
 		return self.__value__
 
 	def get_or_default(self, default: T) -> T:
@@ -1100,9 +1158,9 @@ class FileLockedValue[T](Synchronization.LockUser):
 			if self.closed:
 				return default
 
-			with self.__filesocket__.open('rb') as fstream:
-				self.__value__ = pickle.load(fstream)
+			data: bytes = self.__filesocket__.single_read(True)
 
+		self.__value__ = pickle.loads(data)
 		return self.__value__
 
 	@property
@@ -1112,6 +1170,21 @@ class FileLockedValue[T](Synchronization.LockUser):
 		"""
 
 		return not self.__filesocket__.exists()
+
+	@property
+	def counter(self) -> int:
+		"""
+		:return: The number of active handles to this file
+		"""
+
+		if self.closed:
+			return 0
+
+		with self.read_lock():
+			with self.__filesocket__.open('rb') as f:
+				f.seek(-8, 2)
+				data: bytes = f.read(8)
+				return struct.unpack('Q', data)[0]
 
 	@property
 	def value(self) -> T:

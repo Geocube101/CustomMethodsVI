@@ -7,6 +7,14 @@ from . import Exceptions
 from . import Misc
 
 
+class EmptyCell:
+	def __repr__(self):
+		return ''
+
+	def __str__(self):
+		return ''
+
+
 class Table2D(collections.abc.Sequence):
 	"""
 	Class representing a 2D table of any size
@@ -329,11 +337,12 @@ class Table2D(collections.abc.Sequence):
 		for row in self.__cells__:
 			del row[index:]
 
-	def dimensions(self, width: typing.Optional[int] = ..., height: typing.Optional[int] = ...) -> typing.Optional[tuple[int, int]]:
+	def dimensions(self, width: typing.Optional[int] = ..., height: typing.Optional[int] = ..., fill_value: typing.Any = None) -> typing.Optional[tuple[int, int]]:
 		"""
 		Gets or sets the dimensions of this table
 		:param width: The new width
 		:param height: The new height
+		:param fill_value: The initial value to fill each new cell with
 		:return: The current dimensions if with and height are not supplied, otherwise None
 		"""
 
@@ -350,10 +359,18 @@ class Table2D(collections.abc.Sequence):
 			elif width == 0 or height == 0:
 				self.__cells__.clear()
 			else:
-				del self.__cells__[:height]
+				height_delta: int = height - len(self.__cells__)
+
+				if height_delta > 0:
+					self.__cells__.extend([[fill_value] * width] for _ in range(height_delta))
+				elif height_delta < 0:
+					del self.__cells__[:height]
 
 				for col in self.__cells__:
-					del col[:width]
+					if len(col) > width:
+						del col[:width]
+					elif len(col) < width:
+						col.extend([fill_value] * (width - len(col)))
 
 	def get_column(self, index_or_letter: str | int) -> tuple[typing.Any, ...]:
 		"""
@@ -437,4 +454,5 @@ class Table2D(collections.abc.Sequence):
 		return self
 
 
-__all__: list[str] = ['Table2D']
+EMPTY: EmptyCell = EmptyCell()
+__all__: list[str] = ['Table2D', 'EMPTY']

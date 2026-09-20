@@ -329,7 +329,7 @@ class String(Sequence.MutableSequence[str], str):
 
 		return self
 
-	def extend(self, iterable: typing.Iterable[bytes, bytearray, ByteString, int]) -> String:
+	def extend(self, iterable: collections.abc.Iterable[bytes, bytearray, ByteString, int]) -> String:
 		"""
 		Adds all strings or bytes from the specified iterable to the end of this string
 		:param iterable: The collection of substrings or bytes to add
@@ -379,7 +379,7 @@ class String(Sequence.MutableSequence[str], str):
 
 		return String(''.join(result))
 
-	def multisplit(self, sep: typing.Optional[typing.Iterable[str]] = ..., maxsplit: int = -1) -> list[String]:
+	def multisplit(self, sep: typing.Optional[collections.abc.Iterable[str]] = ..., maxsplit: int = -1) -> list[String]:
 		"""
 		Splits the string around multiple delimiters
 		:param sep: The delimiters to split around
@@ -388,6 +388,17 @@ class String(Sequence.MutableSequence[str], str):
 		"""
 
 		return [String(s) for s in re.split('|'.join(re.escape(delimiter) for delimiter in sep), self, 0 if maxsplit <= 0 else maxsplit)]
+
+	def multireplace(self, target: collections.abc.Iterable[str | String], new_string: str | String, maxreplace: int = 0) -> String:
+		"""
+		Replaces multiple substrings with the same value
+		:param target: The substrings to replace
+		:param new_string: The new substring to replace with
+		:param maxreplace: The maximum replacements to make
+		:return: The modified string
+		"""
+
+		return String(re.sub('|'.join(re.escape(pattern) for pattern in target), new_string, self, maxreplace))
 
 
 class ByteString(Sequence.MutableSequence[int], bytearray):
@@ -731,7 +742,7 @@ class ByteString(Sequence.MutableSequence[int], bytearray):
 
 		return self
 
-	def extend(self, iterable: typing.Iterable[bytes, bytearray, ByteString, int]) -> ByteString:
+	def extend(self, iterable: collections.abc.Iterable[bytes, bytearray, ByteString, int]) -> ByteString:
 		"""
 		Adds all strings or bytes from the specified iterable to the end of this string
 		:param iterable: The collection of substrings or bytes to add
@@ -785,7 +796,7 @@ class ByteString(Sequence.MutableSequence[int], bytearray):
 
 		return ByteString(bytes(result))
 
-	def multisplit(self, sep: typing.Optional[typing.Iterable[int | bytes | bytearray | ByteString]] = ..., maxsplit: int = -1) -> list[ByteString]:
+	def multisplit(self, sep: typing.Optional[collections.abc.Iterable[int | bytes | bytearray | ByteString]] = ..., maxsplit: int = -1) -> list[ByteString]:
 		"""
 		Splits the string around multiple delimiters
 		:param sep: The delimiters to split around
@@ -816,6 +827,17 @@ class ByteString(Sequence.MutableSequence[int], bytearray):
 
 		segments.append(segment)
 		return [ByteString(seg) for seg in segments]
+
+	def multireplace(self, target: collections.abc.Iterable[int | bytes | bytearray | ByteString], new_string: bytes | bytearray | ByteString, maxreplace: int = 0) -> ByteString:
+		"""
+		Replaces multiple substrings with the same value
+		:param target: The substrings to replace
+		:param new_string: The new substring to replace with
+		:param maxreplace: The maximum replacements to make
+		:return: The modified string
+		"""
+
+		return ByteString(re.sub(b'|'.join(re.escape(pattern) for pattern in target), new_string, bytes(self), maxreplace))
 
 	@property
 	def bytes(self) -> typing.Iterator[bytes]:

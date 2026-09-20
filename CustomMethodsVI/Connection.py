@@ -1164,6 +1164,8 @@ class FlaskServerAPI:
 		def connect():
 			if not self.is_running:
 				return flask.Response(json.dumps({'error': 'offline'}), status=503, content_type='application/json', headers=self.global_response_headers)
+			elif flask.request.method.lower() == 'options':
+				return flask.Response(status=200, headers=self.global_response_headers)
 			elif flask.request.content_type != 'application/json':
 				return flask.Response(json.dumps({'error': 'invalid-content-type'}), status=415, content_type='application/json', headers=self.global_response_headers)
 			elif self.__connector__ is None:
@@ -1213,6 +1215,8 @@ class FlaskServerAPI:
 		def disconnect():
 			if not self.is_running:
 				return flask.Response(json.dumps({'error': 'offline'}), status=503, content_type='application/json', headers=self.global_response_headers)
+			elif flask.request.method.lower() == 'options':
+				return flask.Response(status=200, headers=self.global_response_headers)
 			elif flask.request.content_type != 'application/json':
 				return flask.Response(response=json.dumps({'error': 'invalid-content-type'}), status=415, content_type='application/json', headers=self.global_response_headers)
 			elif (session := self.__sessions__.get(auth := FlaskServerAPI.__parse_auth_token__(flask.request.json.get('auth')))) is not None and not session.closed:
@@ -1274,6 +1278,8 @@ class FlaskServerAPI:
 			return flask.Response(json.dumps({'error': 'offline'}), status=503, content_type='application/json', headers=self.global_response_headers)
 		elif route not in self.__callbacks__:
 			return flask.Response(json.dumps({'error': 'no-api-endpoint'}), status=404, content_type='application/json', headers=self.global_response_headers)
+		elif flask.request.method.lower() == 'options':
+			return flask.Response(status=200, headers=self.global_response_headers)
 		elif flask.request.content_type != 'application/json':
 			return flask.Response(json.dumps({'error': 'invalid-content-type'}), status=415, content_type='application/json', headers={'Accept-Post': 'application/json'} | self.global_response_headers)
 		elif (auth := FlaskServerAPI.__parse_auth_token__(flask.request.json.get('auth'))) is None and self.__auth__:

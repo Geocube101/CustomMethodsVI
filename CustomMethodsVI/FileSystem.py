@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import datetime
 import os
 import shutil
-import datetime
 import typing
 
 from . import Exceptions
@@ -499,17 +499,14 @@ class Directory:
 		return Directory(self.__dpath__.rsplit(os.sep, 2)[0])
 
 	@property
-	def contents(self) -> dict[str, tuple[File | Directory, ...]]:
+	def contents(self) -> tuple[tuple[File, ...], tuple[Directory, ...]]:
 		"""
 		Recursively gets directory contents as a dict
-		:return: A dictionary with two keys: 'files' and 'dirs'
+		:return: A tuple of files and directories
 		"""
 
-		try:
-			data = next(os.walk(self.__dpath__, True))
-			return {'files': tuple(File(data[0] + x) for x in data[2]), 'dirs': tuple(Directory(data[0] + x) for x in data[1])}
-		except StopIteration:
-			return {}
+		root, dirs, files = next(os.walk(self.__dpath__, True))
+		return tuple(File(root + file) for file in files), tuple(Directory(root + direc) for direc in dirs)
 
 	@property
 	def files(self) -> tuple[File, ...]:
@@ -517,11 +514,8 @@ class Directory:
 		:return: All sub-files of this directory
 		"""
 
-		try:
-			data = next(os.walk(self.__dpath__, True))
-			return tuple(File(data[0] + x) for x in data[2])
-		except StopIteration:
-			return tuple()
+		root, dirs, files = next(os.walk(self.__dpath__, True))
+		return tuple(File(root + file) for file in files)
 
 	@property
 	def dirs(self) -> tuple[Directory, ...]:
@@ -529,11 +523,8 @@ class Directory:
 		:return: All subdirectories of this directory
 		"""
 
-		try:
-			data = next(os.walk(self.__dpath__, True))
-			return tuple(Directory(data[0] + x) for x in data[1])
-		except StopIteration:
-			return tuple()
+		root, dirs, files = next(os.walk(self.__dpath__, True))
+		return tuple(Directory(root + direc) for direc in dirs)
 
 
 __all__: list[str] = ['File', 'Directory']

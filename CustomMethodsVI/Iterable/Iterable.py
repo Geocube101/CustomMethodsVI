@@ -10,7 +10,6 @@ import typing
 from .. import Exceptions
 from .. import Misc
 from .. import Stream
-from .. import Synchronization
 
 
 class Iterable[IterType, ElemType](collections.abc.Collection[ElemType]):
@@ -239,14 +238,9 @@ class IterableView[IterType: collections.abc.Collection, ElemType](collections.a
 
 
 class ThreadedGenerator[T]:
-	"""
-	Special generator using threading.Thread threads
-	"""
-
 	def __init__(self, generator: typing.Generator | typing.Iterable[T]):
 		"""
-		Special generator using threading.Thread threads\n
-		- Constructor -
+		Special generator using threading.Thread threads
 		:param generator: The initial generator or iterable to iterate
 		"""
 
@@ -255,7 +249,6 @@ class ThreadedGenerator[T]:
 		self.__state__ = False
 		self.__iterator__ = iter(generator)
 		self.__exec__ = None
-
 		self.__thread__.start()
 
 	def __del__(self) -> None:
@@ -367,4 +360,7 @@ def minmax(arg: collections.abc.Iterable, *args) -> tuple[typing.Any, typing.Any
 		raise ValueError('minmax() iterable argument is empty') from None
 
 
-__all__: list[str] = ['Iterable', 'IterableView', 'ThreadedGenerator', 'frange', 'minmax']
+LinqStream = Stream.LinqStream
+
+
+__all__: list[str] = ['Iterable', 'IterableView', 'ThreadedGenerator', 'frange', 'minmax', 'LinqStream']

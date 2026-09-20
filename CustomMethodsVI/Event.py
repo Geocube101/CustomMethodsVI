@@ -74,7 +74,7 @@ class EventHandler[*HCB]:
 
 	def __isub__(self, callback: collections.abc.Callable[[*HCB], ...]) -> EventHandler[*HCB]:
 		"""
-		Unregisters a callback to this event handler
+		Unregisters a callback from this event handler
 		:param callback: The callback to bind
 		:return: This event handler instance
 		"""
@@ -114,7 +114,7 @@ class EventHandler[*HCB]:
 
 		exception: typing.Optional[tuple[collections.abc.Callable[[*HCB], ...], Exception]] = None
 
-		for cb in self.__callbacks__:
+		for cb in self.__callbacks__.copy():
 			try:
 				cb(*args, **kwargs)
 			except Exception as err:
@@ -139,7 +139,7 @@ class EventHandler[*HCB]:
 
 		threads: list[list[threading.Thread | collections.abc.Callable[[*HCB], ...] | typing.Optional[Exception]]] = []
 
-		for i, cb in enumerate(self.__callbacks__):
+		for i, cb in enumerate(self.__callbacks__.copy()):
 			thread: threading.Thread = threading.Thread(target=EventHandler.__thread_callback_wrapper__, args=(cb, threads, i, args, kwargs))
 			threads.append([thread, cb, None])
 
@@ -167,7 +167,7 @@ class EventHandler[*HCB]:
 		threads: list[list[multiprocessing.Process | collections.abc.Callable[[*HCB], ...]]] = []
 		queue: multiprocessing.Queue = multiprocessing.Queue()
 
-		for i, cb in enumerate(self.__callbacks__):
+		for i, cb in enumerate(self.__callbacks__.copy()):
 			thread: multiprocessing.Process = multiprocessing.Process(target=EventHandler.__process_callback_wrapper__, args=(cb, i, queue, args, kwargs))
 			threads.append([thread, cb])
 

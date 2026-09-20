@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import collections.abc
+import io
 import typing
 
 
@@ -179,9 +180,9 @@ class KVP:
 			self.__reference__.sort(key=sorter, reverse=reverse)
 
 	@classmethod
-	def decode(cls, data: str, root_name: str = None) -> KVP:
+	def decode(cls, data: str | io.BufferedIOBase, root_name: str = None) -> KVP:
 		"""
-		Parses a string into a KVP object
+		Parses a string or string/bytes stream into a KVP object
 		:param data: The data to parse
 		:param root_name: The name of the root object
 		:return: A new KVP object
@@ -335,7 +336,8 @@ class KVP:
 						else:
 							token.append(char)
 
-					values.append(_decode_value(line_number, line, ''.join(token)))
+					if len(token) > 0:
+						values.append(_decode_value(line_number, line, ''.join(token)))
 
 					if isstring:
 						raise KVPDecodeError(f'Unclosed string: \'{"".join(token)}\' - LINE.{line_number + 1} {line}')
@@ -353,9 +355,20 @@ class KVP:
 			nonlocal line_number
 			line_number = 0
 
-			for x in data.split('\n'):
-				yield x.strip()
-				line_number += 1
+			if isinstance(data, str):
+				for x in data.split('\n'):
+					yield x.strip()
+					line_number += 1
+			elif isinstance(data, io.BufferedIOBase):
+				while len(line := data.readline()) > 0:
+					if isinstance(line, str):
+						yield line.strip()
+					elif isinstance(line, (bytes, bytearray)):
+						yield line.decode().strip()
+					else:
+						raise TypeError(f'Expected string or bytes object from stream, got \'{type(line).__name__}\'')
+			else:
+				raise TypeError(f'Expected string or BufferedIOBase to decode, got \'{type(data).__name__}\'')
 
 		line_number: int = 1
 		lines: collections.abc.Generator[str] = _line_getter()

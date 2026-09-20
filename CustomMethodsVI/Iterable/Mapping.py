@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import collections
-import threading
 import typing
 
 from . import Iterable
@@ -186,12 +185,12 @@ class MutableMapping[K, V](Mapping[K, V], collections.abc.MutableMapping):
 		return self
 
 
-class LockedMapping[K, V](MutableMapping[K, V], Synchronization.LockUser):
+class LockedMapping[K, V](MutableMapping[K, V], Synchronization.Synchronization.LockUser):
 	"""
 	Thread safe mapping using locks
 	"""
 
-	def __init__(self, mapping: collections.abc.Mapping[K, V] = ..., *, lock: Synchronization.LockType_T = Synchronization.SpinLock()):
+	def __init__(self, mapping: collections.abc.Mapping[K, V] = ..., *, lock: Synchronization.Synchronization.LockType_T = ...):
 		"""
 		Thread safe mapping using locks\n
 		- Constructor -
@@ -200,7 +199,7 @@ class LockedMapping[K, V](MutableMapping[K, V], Synchronization.LockUser):
 		"""
 
 		MutableMapping.__init__(self, mapping)
-		Synchronization.LockUser.__init__(self, lock)
+		Synchronization.Synchronization.LockUser.__init__(self, Synchronization.Threading.SpinLock() if lock is ... or lock is None else lock)
 
 	def __contains__(self, key: K) -> bool:
 		with self.read_lock():
@@ -535,12 +534,12 @@ class MutableMultiMapping[K, V](MultiMapping[K, V], collections.abc.MutableMappi
 		return self
 
 
-class LockedMultiMapping[K, V](MutableMultiMapping[K, V], Synchronization.LockUser):
+class LockedMultiMapping[K, V](MutableMultiMapping[K, V], Synchronization.Synchronization.LockUser):
 	"""
 	Thread safe multi-mapping using locks
 	"""
 
-	def __init__(self, mapping: collections.abc.Mapping[K, V] = ..., *, lock: Synchronization.LockType_T = Synchronization.SpinLock()):
+	def __init__(self, mapping: collections.abc.Mapping[K, V] = ..., *, lock: Synchronization.Synchronization.LockType_T = ...):
 		"""
 		Thread safe multi-mapping using locks\n
 		- Constructor -
@@ -549,7 +548,7 @@ class LockedMultiMapping[K, V](MutableMultiMapping[K, V], Synchronization.LockUs
 		"""
 
 		MutableMultiMapping.__init__(self, mapping)
-		Synchronization.LockUser.__init__(self, lock)
+		Synchronization.Synchronization.LockUser.__init__(self, Synchronization.Threading.SpinLock() if lock is ... or lock is None else lock)
 
 	def __contains__(self, key: K) -> bool:
 		with self.read_lock():
@@ -656,52 +655,6 @@ class LockedMultiMapping[K, V](MutableMultiMapping[K, V], Synchronization.LockUs
 		with self.read_lock():
 			return self.__buffer__.values()
 
-	def acquire_read_lock(self) -> bool:
-		"""
-		Acquires the reader lock if an RW lock, otherwise acquires the lock\n
-		Blocks until lock is acquired
-		:return: Whether the lock was acquired
-		"""
-
-		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
-			return self.__lock__.acquire()
-		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
-			return self.__lock__.acquire_reader()
-
-	def acquire_write_lock(self) -> bool:
-		"""
-		Acquires the writer lock if an RW lock, otherwise acquires the lock\n
-		Blocks until lock is acquired
-		:return: Whether the lock was acquired
-		"""
-
-		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
-			return self.__lock__.acquire()
-		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
-			return self.__lock__.acquire_writer()
-
-	def read_lock(self) -> threading.Lock | Synchronization.SynchronizationPrimitive | Synchronization.ReaderWriterLock.Lock:
-		"""
-		Returns the reader lock if an RW lock, otherwise the lock
-		:return: The lock object for context management
-		"""
-
-		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
-			return self.__lock__
-		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
-			return self.__lock__.reader()
-
-	def write_lock(self) -> threading.Lock | Synchronization.SynchronizationPrimitive | Synchronization.ReaderWriterLock.Lock:
-		"""
-		Returns the reader lock if an RW lock, otherwise the lock
-		:return: The lock object for context management
-		"""
-
-		if isinstance(self.__lock__, (threading.Lock, Synchronization.SpinLock)):
-			return self.__lock__
-		elif isinstance(self.__lock__, Synchronization.ReaderWriterLock):
-			return self.__lock__.writer()
-
 
 class MappingView[K, V](Iterable.IterableView[Mapping, tuple[K, V]]):
 	def __init__(self, mapping: Mapping[K, V]):
@@ -747,6 +700,67 @@ class MappingView[K, V](Iterable.IterableView[Mapping, tuple[K, V]]):
 		"""
 
 		return self.__iterable__.values()
+
+
+class MultiKeyMapping[K: typing.Hashable, V](Mapping[K, int]):
+	def __init__(self, collection: collections.abc.Mapping[K | collections.abc.Iterable[K], V] = ...):
+		"""
+		Class storing a value under multiple keys\n
+		- Constructor -
+		:param collection: The mapping to build from
+		"""
+
+		self.__values__: list[V] = Iterable.LinqStream(collection.values()).distinct().collect(list)
+		super().__init__({} if collection is None or collection is ... else {k: self.__values__.index(v) for k, v in dict(collection).items()})
+
+	def __repr__(self) -> str:
+		pairs: dict[int, tuple[K]] = Iterable.LinqStream(self.__buffer__.items()).group(lambda pair: pair[1]).transform(lambda group: (group[0], tuple(pair[0] for pair in group[1]))).to_dictionary()
+		return repr({pair[1]: self.__values__[pair[0]] for pair in pairs.items()})
+
+	def __str__(self) -> str:
+		pairs: dict[int, tuple[K]] = Iterable.LinqStream(self.__buffer__.items()).group(lambda pair: pair[1]).transform(lambda group: (group[0], tuple(pair[0] for pair in group[1]))).to_dictionary()
+		return str({pair[1]: self.__values__[pair[0]] for pair in pairs.items()})
+
+	def __iter__(self) -> collections.abc.Iterator[tuple[tuple[K, ...], V]]:
+		pairs: dict[int, tuple[K]] = Iterable.LinqStream(self.__buffer__.items()).group(lambda pair: pair[1]).transform(lambda group: (group[0], tuple(pair[0] for pair in group[1]))).to_dictionary()
+		return iter((pair[1], self.__values__[pair[0]]) for pair in pairs.items())
+
+	def __getitem__(self, key: K) -> V:
+		return self.__values__[self.__buffer__[key]]
+
+	def __or__(self, other: collections.abc.Mapping[K, V]) -> MultiKeyMapping[K, V]:
+		keymap: dict[K, int] = self.__buffer__.copy()
+		values: list[V] = self.__values__.copy()
+
+		for key, val in other.items():
+			try:
+				index: int = values.index(val)
+			except ValueError:
+				index: int = len(values)
+				values.append(val)
+
+			keymap[key] = index
+
+		result: MultiKeyMapping[K, V] = MultiKeyMapping()
+		result.__values__ = values
+		result.__buffer__ = keymap
+		return result
+
+	def copy[I: MultiKeyMapping](self: I) -> I:
+		clone: I = type(self)()
+		clone.__values__ = self.__values__.copy()
+		clone.__buffer__ = self.__buffer__.copy()
+		return clone
+
+	def get_or_default(self, key: K, default: typing.Optional[V] = None) -> typing.Optional[V]:
+		index: typing.Optional[int] = self.__buffer__.get(key, None)
+		return default if index is None or index >= len(self.__values__) else self.__values__[index]
+
+	def keys(self) -> collections.abc.KeysView[K]:
+		return self.__buffer__.keys()
+
+	def values(self) -> list[V]:
+		return self.__values__.copy()
 
 
 __all__: list[str] = ['Mapping', 'MutableMapping', 'LockedMapping', 'MultiMapping', 'MutableMultiMapping', 'LockedMultiMapping', 'MappingView']

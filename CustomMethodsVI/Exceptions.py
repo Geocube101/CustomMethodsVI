@@ -9,7 +9,7 @@ class InvalidArgumentException(TypeError):
 	Exception representing an invalid type passed to a parameter
 	"""
 
-	def __init__(self, caller: collections.abc.Callable | types.FunctionType | types.MethodType | types.LambdaType = None, parameter_name: str = None, argument_type: type = None, parameter_types: collections.abc.Iterable[type | str] = None, message: str = None):
+	def __init__(self, caller: typing.Optional[collections.abc.Callable | types.FunctionType | types.MethodType | types.LambdaType] = ..., parameter_name: str = None, argument_type: type = None, parameter_types: collections.abc.Iterable[type | str] = None, message: str = None):
 		"""
 		Exception representing an invalid type passed to a parameter
 		- Constructor -
@@ -23,7 +23,7 @@ class InvalidArgumentException(TypeError):
 		if parameter_name is None:
 			super().__init__()
 
-		if caller is None:
+		if caller is ...:
 			parent: types.FrameType = inspect.currentframe().f_back
 			caller_names: list[str] = parent.f_code.co_qualname.split('.')
 			frame_vars: dict = parent.f_globals | parent.f_locals
@@ -61,7 +61,9 @@ class InvalidArgumentException(TypeError):
 
 		callable_type: str = 'Callable'
 
-		if '<lambda>' in caller.__qualname__:
+		if caller is None:
+			callable_type = '<UNKNOWN>'
+		elif '<lambda>' in caller.__qualname__:
 			callable_type = 'Lambda'
 		elif '.' in caller.__qualname__:
 			callable_type = 'Method'
@@ -69,12 +71,13 @@ class InvalidArgumentException(TypeError):
 			callable_type = 'Function'
 
 		try:
-			parameters: str = ", ".join(inspect.signature(caller).parameters.keys())
+			parameters: str = '...' if caller is None else ', '.join(inspect.signature(caller).parameters.keys())
 		except ValueError:
 			parameters = '...'
 
 		extra: str = f'\n\t...\n{message}' if isinstance(message, str) else ''
-		super().__init__(f'\033[0m{callable_type} {caller.__qualname__.replace(".", "::")}({parameters}) - parameter \'\033[38;2;255;0;0m{parameter_name}\033[0m\' must be {type_list}; got \'{argument_type}\'{extra}')
+		caller_name: str = '///' if caller is None else caller.__qualname__.replace(".", "::")
+		super().__init__(f'\033[0m{callable_type} {caller_name}({parameters}) - parameter \'\033[38;2;255;0;0m{parameter_name}\033[0m\' must be {type_list}; got \'{argument_type}\'{extra}')
 
 
 class CorruptError(RuntimeError):

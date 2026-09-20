@@ -3,6 +3,8 @@ from __future__ import annotations
 import collections
 
 from . import Iterable
+from .. import Exceptions
+from .. import Misc
 from .. import Synchronization
 
 
@@ -275,12 +277,12 @@ class MutableSet[T](Set[T], collections.abc.MutableSet[T]):
 		return self
 
 
-class LockedSet[T](MutableSet[T], Synchronization.LockUser):
+class LockedSet[T](MutableSet[T], Synchronization.Synchronization.LockUser):
 	"""
 	Thread safe set using locks
 	"""
 
-	def __init__(self, hashset: collections.abc.Iterable[T] = ..., *, lock: Synchronization.LockType_T = Synchronization.SpinLock()):
+	def __init__(self, hashset: collections.abc.Iterable[T] = ..., *, lock: Synchronization.Synchronization.LockType_T = ...):
 		"""
 		Thread safe set using locks\n
 		- Constructor -
@@ -289,7 +291,7 @@ class LockedSet[T](MutableSet[T], Synchronization.LockUser):
 		"""
 
 		MutableSet.__init__(self, hashset)
-		Synchronization.LockUser.__init__(self, lock)
+		Synchronization.Synchronization.LockUser.__init__(self, Synchronization.Threading.SpinLock() if lock is ... or lock is None else lock)
 
 	def __repr__(self) -> str:
 		with self.read_lock():
@@ -396,4 +398,16 @@ class LockedSet[T](MutableSet[T], Synchronization.LockUser):
 			return self
 
 
-__all__: list[str] = ['Set', 'MutableSet']
+class SetView[T](Iterable.IterableView[Set, T]):
+	def __init__(self, iterable: Set[T]):
+		"""
+		Class allowing a view into a collection\n
+		- Constructor -
+		:param iterable: The iterable to view
+		"""
+
+		Misc.raise_ifn(isinstance(iterable, Set), Exceptions.InvalidArgumentException(SetView.__init__, 'iterable', type(iterable), (Set,)))
+		super().__init__(iterable)
+
+
+__all__: list[str] = ['Set', 'MutableSet', 'LockedSet', 'SetView']

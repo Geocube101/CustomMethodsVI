@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import collections
-import threading
 import time
 import typing
 import warnings
@@ -350,6 +349,17 @@ class MutableSequence[T](Sequence[T], collections.abc.MutableSequence[T]):
 		"""
 
 		self.__buffer__.insert(index, element)
+		return self
+
+	def replace(self, other: collections.abc.Iterable[T]) -> MutableSequence[T]:
+		"""
+		Replaces all contents in this sequence with the new collection
+		:param other: The iterable to update from
+		:return: This sequence
+		"""
+
+		self.clear()
+		self.extend(other)
 		return self
 
 
@@ -756,6 +766,17 @@ class SortedList[T](SortableSequence[T]):
 
 		return ReverseSortedList(self)
 
+	def replace(self, other: collections.abc.Iterable[T]) -> SortedList[T]:
+		"""
+		Replaces all contents in this set with the new collection
+		:param other: The iterable to update from
+		:return: This sequence
+		"""
+
+		self.__buffer__.clear()
+		self.__buffer__.extend(sorted(other))
+		return self
+
 
 class ReverseSortedList[T](SortableSequence[T]):
 	"""
@@ -1143,8 +1164,19 @@ class ReverseSortedList[T](SortableSequence[T]):
 
 		return SortedList(self)
 
+	def replace(self, other: collections.abc.Iterable[T]) -> ReverseSortedList[T]:
+		"""
+		Replaces all contents in this set with the new collection
+		:param other: The iterable to update from
+		:return: This sequence
+		"""
 
-class LockedSequence[T](SortableSequence[T], Synchronization.LockUser):
+		self.__buffer__.clear()
+		self.__buffer__.extend(sorted(other, reverse=True))
+		return self
+
+
+class LockedSequence[T](SortableSequence[T], Synchronization.Synchronization.LockUser):
 	"""
 	Thread safe sequence using locks
 	"""
@@ -1187,7 +1219,7 @@ class LockedSequence[T](SortableSequence[T], Synchronization.LockUser):
 					self.__int_index__ += 1
 					return value
 
-	def __init__(self, sequence: collections.abc.Iterable[T] = ..., *, lock: Synchronization.LockType_T = Synchronization.SpinLock()):
+	def __init__(self, sequence: collections.abc.Iterable[T] = ..., *, lock: Synchronization.Synchronization.LockType_T = ...):
 		"""
 		Thread safe sequence using locks\n
 		- Constructor -
@@ -1196,7 +1228,7 @@ class LockedSequence[T](SortableSequence[T], Synchronization.LockUser):
 		"""
 
 		SortableSequence.__init__(self, sequence)
-		Synchronization.LockUser.__init__(self, lock)
+		Synchronization.Synchronization.LockUser.__init__(self, Synchronization.Threading.SpinLock() if lock is ... or lock is None else lock)
 
 	def __contains__(self, item: T) -> bool:
 		with self.read_lock():
@@ -1374,6 +1406,18 @@ class LockedSequence[T](SortableSequence[T], Synchronization.LockUser):
 
 		return self
 
+	def replace(self, other: collections.abc.Iterable[T]) -> LockedSequence[T]:
+		"""
+		Replaces all contents in this sequence with the new collection
+		:param other: The iterable to update from
+		:return: This sequence
+		"""
+
+		with self.write_lock():
+			super().replace(other)
+
+		return self
+
 
 class FixedArray[T](SortableSequence[T]):
 	"""
@@ -1413,15 +1457,105 @@ class FixedArray[T](SortableSequence[T]):
 
 		self[key] = None
 
+	def remove(self, element: T, count: int = -1) -> int:
+		"""
+		Removes the specified element from this sequence
+		:param element: The element to remove
+		:param count: The number of occurrences to remove or all if less than 0
+		:return: The number of occurrences removed
+		"""
+
+		matches: int = 0
+
+		for i in range(len(self)):
+			if self.__buffer__[i] == element:
+				self.pop(i)
+				matches += 1
+
+			if 0 <= count <= matches:
+				break
+
+		return matches
+
+	def pop(self, index: int = -1) -> T:
+		"""
+		Removes and returns the element at the specified index
+		:param index: The index or last element if not specified
+		:return: The removed element
+		"""
+
+		index = index if (index := int(index)) >= 0 else (len(self) + index)
+		value: T = self.__buffer__[index]
+
+		for i in range(index, len(self) - 1):
+			self.__buffer__[i] = self.__buffer__[i + 1]
+
+		self.__buffer__[-1] = None
+		return value
+
 	def clear(self) -> FixedArray[T]:
 		"""
-		Clears the list, setting all elements to 'None'
-		:return: This array
+		Clears the sequence
+		:return: This sequence
 		"""
 
 		for i in range(len(self)):
 			self.__buffer__[i] = None
 
+		return self
+
+	def reverse(self) -> FixedArray[T]:
+		"""
+		Reverses the sequence in-place
+		:return: This sequence
+		"""
+
+		self.__buffer__.reverse()
+		return self
+
+	def append(self, element: T) -> FixedArray[T]:
+		"""
+		Appends an item at the end of the sequence
+		:param element: The element to append
+		:return: This sequence
+		"""
+
+		for i in range(len(self)):
+			if self.__buffer__[i] is None:
+				self.__buffer__[i] = element
+				return self
+
+		raise IndexError('Fixed array is full')
+
+	def insert(self, index: int, element: T) -> FixedArray[T]:
+		"""
+		Inserts an element into the sequence at the specified index
+		:param index: The index to insert to
+		:param element: The element to insert
+		:return: This sequence
+		"""
+
+		if None not in self.__buffer__:
+			raise IndexError('Fixed array is full')
+
+		index = index if (index := int(index)) >= 0 else (len(self) + index)
+
+		for i in range(len(self) - 1, index, -1):
+			self.__buffer__[i] = self.__buffer__[i - 1]
+
+		self.__buffer__[index] = element
+		return self
+
+	def replace(self, other: collections.abc.Iterable[T]) -> FixedArray[T]:
+		"""
+		Replaces all contents in this sequence with the new collection\n
+		Only the first 'n' elements will be added where 'n' is the size of this array
+		:param other: The iterable to update from
+		:return: This array
+		"""
+
+		self.__buffer__.clear()
+		self.__buffer__.extend(other[:len(self)])
 		return self
 
 	def copy(self) -> FixedArray[T]:
@@ -1578,6 +1712,19 @@ class SpinQueue[T](SortableSequence[T]):
 
 		for i in range(self.__max_size__):
 			self.__buffer__[i] = None
+
+		return self
+
+	def reverse(self) -> SpinQueue[T]:
+		for i in range(len(self)):
+			inverse: int = len(self) - i - 1
+
+			if i >= inverse:
+				break
+
+			temp: T = self[inverse]
+			self[inverse] = self[i]
+			self[i] = temp
 
 		return self
 

@@ -7,17 +7,59 @@ import threading
 import typing
 
 from . import Exceptions
+from . import Stream
 
 
 class Logger:
-	"""
-	Class representing a log file writer
-	"""
+	class CategoryLogger(Stream.StringStream):
+		def __init__(self, logger: Logger, category: str):
+			"""
+			Class representing a logging stream under a single category level
+			:param logger: The parent logger
+			:param category: The logging category
+			"""
+
+			super().__init__()
+			self.__logger__: Logger = logger
+			self.__category__: str = str(category)
+
+		def print(self, *data: typing.Any, sep: str = ' ', end: str = '\n') -> Logger.CategoryLogger:
+			"""
+			Prints data to the logger
+			:param data: The data
+			:param sep: Data delimiter
+			:param end: Data terminator
+			:return: This stream
+			"""
+
+			self.write(self.__logger__.__get_line__(self.category, sep.join(map(str, data))) + end)
+			return self
+
+		def write(self, line: str, *, ignore_invalid=False) -> Logger.CategoryLogger:
+			"""
+			Writes raw data to the logger
+			:param line: The line to write
+			:param ignore_invalid: Not used
+			:return: This stream
+			"""
+
+			if self.closed or self.__logger__.closed:
+				raise IOError('Log is closed')
+
+			self.__logger__.__stream__.write(self.__logger__.__get_line__(self.category, line))
+			return self
+
+		@property
+		def category(self) -> str:
+			"""
+			:return: This writer's category
+			"""
+
+			return self.__category__
 
 	def __init__(self, stream: io.IOBase, timezone: datetime.timezone | datetime.tzinfo = datetime.timezone.utc, header_format: str = '{%D} {%T} - [ {%TZ} ] [ {%C} ] -> Thread {%TID}: {%M}'):
 		"""
 		Class representing a log file writer\n
-		- Constructor -\n
 		[ Header Format ]\n
 		* %D - Current date\n
 		* %T - Current time\n
@@ -41,10 +83,12 @@ class Logger:
 		elif not stream.writable():
 			raise IOError('Target stream is not writable')
 
+		categories: tuple[str, ...] = ('DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL')
 		self.__header__: str = str(header_format)
 		self.__stream__: io.IOBase = stream
 		self.__timezone__: datetime.timezone = timezone
 		self.__state__: bool = True
+		self.__categories__: dict[str, Logger.CategoryLogger] = {category: Logger.CategoryLogger(self, category) for category in categories}
 		self.__stream__.write('==========[ Log Opened ]==========\n\n')
 
 	def __get_line__(self, category: str, msg: str) -> str:
@@ -69,6 +113,10 @@ class Logger:
 
 		if self.__state__ is False:
 			raise IOError('Log is closed')
+
+		for category in self.__categories__.values():
+			category.flush()
+			category.close()
 
 		self.__stream__.write('\n==========[ Log Closed ]==========')
 		self.__state__ = False
@@ -101,10 +149,7 @@ class Logger:
 		:raises IOError: If log is closed
 		"""
 
-		if self.__state__ is False:
-			raise IOError('Log is closed')
-
-		self.__stream__.write(self.__get_line__('DEBUG', sep.join(map(str, data))) + end)
+		self.category_debug.print(*data, sep=sep, end=end)
 		return self
 
 	def info(self, *data: typing.Any, sep: str = ' ', end: str = '\n') -> Logger:
@@ -117,10 +162,7 @@ class Logger:
 		:raises IOError: If log is closed
 		"""
 
-		if self.__state__ is False:
-			raise IOError('Log is closed')
-
-		self.__stream__.write(self.__get_line__('INFO', sep.join(map(str, data))) + end)
+		self.category_info.print(*data, sep=sep, end=end)
 		return self
 
 	def warn(self, *data: typing.Any, sep: str = ' ', end: str = '\n') -> Logger:
@@ -133,10 +175,7 @@ class Logger:
 		:raises IOError: If log is closed
 		"""
 
-		if self.__state__ is False:
-			raise IOError('Log is closed')
-
-		self.__stream__.write(self.__get_line__('WARN', sep.join(map(str, data))) + end)
+		self.category_warn.print(*data, sep=sep, end=end)
 		return self
 
 	def error(self, *data: typing.Any, sep: str = ' ', end: str = '\n') -> Logger:
@@ -149,10 +188,7 @@ class Logger:
 		:raises IOError: If log is closed
 		"""
 
-		if self.__state__ is False:
-			raise IOError('Log is closed')
-
-		self.__stream__.write(self.__get_line__('ERROR', sep.join(map(str, data))) + end)
+		self.category_error.print(*data, sep=sep, end=end)
 		return self
 
 	def critical(self, *data: typing.Any, sep: str = ' ', end: str = '\n') -> Logger:
@@ -165,11 +201,73 @@ class Logger:
 		:raises IOError: If log is closed
 		"""
 
-		if self.__state__ is False:
-			raise IOError('Log is closed')
-
-		self.__stream__.write(self.__get_line__('CRITICAL', sep.join(map(str, data))) + end)
+		self.category_critical.print(*data, sep=sep, end=end)
 		return self
+
+	def category(self, category: str) -> Logger.CategoryLogger:
+		"""
+		Creates or gets a category writer
+		:param category: The category to write to
+		:return: The writer
+		"""
+
+		category = str(category).upper()
+		writer: typing.Optional[Logger.CategoryLogger] = self.__categories__.get(category)
+
+		if writer is None or writer.closed:
+			writer = Logger.CategoryLogger(self, category)
+			self.__categories__[category] = writer
+			return writer
+		else:
+			return writer
+
+	@property
+	def closed(self) -> bool:
+		"""
+		:return: Whether this logger is closed
+		"""
+
+		return not self.__state__
+
+	@property
+	def category_debug(self) -> Logger.CategoryLogger:
+		"""
+		:return: Category writer for debug level
+		"""
+
+		return self.__categories__['DEBUG']
+
+	@property
+	def category_info(self) -> Logger.CategoryLogger:
+		"""
+		:return: Category writer for info level
+		"""
+
+		return self.__categories__['INFO']
+
+	@property
+	def category_warn(self) -> Logger.CategoryLogger:
+		"""
+		:return: Category writer for warn level
+		"""
+
+		return self.__categories__['WARN']
+
+	@property
+	def category_error(self) -> Logger.CategoryLogger:
+		"""
+		:return: Category writer for error level
+		"""
+
+		return self.__categories__['ERROR']
+
+	@property
+	def category_critical(self) -> Logger.CategoryLogger:
+		"""
+		:return: Category writer for critical level
+		"""
+
+		return self.__categories__['CRITICAL']
 
 
 __all__: list[str] = ['Logger']

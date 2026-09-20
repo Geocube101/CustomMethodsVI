@@ -1,6 +1,5 @@
 import math
 import time
-import types
 import typing
 import warnings
 
@@ -62,7 +61,7 @@ def warn_ifn(expression: bool, warning: Warning = UserWarning('Assertion Failed'
 def sleep(seconds: float) -> None:
 	"""
 	Pauses the current thread for the specified number of seconds
-	:param seconds: The second to wait
+	:param seconds: The seconds to wait
 	"""
 
 	t1: float = time.perf_counter_ns()
@@ -77,10 +76,9 @@ def sleep(seconds: float) -> None:
 
 def busy_sleep(seconds: float) -> None:
 	"""
-	Pauses the current thread for the specified number of seconds
-	This function busy-waits and will not yield thread execution
-	:param seconds:
-	:return:
+	Pauses the current thread for the specified number of seconds\n
+	*This function busy-waits and will not yield thread execution*
+	:param seconds: The seconds to wait
 	"""
 
 	t1: float = time.perf_counter_ns()
@@ -89,8 +87,19 @@ def busy_sleep(seconds: float) -> None:
 		pass
 
 
+def sign(value: float) -> int:
+	"""
+	Returns the sign of a number
+	:param value: The number
+	:return: -1 if negative, 1 if positive or zero
+	"""
+
+	return -1 if value < 0 else 1
+
+
 def get_ratio(value: float, _min: float = 0, _max: float = 1) -> float:
 	"""
+	Calculates the ratio of 'value' relative to 'min' and 'max'
 	:param value: The value
 	:param _min: The lower bound
 	:param _max: The upper bound
@@ -102,6 +111,7 @@ def get_ratio(value: float, _min: float = 0, _max: float = 1) -> float:
 
 def get_value(ratio: float, _min: float = 0, _max: float = 1) -> float:
 	"""
+	Calculates the value of 'ratio' relative to 'min' and 'max'
 	:param ratio: The ratio
 	:param _min: The lower bound
 	:param _max: The upper bound
@@ -136,11 +146,11 @@ def convert_metric(value: float | int, unit: str, places: int = ...) -> str:
 
 def convert_scientific(value: float | int, places: int, e: str = " E ") -> str:
 	"""
-	Converts the value into its metric string
+	Converts the value into its scientific notation string
 	:param value: The value
 	:param places: The number of places to round
 	:param e: The separator used for scientific notation
-	:return: The metric prefixed value
+	:return: The value in scientific notation
 	:raises InvalidArgumentException: If 'value' is not a float or integer
 	:raises InvalidArgumentException: If 'places' is not an integer
 	:raises InvalidArgumentException: If 'e' is not a string
@@ -215,4 +225,12 @@ def fullname(variable: typing.Any) -> str:
 		return qualname if module is None or module == 'builtins' or module == '__builtin__' else f'{module}.{qualname}'
 
 
-__all__: list[str] = ['raise_if', 'raise_ifn', 'sleep', 'busy_sleep', 'get_ratio', 'get_value', 'convert_metric', 'convert_scientific', 'convert_ddhhmmss', 'minmax', 'clamp']
+__all__: list[str] = [
+	'raise_if', 'raise_ifn', 'warn_if', 'warn_ifn',
+	'sleep', 'busy_sleep',
+	'sign',
+	'get_ratio', 'get_value',
+	'convert_metric', 'convert_scientific', 'convert_ddhhmmss',
+	'minmax', 'clamp',
+	'fullname'
+]

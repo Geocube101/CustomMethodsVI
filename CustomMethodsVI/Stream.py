@@ -23,19 +23,14 @@ class StreamFullError(StreamError):
 	pass
 
 
-class StreamEmptyError(StreamError):
+class StreamEmptyError(StreamError, EOFError):
 	pass
 
 
 class Stream[T](io.BufferedIOBase):
-	"""
-	Base class for CustomMethodsVI Streams
-	"""
-
 	def __init__(self):
 		"""
 		Base class for CustomMethodsVI Streams
-		- Constructor -
 		"""
 
 		self.__state__: bool = True
@@ -96,7 +91,7 @@ class Stream[T](io.BufferedIOBase):
 
 		return self.read(1)
 
-	def __reader_stack__(self, __data: tuple[T, ...]) -> T | typing.Iterable[T]:
+	def __reader_stack__(self, __data: tuple[T, ...]) -> T | collections.abc.Iterable[T]:
 		"""
 		INTERNAL METHOD
 		Executes the reader callback stack on read data
@@ -192,7 +187,7 @@ class Stream[T](io.BufferedIOBase):
 
 		return False
 
-	def pipe(self, *pipes: io.IOBase) -> Stream:
+	def pipe(self, *pipes: io.BufferedIOBase) -> Stream:
 		"""
 		Creates a link between this pipe (src) and the specified pipes (*dst)
 		Use 'Stream::flush' to move data from this stream to all linked pipes
@@ -285,14 +280,9 @@ class Stream[T](io.BufferedIOBase):
 
 
 class FileStream(Stream[str | bytes]):
-	"""
-	Stream for file IO
-	"""
-
 	def __init__(self, path: str, mode: str, encoding: str = 'utf-8'):
 		"""
 		Stream for file IO
-		- Constructor -
 		:param path: The filepath
 		:param mode: The stream IO mode
 		:param encoding: For non-binary streams, the encoding to use
@@ -515,7 +505,7 @@ class FileStream(Stream[str | bytes]):
 		self.__stream__.write(__buffer)
 		return self
 
-	def writelines(self, __lines: typing.Iterable[str | bytes]) -> FileStream:
+	def writelines(self, __lines: collections.abc.Iterable[str | bytes]) -> FileStream:
 		"""
 		Writes multiple lines to the file
 		:param __lines: The data to write
@@ -574,16 +564,12 @@ class FileStream(Stream[str | bytes]):
 		return self.__filepath__
 
 
-class ListStream[T](Stream[T], typing.Iterable[T]):
-	"""
-	Basic FIFO stream using a list for its internal buffer
-	"""
-
-	def __init__(self, max_length: int = -1):
+class ListStream[T](Stream[T], collections.abc.Iterable[T]):
+	def __init__(self, max_length: int = -1, explicit_length: bool = False):
 		"""
 		Basic FIFO stream using a list for its internal buffer
-		- Constructor -
 		:param max_length: The maximum length (in number of items) of this stream or -1 to disable
+		:param explicit_length: Whether reads past end of buffer raise error
 		:raises InvalidArgumentException: If max length is not an integer
 		:raises ValueError: If max length negative and not -1
 		"""
@@ -593,6 +579,7 @@ class ListStream[T](Stream[T], typing.Iterable[T]):
 		Misc.raise_ifn((max_length := int(max_length)) > 0 or max_length == -1, ValueError('Max length cannot be less than 0'))
 		self.__buffer__: list[typing.Any] = []
 		self.__max_len__: int = int(max_length)
+		self.__explicit__: bool = bool(explicit_length)
 
 	def __len__(self) -> int:
 		"""
@@ -664,7 +651,7 @@ class ListStream[T](Stream[T], typing.Iterable[T]):
 		:param __size: If specified, reads this many items, otherwise reads all data
 		:return: A tuple of read elements if more than one otherwise the single element
 		:raises StreamError: If this stream is closed or not readable
-		:raises StreamEmptyError: If the stream is empty
+		:raises StreamEmptyError: If the stream is empty and stream length is explicit
 		"""
 
 		if not self.__state__:
@@ -673,13 +660,11 @@ class ListStream[T](Stream[T], typing.Iterable[T]):
 			raise StreamError('Stream is not readable')
 
 		count: int = len(self.__buffer__) if __size is ... or __size is None or int(__size) < 0 else int(__size)
+		Misc.raise_if(count > len(self.__buffer__) and self.is_length_explicit, EOFError('Read past end of stream'))
 		temp: tuple[typing.Any, ...] = tuple(self.__buffer__[:count])
 		del self.__buffer__[:count]
 		result: tuple[typing.Any, ...] = tuple((y := self.__reader_stack__(x))[0 if len(y) == 1 else slice(None)] for x in temp)
-
-		if len(result) == 0:
-			raise StreamEmptyError('Stream is empty')
-
+		Misc.raise_if(len(result) == 0 and self.is_length_explicit, StreamEmptyError('Stream is empty'))
 		return result[0] if __size == 1 else result
 
 	def peek(self, __size: typing.Optional[int] = ...) -> tuple[T, ...] | T:
@@ -722,7 +707,7 @@ class ListStream[T](Stream[T], typing.Iterable[T]):
 
 		raise StreamFullError('Stream is full')
 
-	def writefrom(self, __buffer: typing.Iterable[T] | typing.IO | io.BufferedIOBase, __size: typing.Optional[int] = ..., *, ignore_invalid=False) -> ListStream[T]:
+	def writefrom(self, __buffer: collections.abc.Iterable[T] | typing.IO | io.BufferedIOBase, __size: typing.Optional[int] = ..., *, ignore_invalid=False) -> ListStream[T]:
 		"""
 		Reads all contents from the specified buffer into this stream
 		:param __buffer: The buffer to read from
@@ -760,7 +745,7 @@ class ListStream[T](Stream[T], typing.Iterable[T]):
 
 			return self
 
-		elif isinstance(__buffer, typing.Iterable):
+		elif isinstance(__buffer, collections.abc.Iterable):
 			iterator = iter(__buffer)
 
 			try:
@@ -786,21 +771,25 @@ class ListStream[T](Stream[T], typing.Iterable[T]):
 
 		return self.__max_len__
 
+	@property
+	def is_length_explicit(self) -> bool:
+		"""
+		:return: Whether reads past end of buffer raise error
+		"""
+
+		return self.__explicit__
+
 
 class OrderedStream[T](ListStream[T]):
-	"""
-	A stream allowing for LIFO capabilities
-	"""
-
-	def __init__(self, max_length: int = -1, fifo: bool = True):
+	def __init__(self, max_length: int = -1, fifo: bool = True, explicit_length: bool = False):
 		"""
 		A stream allowing for LIFO capabilities
-		- Constructor -
 		:param max_length: The maximum length (in number of items) of this stream
 		:param fifo: Whether this stream is FIFO or LIFO
+		:param explicit_length: Whether reads past end of buffer raise error
 		"""
 
-		super().__init__(max_length)
+		super().__init__(max_length, explicit_length)
 		self.__fifo__: bool = bool(fifo)
 
 	def read(self, __size: typing.Optional[int] = ...) -> tuple[T, ...] | T:
@@ -810,6 +799,7 @@ class OrderedStream[T](ListStream[T]):
 			raise StreamError('Stream is not readable')
 
 		count: int = len(self.__buffer__) if __size is ... or __size is None or int(__size) < 0 else int(__size)
+		Misc.raise_if(count > len(self.__buffer__) and self.is_length_explicit, EOFError('Read past end of stream'))
 		temp: tuple[typing.Any, ...] = tuple(self.__buffer__[:count] if self.__fifo__ else reversed(self.__buffer__[-count:]))
 
 		if self.__fifo__:
@@ -818,11 +808,8 @@ class OrderedStream[T](ListStream[T]):
 			del self.__buffer__[-count:]
 
 		result: tuple[typing.Any, ...] = tuple((y := self.__reader_stack__(x))[0 if len(y) == 1 else slice(None)] for x in temp)
-
-		if len(result) == 0:
-			raise StreamEmptyError('Stream is empty')
-
-		return result[0] if __size == 1 else result
+		Misc.raise_if(len(result) == 0 and self.is_length_explicit, StreamEmptyError('Stream is empty'))
+		return ... if len(result) == 0 else result[0] if __size == 1 else result
 
 	def peek(self, __size: typing.Optional[int] = ...) -> tuple[T, ...] | T:
 		if not self.__state__:
@@ -833,7 +820,7 @@ class OrderedStream[T](ListStream[T]):
 		count: int = len(self.__buffer__) if __size is ... or __size is None or int(__size) < 0 else int(__size)
 		temp: tuple[typing.Any, ...] = tuple(self.__buffer__[:count] if self.__fifo__ else reversed(self.__buffer__[-count:]))
 		result: tuple[typing.Any, ...] = tuple((y := self.__reader_stack__(x))[0 if len(y) == 1 else slice(None)] for x in temp)
-		return result[0] if __size == 1 else result
+		return ... if len(result) == 0 else result[0] if __size == 1 else result
 
 	@property
 	def is_fifo(self) -> bool:
@@ -853,22 +840,18 @@ class OrderedStream[T](ListStream[T]):
 
 
 class TypedStream[T](OrderedStream[T]):
-	"""
-	Stream limiting stored items to instances of specified types
-	"""
-
-	def __init__(self, cls: type | typing.Iterable[type], max_length: int = -1, fifo: bool = True):
+	def __init__(self, cls: type | collections.abc.Iterable[type], max_length: int = -1, fifo: bool = True, explicit_length: bool = False):
 		"""
 		Stream limiting stored items to instances of specified types
-		- Constructor -
 		:param cls: The type(s) to allow
 		:param max_length: The maximum length (in number of items) of this stream
 		:param fifo: Whether this stream is FIFO or LIFO
+		:param explicit_length: Whether reads past end of buffer raise error
 		:raises InvalidArgumentException: If any value in 'cls' is not a type
 		"""
 
-		super().__init__(max_length, fifo)
-		self.__cls__: tuple[type, ...] = tuple(cls) if isinstance(cls, typing.Iterable) else (cls,)
+		super().__init__(max_length, fifo, explicit_length)
+		self.__cls__: tuple[type, ...] = tuple(cls) if isinstance(cls, collections.abc.Iterable) else (cls,)
 		Misc.raise_ifn(all(type(c) is type for c in self.__cls__), Exceptions.InvalidArgumentException(TypedStream.__init__, 'cls', type(cls)))
 
 	def write(self, __object: T, *, ignore_invalid = False) -> TypedStream[T]:
@@ -887,11 +870,7 @@ class TypedStream[T](OrderedStream[T]):
 		return self
 
 
-class ByteStream(TypedStream[bytes | bytearray], io.BytesIO):
-	"""
-	Stream designed for storing only byte-strings
-	"""
-
+class ByteStream(TypedStream[bytes | bytearray], io.BufferedIOBase):
 	@staticmethod
 	def __buffer_writer_cb__(__object: bytes | bytearray | int | str) -> typing.Iterator[int] | typing.Generator[int, None, None]:
 		"""
@@ -909,15 +888,15 @@ class ByteStream(TypedStream[bytes | bytearray], io.BytesIO):
 		else:
 			return iter(bytes(__object))
 
-	def __init__(self, max_length: int = -1, fifo: bool = True):
+	def __init__(self, max_length: int = -1, fifo: bool = True, explicit_length: bool = False):
 		"""
 		Stream designed for storing only byte-strings
-		- Constructor -
 		:param max_length: The maximum length (in number of items) of this stream
 		:param fifo: Whether this stream is FIFO or LIFO
+		:param explicit_length: Whether reads past end of buffer raise error
 		"""
 
-		super().__init__((bytes, bytearray, int, str), max_length, fifo)
+		super().__init__((bytes, bytearray, int, str), max_length, fifo, explicit_length)
 		self.__buffer_writer__.append(ByteStream.__buffer_writer_cb__)
 
 	def read(self, __size: typing.Optional[int] = ...) -> bytes:
@@ -929,7 +908,7 @@ class ByteStream(TypedStream[bytes | bytearray], io.BytesIO):
 		"""
 
 		data: int | tuple[int, ...] = super().read(__size)
-		return data.to_bytes(1) if isinstance(data, int) else bytes(data)
+		return b'' if data is ... else data.to_bytes(1) if isinstance(data, int) else bytes(data)
 
 	def peek(self, __size: typing.Optional[int] = ...) -> bytes:
 		"""
@@ -940,16 +919,60 @@ class ByteStream(TypedStream[bytes | bytearray], io.BytesIO):
 		"""
 
 		data: int | tuple[int, ...] = super().peek(__size)
-		return data.to_bytes(1) if isinstance(data, int) else bytes(data)
+		return b'' if data is ... else data.to_bytes(1) if isinstance(data, int) else bytes(data)
+
+	def flush(self, ignore_invalid: bool = False) -> ByteStream:
+		if not self.__state__:
+			raise StreamError('Stream is closed')
+
+		if self.readable() and len(self) > 0:
+			data: bytes = self.read(...)
+
+			for pipe in self.__pipes__:
+				if pipe.closed and not ignore_invalid:
+					raise BrokenPipeError(f'Pipe \'{pipe}\' is closed')
+				elif not pipe.writable() and not ignore_invalid:
+					raise BrokenPipeError(f'Pipe \'{pipe}\' is not writable')
+				elif not pipe.closed and pipe.writable():
+					pipe.write(data)
+
+		return self
+
+	def readline(self, size: typing.Optional[int] = ...) -> bytes:
+		"""
+		Reads data from the internal queue until newline or carriage return reached
+		:param size: If specified, reads at most this many items, otherwise reads until end of line
+		:return: The read data as a single string
+		:raises StreamError: If this stream is closed or not readable
+		"""
+
+		line: bytes = b''
+
+		while (c := self.read(1)) != b'\n' and c != b'\r' and c != b'':
+			line += c
+
+		return line + c
+
+	def readuntil(self, target: bytes) -> bytes:
+		"""
+		Reads data from the internal queue until newline or carriage return reached
+		:param target: A single character at which this stream will stop reading\nIf string length is greater than one, reads until any character hit
+		:return: The read data as a single string
+		:raises StreamError: If this stream is closed or not readable
+		"""
+
+		assert isinstance(target, bytes)
+		line: bytes = b''
+
+		while (c := self.read(1)) not in target and c != b'':
+			line += c
+
+		return line + c
 
 
 class BitStream(TypedStream[bytes | bytearray | str | int | bool], io.BytesIO):
-	"""
-	Stream designed for storing individual bits
-	"""
-
 	@staticmethod
-	def __buffer_writer_cb__(__object: bytes | bytearray | int | str | bool) -> typing.Iterable[bool]:
+	def __buffer_writer_cb__(__object: bytes | bytearray | int | str | bool) -> collections.abc.Iterable[bool]:
 		"""
 		INTERNAL METHOD
 		Converts data to write into bits
@@ -996,16 +1019,16 @@ class BitStream(TypedStream[bytes | bytearray | str | int | bool], io.BytesIO):
 		else:
 			raise TypeError()
 
-	def __init__(self, max_length: int = -1, fifo: bool = True, pack: bool = True):
+	def __init__(self, max_length: int = -1, fifo: bool = True, explicit_length: bool = False, pack: bool = True):
 		"""
 		Stream designed for storing individual bits
-		- Constructor -
 		:param max_length: The maximum length (in number of items) of this stream
 		:param fifo: Whether this stream is FIFO or LIFO
+		:param explicit_length: Whether reads past end of buffer raise error
 		:param pack: Whether to read bits packed into bytes or read individual bits
 		"""
 
-		super().__init__((bool, int, bytes, bytearray, str), max_length, fifo)
+		super().__init__((bool, int, bytes, bytearray, str), max_length, fifo, explicit_length)
 		self.__buffer_writer__.append(BitStream.__buffer_writer_cb__)
 		self.__packed__: bool = bool(pack)
 
@@ -1043,7 +1066,7 @@ class BitStream(TypedStream[bytes | bytearray | str | int | bool], io.BytesIO):
 
 		data: bool | tuple[bool, ...] = super().read(__size)
 
-		if not self.__packed__:
+		if not self.__packed__ or data is ...:
 			return data
 
 		packed: list[int] = []
@@ -1069,7 +1092,7 @@ class BitStream(TypedStream[bytes | bytearray | str | int | bool], io.BytesIO):
 
 		data: bool | tuple[bool, ...] = super().peek(__size)
 
-		if not self.__packed__:
+		if not self.__packed__ or data is ...:
 			return data
 
 		packed: list[int] = []
@@ -1086,20 +1109,16 @@ class BitStream(TypedStream[bytes | bytearray | str | int | bool], io.BytesIO):
 		return bytes(packed)
 
 
-class StringStream(OrderedStream[str]):
-	"""
-	Stream designed for storing only strings
-	"""
-
-	def __init__(self, max_length: int = -1, fifo: bool = True):
+class StringStream(OrderedStream[str], io.TextIOBase):
+	def __init__(self, max_length: int = -1, fifo: bool = True, explicit_length: bool = False):
 		"""
 		Stream designed for storing only strings
-		- Constructor -
 		:param max_length: The maximum length (in number of items) of this stream
 		:param fifo: Whether this stream is FIFO or LIFO
+		:param explicit_length: Whether reads past end of buffer raise error
 		"""
 
-		super().__init__(max_length, fifo)
+		super().__init__(max_length, fifo, explicit_length)
 		self.__buffer_writer__.append(str)
 		self.__buffer_reader__.append(''.join)
 
@@ -1111,7 +1130,8 @@ class StringStream(OrderedStream[str]):
 		:raises StreamError: If this stream is closed or not readable
 		"""
 
-		return ''.join(super().read(__size))
+		data: str | tuple[str, ...] = super().read(__size)
+		return '' if data is ... else ''.join(data)
 
 	def peek(self, __size: typing.Optional[int] = ...) -> str:
 		"""
@@ -1121,25 +1141,71 @@ class StringStream(OrderedStream[str]):
 		:raises StreamError: If this stream is closed or not readable
 		"""
 
-		return super().peek(__size)
+		data: str | tuple[str, ...] = super().peek(__size)
+		return '' if data is ... else ''.join(data)
+
+	def flush(self, ignore_invalid: bool = False) -> StringStream:
+		if not self.__state__:
+			raise StreamError('Stream is closed')
+
+		if self.readable() and len(self) > 0:
+			data: str = self.read(...)
+
+			for pipe in self.__pipes__:
+				if pipe.closed and not ignore_invalid:
+					raise BrokenPipeError(f'Pipe \'{pipe}\' is closed')
+				elif not pipe.writable() and not ignore_invalid:
+					raise BrokenPipeError(f'Pipe \'{pipe}\' is not writable')
+				elif not pipe.closed and pipe.writable():
+					pipe.write(data)
+
+		return self
+
+	def readline(self, size: typing.Optional[int] = ...) -> str:
+		"""
+		Reads data from the internal queue until newline or carriage return reached
+		:param size: If specified, reads at most this many items, otherwise reads until end of line
+		:return: The read data as a single string
+		:raises StreamError: If this stream is closed or not readable
+		"""
+
+		line: str = ''
+
+		while (c := self.read(1)) != '\n' and c != '\r' and c != '':
+			line += c
+
+		return line + c
+
+	def readuntil(self, target: str) -> str:
+		"""
+		Reads data from the internal queue until newline or carriage return reached
+		:param target: A single character at which this stream will stop reading\nIf string length is greater than one, reads until any character hit
+		:return: The read data as a single string
+		:raises StreamError: If this stream is closed or not readable
+		"""
+
+		assert isinstance(target, str)
+		line: str = ''
+
+		while (c := self.read(1)) not in target and c != '':
+			line += c
+
+		return line + c
 
 
 class ZLibCompressorStream(ByteStream):
-	"""
-	Stream designed for ZLIB compressing arbitrary byte-strings
-	"""
-
-	def __init__(self, compression_ratio: int = zlib.Z_DEFAULT_COMPRESSION, max_length: int = -1, fifo: bool = True):
+	def __init__(self, compression_ratio: int = zlib.Z_DEFAULT_COMPRESSION, max_length: int = -1, fifo: bool = True, explicit_length: bool = False):
 		"""
 		Stream designed for ZLIB compressing arbitrary byte-strings
 		:param compression_ratio: The ZLIB compression ratio
 		:param max_length:  The maximum length (in number of items) of this stream
 		:param fifo:Whether this stream is FIFO or LIFO
+		:param explicit_length: Whether reads past end of buffer raise error
 		:raises InvalidArgumentException: If 'compression_ratio' is not an integer
 		:raises ValueError: If 'compression_ratio' is invalid
 		"""
 
-		super().__init__(max_length, fifo)
+		super().__init__(max_length, fifo, explicit_length)
 		Misc.raise_ifn(isinstance(compression_ratio, int), Exceptions.InvalidArgumentException(ZLibCompressorStream.__init__, 'compression_ratio', type(compression_ratio), (int,)))
 		Misc.raise_ifn(zlib.Z_NO_COMPRESSION <= (compression_ratio := int(compression_ratio)) <= zlib.Z_BEST_COMPRESSION, ValueError('Invalid compression ratio'))
 		self.__compression__: int = int(compression_ratio)
@@ -1152,18 +1218,15 @@ class ZLibCompressorStream(ByteStream):
 
 
 class ZLibDecompressorStream(ByteStream):
-	"""
-	Stream designed for ZLIB decompressing arbitrary byte-strings
-	"""
-
-	def __init__(self, max_length: int = -1, fifo: bool = True):
+	def __init__(self, max_length: int = -1, fifo: bool = True, explicit_length: bool = False):
 		"""
 		Stream designed for ZLIB decompressing arbitrary byte-strings
 		:param max_length: The maximum length (in number of items) of this stream
 		:param fifo: Whether this stream is FIFO or LIFO
+		:param explicit_length: Whether reads past end of buffer raise error
 		"""
 
-		super().__init__(max_length, fifo)
+		super().__init__(max_length, fifo, explicit_length)
 
 	def read(self, __size: typing.Optional[int] = ...) -> bytes:
 		return zlib.decompress(super().read(__size))
@@ -1173,22 +1236,18 @@ class ZLibDecompressorStream(ByteStream):
 
 
 class PickleSerializerStream(ByteStream):
-	"""
-	Stream that serializes all data with pickle during write
-	"""
-
-	def __init__(self, max_length: int = -1, fifo: bool = True, header_size: int = 4):
+	def __init__(self, max_length: int = -1, fifo: bool = True, explicit_length: bool = False, header_size: int = 4):
 		"""
 		Stream that serializes all data with pickle during write
-		- Constructor -
 		:param max_length: The maximum length (in number of items) of this stream
 		:param fifo: Whether this stream is FIFO or LIFO
+		:param explicit_length: Whether reads past end of buffer raise error
 		:param header_size: The number of bytes to use for serialized object size
 		:raises InvalidArgumentException: If 'header_size' is not an integer
 		:raises ValueError: If 'header_size' is smaller than 1
 		"""
 
-		super().__init__(max_length, fifo)
+		super().__init__(max_length, fifo, explicit_length)
 		Misc.raise_ifn(isinstance(header_size, int), Exceptions.InvalidArgumentException(PickleSerializerStream.__init__, 'header_size', type(header_size), (int,)))
 		Misc.raise_ifn((header_size := int(header_size) < 1), ValueError('Header size cannot be smaller than 1'))
 		self.__header_size__: int = int(header_size)
@@ -1202,22 +1261,18 @@ class PickleSerializerStream(ByteStream):
 
 
 class PickleDeserializerStream(ByteStream):
-	"""
-	Stream that deserializes all data with pickle during read
-	"""
-
-	def __init__(self, max_length: int = -1, fifo: bool = True, header_size: int = 4):
+	def __init__(self, max_length: int = -1, fifo: bool = True, explicit_length: bool = False, header_size: int = 4):
 		"""
 		Stream that deserializes all data with pickle during read
-		- Constructor -
 		:param max_length: The maximum length (in number of items) of this stream
 		:param fifo: Whether this stream is FIFO or LIFO
+		:param explicit_length: Whether reads past end of buffer raise error
 		:param header_size: The number of bytes to use for serialized object size
 		:raises InvalidArgumentException: If 'header_size' is not an integer
 		:raises ValueError: If 'header_size' is smaller than 1
 		"""
 
-		super().__init__(max_length, fifo)
+		super().__init__(max_length, fifo, explicit_length)
 		Misc.raise_ifn(isinstance(header_size, int), Exceptions.InvalidArgumentException(PickleSerializerStream.__init__, 'header_size', type(header_size), (int,)))
 		Misc.raise_ifn((header_size := int(header_size) < 1), ValueError('Header size cannot be smaller than 1'))
 		self.__header_size__: int = int(header_size)
@@ -1242,22 +1297,18 @@ class PickleDeserializerStream(ByteStream):
 
 
 class DillSerializerStream(ByteStream):
-	"""
-	Stream that serializes all data with dill during write
-	"""
-
-	def __init__(self, max_length: int = -1, fifo: bool = True, header_size: int = 4):
+	def __init__(self, max_length: int = -1, fifo: bool = True, explicit_length: bool = False, header_size: int = 4):
 		"""
 		Stream that serializes all data with dill during write
-		- Constructor -
 		:param max_length: The maximum length (in number of items) of this stream
 		:param fifo: Whether this stream is FIFO or LIFO
+		:param explicit_length: Whether reads past end of buffer raise error
 		:param header_size: The number of bytes to use for serialized object size
 		:raises InvalidArgumentException: If 'header_size' is not an integer
 		:raises ValueError: If 'header_size' is smaller than 1
 		"""
 
-		super().__init__(max_length, fifo)
+		super().__init__(max_length, fifo, explicit_length)
 		Misc.raise_ifn(isinstance(header_size, int), Exceptions.InvalidArgumentException(PickleSerializerStream.__init__, 'header_size', type(header_size), (int,)))
 		Misc.raise_ifn((header_size := int(header_size) < 1), ValueError('Header size cannot be smaller than 1'))
 		self.__header_size__: int = int(header_size)
@@ -1271,22 +1322,18 @@ class DillSerializerStream(ByteStream):
 
 
 class DillDeserializerStream(ByteStream):
-	"""
-	Stream that deserializes all data with dill during read
-	"""
-
-	def __init__(self, max_length: int = -1, fifo: bool = True, header_size: int = 4):
+	def __init__(self, max_length: int = -1, fifo: bool = True, explicit_length: bool = False, header_size: int = 4):
 		"""
 		Stream that deserializes all data with dill during read
-		- Constructor -
 		:param max_length: The maximum length (in number of items) of this stream
 		:param fifo: Whether this stream is FIFO or LIFO
+		:param explicit_length: Whether reads past end of buffer raise error
 		:param header_size: The number of bytes to use for serialized object size
 		:raises InvalidArgumentException: If 'header_size' is not an integer
 		:raises ValueError: If 'header_size' is smaller than 1
 		"""
 
-		super().__init__(max_length, fifo)
+		super().__init__(max_length, fifo, explicit_length)
 		Misc.raise_ifn(isinstance(header_size, int), Exceptions.InvalidArgumentException(PickleSerializerStream.__init__, 'header_size', type(header_size), (int,)))
 		Misc.raise_ifn((header_size := int(header_size) < 1), ValueError('Header size cannot be smaller than 1'))
 		self.__header_size__: int = int(header_size)
@@ -1311,23 +1358,19 @@ class DillDeserializerStream(ByteStream):
 
 
 class EventedStream[T](OrderedStream[T]):
-	"""
-	Stream which allows binding of callbacks to various stream events
-	"""
-
 	NO_THREADING: int = 0
 	MULTITHREADING: int = 1
 	MULTIPROCESSING: int = 2
 
-	def __init__(self, max_length: int = -1, fifo: bool = True):
+	def __init__(self, max_length: int = -1, fifo: bool = True, explicit_length: bool = False):
 		"""
 		Stream which allows binding of callbacks to various stream events
-		- Constructor -
 		:param max_length: The maximum length (in number of items) of this stream
 		:param fifo: Whether this stream is FIFO or LIFO
+		:param explicit_length: Whether reads past end of buffer raise error
 		"""
 
-		super().__init__(max_length, fifo)
+		super().__init__(max_length, fifo, explicit_length)
 		self.__callbacks__: dict[str, dict[typing.Callable, int]] = {'write': {}, 'read': {}, 'pipe': {}, 'del_pipe': {}, 'close': {}, 'peek': {}, 'flush': {}}
 
 	def __exec__(self, eid: str, *args, **kwargs) -> None:
@@ -1440,20 +1483,15 @@ class EventedStream[T](OrderedStream[T]):
 
 
 class LinqStream[T](typing.Reversible):
-	"""
-	Lazy generator mimicking C# LINQ or Java Streams
-	"""
-
-	def __init__(self, iterable: typing.Iterable[T]):
+	def __init__(self, iterable: collections.abc.Iterable[T]):
 		"""
 		Lazy generator mimicking C# LINQ or Java Streams
-		- Constructor -
 		:param iterable: The source iterable
 		:raises InvalidArgumentException: If 'iterable' is not iterable
 		"""
 
-		Misc.raise_ifn(isinstance(iterable, typing.Iterable), Exceptions.InvalidArgumentException(LinqStream.__init__, 'iterable', type(iterable)))
-		self.__source__: typing.Iterable[T] = iterable
+		Misc.raise_ifn(isinstance(iterable, collections.abc.Iterable), Exceptions.InvalidArgumentException(LinqStream.__init__, 'iterable', type(iterable)))
+		self.__source__: collections.abc.Iterable[T] = iterable
 
 	def __contains__(self, item: T) -> bool:
 		"""
@@ -1572,10 +1610,11 @@ class LinqStream[T](typing.Reversible):
 		for elem in self:
 			callback(elem)
 
-	def apply(self, collection: typing.Iterable[T], collector: typing.Optional[typing.Callable[[typing.Iterable[T], T], ...]] = None, *, clear: bool = True, clearer: typing.Optional[typing.Callable[[typing.Iterable[T]], ...]] = None) -> None:
+	def apply(self, collection: collections.abc.Iterable[T], collector: typing.Optional[typing.Callable[[collections.abc.Iterable[T], T], ...]] = None, *, clear: bool = True, clearer: typing.Optional[typing.Callable[[collections.abc.Iterable[T]], ...]] = None) -> None:
 		"""
 		*Evaluates the query*\n
-		Collects all elements in this query into an existing collection or Stream; modifies the specified iterable in-place
+		Collects all elements in this query into an existing collection or Stream; modifies the specified iterable in-place\n
+		To convert to a mapping see 'LinqStream.to_dictionary'
 		:param collection: The iterable to modify
 		:param collector: Writer function describing how elements should be appended to the collection
 		:param clear: Whether the collection should be cleared before writing
@@ -1583,13 +1622,13 @@ class LinqStream[T](typing.Reversible):
 		:raises InvalidArgumentException: If the iterable is not mutable
 		"""
 
-		query: tuple[T, ...] = tuple(self)
 		Misc.raise_if(collector is not None and collector is not ... and not callable(collector), Exceptions.InvalidArgumentException(LinqStream.apply, 'collector', type(collector), (typing.Callable,)))
 		Misc.raise_if(clearer is not None and clearer is not ... and not callable(clearer), Exceptions.InvalidArgumentException(LinqStream.apply, 'clearer', type(clearer), (typing.Callable,)))
+		Misc.raise_if(isinstance(collection, collections.abc.Mapping), TypeError('Dor dictionary or mapping conversions use \'LinqStream.to_dictionary\''))
 
 		if clear and callable(clearer):
 			clearer(collection)
-		elif clear and isinstance(collection, typing.MutableSequence):
+		elif clear and isinstance(collection, (collections.abc.MutableSequence, collections.abc.MutableSet, collections.abc.MutableMapping)):
 			collection.clear()
 		elif clear and isinstance(collection, Stream):
 			collection.flush()
@@ -1597,12 +1636,15 @@ class LinqStream[T](typing.Reversible):
 			raise TypeError(f'Collection of type \'{type(collection).__name__}\' has no default clearer')
 
 		if callable(collector):
-			for element in query:
+			for element in self:
 				collector(collection, element)
-		elif isinstance(collection, typing.MutableSequence):
-			collection.extend(query)
+		elif isinstance(collection, collections.abc.MutableSequence):
+			collection.extend(self)
+		elif isinstance(collection, collections.abc.MutableSet):
+			for item in self:
+				collection.add(item)
 		elif isinstance(collection, Stream):
-			for element in query:
+			for element in self:
 				collection.write(element)
 		else:
 			raise TypeError(f'Collection of type \'{type(collection).__name__}\' has no default collector')
@@ -1860,7 +1902,7 @@ class LinqStream[T](typing.Reversible):
 
 		return total / count
 
-	def collect[C: typing.Iterable](self, collection: Stream[T] | type[C] = tuple, *args, **kwargs) -> Stream[T] | C:
+	def collect[C: collections.abc.Iterable](self, collection: Stream[T] | type[C] = tuple, *args, **kwargs) -> Stream[T] | C:
 		"""
 		*Evaluates the query*
 		Collects all elements in this query into a new collection or Stream
@@ -1878,7 +1920,7 @@ class LinqStream[T](typing.Reversible):
 				stream.write(elem)
 
 			return stream
-		elif isinstance(collection, type) and issubclass(collection, (typing.Iterable, collections.abc.Sequence, collections.abc.Iterable)):
+		elif isinstance(collection, type) and issubclass(collection, collections.abc.Iterable):
 			return collection(self, *args, **kwargs)
 		elif isinstance(collection, Stream):
 			for elem in self:
@@ -1898,7 +1940,7 @@ class LinqStream[T](typing.Reversible):
 		Misc.raise_ifn(callable(mapper), Exceptions.InvalidArgumentException(LinqStream.transform, 'mapper', type(mapper)))
 		return LinqStream(mapper(x) for x in self)
 
-	def transform_many[K](self, mapper: typing.Callable[[T], typing.Iterable[K]]) -> LinqStream[K]:
+	def transform_many[K](self, mapper: typing.Callable[[T], collections.abc.Iterable[K]]) -> LinqStream[K]:
 		"""
 		Applies a transformer to all elements in this query and flattens the result
 		:param mapper: Transformer function
@@ -1910,7 +1952,7 @@ class LinqStream[T](typing.Reversible):
 
 		def _many() -> typing.Generator[K]:
 			for elem in self:
-				collection: typing.Iterable[K] = mapper(elem)
+				collection: collections.abc.Iterable[K] = mapper(elem)
 
 				for subelem in collection:
 					yield subelem
@@ -2163,7 +2205,7 @@ class LinqStream[T](typing.Reversible):
 		Misc.raise_ifn(key is None or key is ... or callable(key), Exceptions.InvalidArgumentException(LinqStream.distinct, 'key', type(key)))
 		return LinqStream(_distinct(self))
 
-	def set_difference(self, iterable: typing.Iterable[T], key: typing.Optional[typing.Callable[[T], typing.Hashable]] = ...) -> LinqStream[T]:
+	def set_difference(self, iterable: collections.abc.Iterable[T], key: typing.Optional[typing.Callable[[T], typing.Hashable]] = ...) -> LinqStream[T]:
 		"""
 		Applies the set difference between the elements in this query and the supplied iterable
 		:param iterable: The second iterable to apply difference with
@@ -2189,7 +2231,7 @@ class LinqStream[T](typing.Reversible):
 		primary: set[typing.Hashable] = set()
 		return LinqStream(_difference(self))
 
-	def set_intersect(self, iterable: typing.Iterable[T], key: typing.Optional[typing.Callable[[T], typing.Hashable]] = ...) -> LinqStream[T]:
+	def set_intersect(self, iterable: collections.abc.Iterable[T], key: typing.Optional[typing.Callable[[T], typing.Hashable]] = ...) -> LinqStream[T]:
 		"""
 		Applies the set intersection between the elements in this query and the supplied iterable
 		:param iterable: The second iterable to apply intersection with
@@ -2215,7 +2257,7 @@ class LinqStream[T](typing.Reversible):
 		primary: set[typing.Hashable] = set()
 		return LinqStream(_intersect(self))
 
-	def set_union(self, iterable: typing.Iterable[T], key: typing.Optional[typing.Callable[[T], typing.Hashable]] = ...) -> LinqStream[T]:
+	def set_union(self, iterable: collections.abc.Iterable[T], key: typing.Optional[typing.Callable[[T], typing.Hashable]] = ...) -> LinqStream[T]:
 		"""
 		Applies the set union between the elements in this query and the supplied iterable
 		:param iterable: The second iterable to apply union with
@@ -2259,7 +2301,7 @@ class LinqStream[T](typing.Reversible):
 
 		for elem in self:
 			elem: tuple[K, V] = converter(converter) if callable(elem) else elem
-			Misc.raise_ifn(isinstance(elem, typing.Iterable) and len(elem := tuple(elem)) < 2, ValueError(f'Cannot convert value to lookup pair - must be an iterable with at least 2 elements; got \'{type(elem)}\''))
+			Misc.raise_ifn(isinstance(elem, collections.abc.Iterable) and len(elem := tuple(elem)) < 2, ValueError(f'Cannot convert value to lookup pair - must be an iterable with at least 2 elements; got \'{type(elem)}\''))
 			key, *values = elem
 
 			if key in mapping:
@@ -2284,7 +2326,7 @@ class LinqStream[T](typing.Reversible):
 
 		for elem in self:
 			elem: tuple[K, V] = converter(elem) if callable(converter) else elem
-			Misc.raise_ifn(isinstance(elem, typing.Iterable) and len(elem := tuple(elem)) == 2, ValueError(f'Cannot convert value to dictionary pair - must be an iterable with at least 2 elements; got \'{type(elem)}\''))
+			Misc.raise_ifn(isinstance(elem, collections.abc.Iterable) and len(elem := tuple(elem)) == 2, ValueError(f'Cannot convert value to dictionary pair - must be an iterable with at least 2 elements; got \'{type(elem)}\''))
 			key, value = elem
 
 			if key in mapping:
@@ -2314,7 +2356,7 @@ class LinqStream[T](typing.Reversible):
 
 		return LinqStream(reversed(self))
 
-	def merge(self, *others: typing.Iterable[T]) -> LinqStream[T]:
+	def merge(self, *others: collections.abc.Iterable[T]) -> LinqStream[T]:
 		"""
 		Appends multiple iterables to the end of this query
 		:param others: The iterable whose elements to append
@@ -2332,7 +2374,7 @@ class LinqStream[T](typing.Reversible):
 
 		return LinqStream(iterator())
 
-	def zip(self, *others: typing.Iterable[T]) -> LinqStream[tuple[T, ...]]:
+	def zip(self, *others: collections.abc.Iterable[T]) -> LinqStream[tuple[T, ...]]:
 		"""
 		Zips multiple iterables with this one
 		The resulting query contains a tuple of index aligned elements from each iterable
