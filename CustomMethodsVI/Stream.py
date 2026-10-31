@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import abc
 import collections.abc
 import dill
 import io
@@ -34,7 +35,7 @@ class Stream[T](io.BufferedIOBase):
 		"""
 
 		self.__state__: bool = True
-		self.__pipes__: dict[io.BufferedIOBase, bool] = {}
+		self.__pipes__: dict[io.IOBase, bool] = {}
 		self.__buffer_writer__: list[typing.Callable] = []
 		self.__buffer_reader__: list[typing.Callable] = []
 
@@ -53,11 +54,11 @@ class Stream[T](io.BufferedIOBase):
 			self.close()
 
 	def __del__(self) -> None:
-		if self.__state__:
+		if not self.closed:
 			self.close()
 
 	def __eq__(self, other) -> bool:
-		return type(other) is type(self) and id(other) == id(self)
+		return self is other
 
 	def __hash__(self) -> int:
 		return id(self)
@@ -73,7 +74,7 @@ class Stream[T](io.BufferedIOBase):
 		:raises StreamError: If stream is closed or not readable
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not self.readable():
 			raise StreamError('Stream is not readable')
@@ -91,6 +92,7 @@ class Stream[T](io.BufferedIOBase):
 
 		return self.read(1)
 
+	@typing.final
 	def __reader_stack__(self, __data: tuple[T, ...]) -> T | collections.abc.Iterable[T]:
 		"""
 		INTERNAL METHOD
@@ -112,6 +114,7 @@ class Stream[T](io.BufferedIOBase):
 
 		return items
 
+	@typing.final
 	def __writer_stack__(self, __object: typing.Any) -> list[T]:
 		"""
 		INTERNAL METHOD
@@ -133,6 +136,7 @@ class Stream[T](io.BufferedIOBase):
 
 		return items
 
+	@typing.final
 	def __auto_flush__(self, ignore_invalid: bool = False) -> None:
 		"""
 		INTERNAL METHOD
@@ -141,7 +145,7 @@ class Stream[T](io.BufferedIOBase):
 		:raises BrokenPipeError: If the targeted pipe is closed
 		"""
 
-		targets: tuple[io.BufferedIOBase, ...] = tuple(pipe for pipe, auto in self.__pipes__.items() if auto)
+		targets: tuple[io.IOBase, ...] = tuple(pipe for pipe, auto in self.__pipes__.items() if auto)
 
 		if len(targets) == 0:
 			return
@@ -161,25 +165,28 @@ class Stream[T](io.BufferedIOBase):
 		:raises StreamError: If the stream is already closed
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 
 		self.__state__ = False
 
+	@abc.abstractmethod
 	def readable(self) -> bool:
 		"""
 		:return: Whether this stream can be read from
 		"""
 
-		return self.__state__
+		return False
 
+	@abc.abstractmethod
 	def writable(self) -> bool:
 		"""
 		:return: Whether this stream can be written to
 		"""
 
-		return self.__state__
+		return False
 
+	@abc.abstractmethod
 	def seekable(self) -> bool:
 		"""
 		:return: Whether this stream can seek cursor position
@@ -187,7 +194,7 @@ class Stream[T](io.BufferedIOBase):
 
 		return False
 
-	def pipe(self, *pipes: io.BufferedIOBase) -> Stream:
+	def pipe(self, *pipes: io.IOBase) -> Stream:
 		"""
 		Creates a link between this pipe (src) and the specified pipes (*dst)
 		Use 'Stream::flush' to move data from this stream to all linked pipes
@@ -197,7 +204,7 @@ class Stream[T](io.BufferedIOBase):
 		:raises TypeError: If one of the specified pipes is not an 'io.BufferedIOBase' instance
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not all(isinstance(x, io.IOBase) for x in pipes):
 			raise TypeError('Specified stream is not an \'io.BufferedIOBase\'')
@@ -216,7 +223,7 @@ class Stream[T](io.BufferedIOBase):
 		:raises TypeError: If one of the specified pipes is not an 'io.BufferedIOBase' instance
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not all(isinstance(x, io.BufferedIOBase) for x in pipes):
 			raise TypeError('Specified stream is not an \'io.BufferedIOBase\'')
@@ -225,7 +232,7 @@ class Stream[T](io.BufferedIOBase):
 		self.__auto_flush__(ignore_invalid)
 		return self
 
-	def del_pipe(self, *pipes: io.BufferedIOBase) -> Stream:
+	def del_pipe(self, *pipes: io.IOBase) -> Stream:
 		"""
 		Destroys a link between this pipe and the specified pipes
 		:param pipes: The pipes to remove
@@ -234,7 +241,7 @@ class Stream[T](io.BufferedIOBase):
 		:raises TypeError: If one of the specified pipes is not an 'io.BufferedIOBase' instance
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not all(isinstance(x, io.BufferedIOBase) for x in pipes):
 			raise TypeError('Specified stream is not an \'io.BufferedIOBase\'')
@@ -255,7 +262,7 @@ class Stream[T](io.BufferedIOBase):
 		:raises BrokenPipeError: If 'ignore_invalid' is false and at least one pipe is non-writable or closed
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 
 		if self.readable() and len(self) > 0:
@@ -279,6 +286,228 @@ class Stream[T](io.BufferedIOBase):
 		return not self.__state__
 
 
+class WrapperStream[T](Stream[T]):
+	def __init__(self, stream: typing.IO):
+		assert isinstance(stream, typing.IO), 'Not an IO stream'
+		super().__init__()
+		self.__stream__: typing.IO = stream
+		self.__state__ = not stream.closed
+
+	def __len__(self) -> int:
+		"""
+		:return: The number of items remaining in this stream
+		"""
+
+		if not self.seekable():
+			return 0
+
+		pos1: int = self.stream.tell()
+		self.stream.seek(0, 2)
+		pos2: int = self.stream.tell()
+		self.stream.seek(pos1, 0)
+		return pos2 - pos1
+
+	def __del__(self) -> None:
+		if not self.closed:
+			self.close()
+
+	def __next__(self) -> T:
+		"""
+		Alias for 'Stream::read(1)'
+		:return: The read item
+		:raises StopIteration: If the stream is not seekable or the stream is exhausted
+		:raises StreamError: If stream is closed or not readable
+		"""
+
+		if self.closed:
+			raise StreamError('Stream is closed')
+		elif not self.readable():
+			raise StreamError('Stream is not readable')
+
+		return self.read(1)
+
+	def close(self) -> None:
+		"""
+		Closes the stream
+		:raises StreamError: If the stream is already closed
+		"""
+
+		if self.closed:
+			raise StreamError('Stream is closed')
+
+		self.stream.close()
+
+	def readable(self) -> bool:
+		"""
+		:return: Whether this stream can be read from
+		"""
+
+		return self.stream.readable()
+
+	def writable(self) -> bool:
+		"""
+		:return: Whether this stream can be written to
+		"""
+
+		return self.stream.writable()
+
+	def seekable(self) -> bool:
+		"""
+		:return: Whether this stream can seek cursor position
+		"""
+
+		return self.stream.seekable()
+
+	def seek(self, __offset: int, __whence: int = ...) -> int:
+		"""
+		Moves the stream cursor
+		:param __offset: The amount to move the cursor
+		:param __whence: 0 - Seek relative to beginning of file<br/>1 - Seek relative to current position<br/>2 - Seek relative to end of file
+		:return: The new cursor position relative to file beginning
+		:raises StreamError: If stream is closed or not seekable
+		"""
+
+		if self.closed:
+			raise StreamError('Stream is closed')
+		elif not self.seekable():
+			raise StreamError('Stream is not seekable')
+
+		return self.stream.seek(__offset, __whence)
+
+	def tell(self) -> int:
+		"""
+		:return: The current stream cursor relative to beginning of file
+		:raises StreamError: If stream is closed
+		"""
+
+		if self.closed:
+			raise StreamError('Stream is closed')
+
+		return self.stream.tell()
+
+	def cursor(self, offset: typing.Optional[int] = ..., whence: typing.Optional[int] = ...) -> int:
+		"""
+		Sets or gets the current stream cursor position
+		:param offset: If supplied, seeks to the specified position
+		:param whence: If supplied, sets the offset for 'seek'; cannot be supplied without 'offset'
+		:return: The current position if neither 'offset' nor 'whence' is supplied, otherwise the new absolute cursor position
+		:raises StreamError: If this stream is closed or not seekable
+		:raises TypeError: If 'whence' is supplied without 'offset'
+		"""
+
+		if self.closed:
+			raise StreamError('Stream is closed')
+
+		if offset is ... and whence is ...:
+			return self.stream.tell()
+		elif offset is ... and whence is not ...:
+			raise TypeError('Expected \'offset\' alongside \'whence\'')
+		elif not self.seekable():
+			raise StreamError('Stream is not seekable')
+		else:
+			return self.stream.seek(offset, whence)
+
+	def truncate(self, __size: typing.Optional[int] = ...) -> int:
+		"""
+		Truncates the stream to either the current cursor position if '__size' is not specified otherwise to '__size' bytes
+		:param __size: The new size of the file in bytes
+		:return: The new stream size in bytes
+		:raises StreamError: If this stream is closed
+		"""
+
+		if self.closed:
+			raise StreamError('Stream is closed')
+
+		return self.stream.truncate(None if __size is None or __size is ... else int(__size))
+
+	def size(self) -> int:
+		"""
+		No read operation is performed
+		:return: The total size of the file contents in bytes
+		:raises StreamError: If this stream is closed
+		:raises StreamError: If this stream is not seekable
+		"""
+
+		if self.closed:
+			raise StreamError('Stream is closed')
+		elif not self.seekable():
+			raise StreamError('Stream is not seekable')
+
+		cursor = self.tell()
+		self.seek(0, 2)
+		size = self.tell()
+		self.seek(cursor, 0)
+		return size
+
+	def fileno(self) -> int:
+		"""
+		:return: This stream's file descriptor
+		"""
+
+		return self.stream.fileno()
+
+	def read(self, __size: typing.Optional[int] = ...) -> T:
+		"""
+		Reads '__size' characters from the stream
+		:param __size: The number of characters to read or all if not supplied
+		:return: The read data
+		:raises StreamError: If this stream is closed or not readable
+		"""
+
+		if self.closed:
+			raise StreamError('Stream is closed')
+		elif not self.readable():
+			raise StreamError('Stream is not readable')
+
+		return self.stream.read(-1 if __size is None or __size is ... else int(__size))
+
+	def readline(self, __size: typing.Optional[int] = ...) -> bytes | str:
+		"""
+		Reads one line from the stream reading at most '__size' bytes if supplied
+		:param __size: The number of characters to read or all until line delimiter if not supplied
+		:return: The read data
+		:raises StreamError: If this stream is closed or not readable
+		"""
+
+		if self.closed:
+			raise StreamError('Stream is closed')
+		elif not self.readable():
+			raise StreamError('Stream is not readable')
+
+		return self.stream.readline(-1 if __size is None or __size is ... else int(__size))
+
+	def readlines(self, __hint: int = ...) -> list[bytes | str]:
+		"""
+		Reads multiple line from the stream stopping if '__hint' is supplied and the size of all read lines exceeds this amount
+		:param __hint: A hint indicating the number of characters to read
+		:return: The read data
+		:raises StreamError: If this stream is closed or not readable
+		"""
+
+		if self.closed:
+			raise StreamError('Stream is closed')
+		elif not self.readable():
+			raise StreamError('Stream is not readable')
+
+		return self.stream.readlines(-1 if __hint is None or __hint is ... else int(__hint))
+
+	@property
+	def closed(self) -> bool:
+		"""
+		:return: Whether this stream is closed
+		"""
+
+		return self.stream.closed
+
+	@property
+	def stream(self) -> typing.IO:
+		"""
+		:return: The underlying stream object
+		"""
+
+		return self.__stream__
+
+
 class FileStream(Stream[str | bytes]):
 	def __init__(self, path: str, mode: str, encoding: str = 'utf-8'):
 		"""
@@ -295,7 +524,7 @@ class FileStream(Stream[str | bytes]):
 		Misc.raise_ifn(isinstance(path, str), Exceptions.InvalidArgumentException(FileStream.__init__, 'path', type(path), (str,)))
 		Misc.raise_ifn(isinstance(mode, str), Exceptions.InvalidArgumentException(FileStream.__init__, 'mode', type(mode), (str,)))
 		Misc.raise_ifn(isinstance(encoding, str), Exceptions.InvalidArgumentException(FileStream.__init__, 'encoding', type(encoding), (str,)))
-		self.__stream__ = open(str(path), mode, encoding=None if 'b' in mode else encoding)
+		self.__stream__: typing.IO = open(str(path), mode, encoding=None if 'b' in mode else encoding)
 		self.__filepath__: str = str(path)
 
 	def __len__(self) -> int:
@@ -312,16 +541,16 @@ class FileStream(Stream[str | bytes]):
 
 	def close(self) -> None:
 		super().close()
-		self.__stream__.close()
+		self.stream.close()
 
 	def readable(self) -> bool:
-		return self.__state__ and self.__stream__.readable()
+		return not self.closed and self.stream.readable()
 
 	def writable(self) -> bool:
-		return self.__state__ and self.__stream__.writable()
+		return not self.closed and self.stream.writable()
 
 	def seekable(self) -> bool:
-		return self.__state__ and self.__stream__.seekable()
+		return not self.closed and self.stream.seekable()
 
 	def seek(self, __offset: int, __whence: int = ...) -> int:
 		"""
@@ -332,12 +561,12 @@ class FileStream(Stream[str | bytes]):
 		:raises StreamError: If stream is closed or not seekable
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not self.seekable():
 			raise StreamError('Stream is not seekable')
 
-		return self.__stream__.seek(__offset, __whence)
+		return self.stream.seek(__offset, __whence)
 
 	def tell(self) -> int:
 		"""
@@ -345,10 +574,10 @@ class FileStream(Stream[str | bytes]):
 		:raises StreamError: If stream is closed
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 
-		return self.__stream__.tell()
+		return self.stream.tell()
 
 	def cursor(self, offset: typing.Optional[int] = ..., whence: typing.Optional[int] = ...) -> int:
 		"""
@@ -360,17 +589,17 @@ class FileStream(Stream[str | bytes]):
 		:raises TypeError: If 'whence' is supplied without 'offset'
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 
 		if offset is ... and whence is ...:
-			return self.__stream__.tell()
+			return self.stream.tell()
 		elif offset is ... and whence is not ...:
 			raise TypeError('Expected \'offset\' alongside \'whence\'')
 		elif not self.seekable():
 			raise StreamError('Stream is not seekable')
 		else:
-			return self.__stream__.seek(offset, whence)
+			return self.stream.seek(offset, whence)
 
 	def truncate(self, __size: typing.Optional[int] = ...) -> int:
 		"""
@@ -380,10 +609,10 @@ class FileStream(Stream[str | bytes]):
 		:raises StreamError: If this stream is closed
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 
-		return self.__stream__.truncate(None if __size is None or __size is ... else int(__size))
+		return self.stream.truncate(None if __size is None or __size is ... else int(__size))
 
 	def size(self) -> int:
 		"""
@@ -392,7 +621,7 @@ class FileStream(Stream[str | bytes]):
 		:raises StreamError: If this stream is closed
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 
 		cursor = self.tell()
@@ -406,7 +635,7 @@ class FileStream(Stream[str | bytes]):
 		:return: This stream's file descriptor
 		"""
 
-		return self.__stream__.fileno()
+		return self.stream.fileno()
 
 	def read(self, __size: typing.Optional[int] = ...) -> bytes | str:
 		"""
@@ -416,12 +645,12 @@ class FileStream(Stream[str | bytes]):
 		:raises StreamError: If this stream is closed or not readable
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not self.readable():
 			raise StreamError('Stream is not readable')
 
-		return self.__stream__.read(-1 if __size is None or __size is ... else int(__size))
+		return self.stream.read(-1 if __size is None or __size is ... else int(__size))
 
 	def peek(self, __size: typing.Optional[int] = ...) -> bytes | str:
 		"""
@@ -431,13 +660,13 @@ class FileStream(Stream[str | bytes]):
 		:raises StreamError: If this stream is closed or not readable
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not self.readable():
 			raise StreamError('Stream is not readable')
 
 		cursor: int = self.tell()
-		data: bytes | str = self.__stream__.read(-1 if __size is None or __size is ... else int(__size))
+		data: bytes | str = self.stream.read(-1 if __size is None or __size is ... else int(__size))
 		self.seek(cursor, 0)
 		return data
 
@@ -449,12 +678,12 @@ class FileStream(Stream[str | bytes]):
 		:raises StreamError: If this stream is closed or not readable
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not self.readable():
 			raise StreamError('Stream is not readable')
 
-		return self.__stream__.readline(-1 if __size is None or __size is ... else int(__size))
+		return self.stream.readline(-1 if __size is None or __size is ... else int(__size))
 
 	def peekline(self, __size: typing.Optional[int] = ...) -> bytes | str:
 		"""
@@ -464,13 +693,13 @@ class FileStream(Stream[str | bytes]):
 		:raises StreamError: If this stream is closed or not readable
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not self.readable():
 			raise StreamError('Stream is not readable')
 
 		cursor: int = self.tell()
-		data: bytes | str = self.__stream__.readline(-1 if __size is None or __size is ... else int(__size))
+		data: bytes | str = self.stream.readline(-1 if __size is None or __size is ... else int(__size))
 		self.seek(cursor, 0)
 		return data
 
@@ -482,12 +711,12 @@ class FileStream(Stream[str | bytes]):
 		:raises StreamError: If this stream is closed or not readable
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not self.readable():
 			raise StreamError('Stream is not readable')
 
-		return self.__stream__.readlines(-1 if __hint is None or __hint is ... else int(__hint))
+		return self.stream.readlines(-1 if __hint is None or __hint is ... else int(__hint))
 
 	def write(self, __buffer: str | bytes) -> FileStream:
 		"""
@@ -497,12 +726,12 @@ class FileStream(Stream[str | bytes]):
 		:raises StreamError: If this stream is closed or not writable
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not self.writable():
 			raise StreamError('Stream is not writable')
 
-		self.__stream__.write(__buffer)
+		self.stream.write(__buffer)
 		return self
 
 	def writelines(self, __lines: collections.abc.Iterable[str | bytes]) -> FileStream:
@@ -513,12 +742,12 @@ class FileStream(Stream[str | bytes]):
 		:raises StreamError: If this stream is closed or not writable
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not self.writable():
 			raise StreamError('Stream is not writable')
 
-		self.__stream__.writelines(__lines)
+		self.stream.writelines(__lines)
 		return self
 
 	def reopen(self, mode: str, encoding: str = 'utf8') -> FileStream:
@@ -534,7 +763,7 @@ class FileStream(Stream[str | bytes]):
 		Misc.raise_ifn(isinstance(mode, str), Exceptions.InvalidArgumentException(FileStream.reopen, 'mode', type(mode), (str,)))
 		Misc.raise_ifn(isinstance(encoding, str), Exceptions.InvalidArgumentException(FileStream.reopen, 'encoding', type(encoding), (str,)))
 
-		if self.__state__:
+		if not self.closed:
 			self.close()
 
 		self.__stream__ = open(self.__filepath__, mode, encoding=encoding)
@@ -548,10 +777,10 @@ class FileStream(Stream[str | bytes]):
 		:raises StreamError: If this stream is closed
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 
-		self.__stream__.flush()
+		self.stream.flush()
 		super().flush(ignore_invalid)
 		return self
 
@@ -562,6 +791,14 @@ class FileStream(Stream[str | bytes]):
 		"""
 
 		return self.__filepath__
+
+	@property
+	def stream(self) -> typing.IO:
+		"""
+		:return: The underlying stream
+		"""
+
+		return self.__stream__
 
 
 class ListStream[T](Stream[T], collections.abc.Iterable[T]):
@@ -577,7 +814,7 @@ class ListStream[T](Stream[T], collections.abc.Iterable[T]):
 		super().__init__()
 		Misc.raise_ifn(isinstance(max_length, int), Exceptions.InvalidArgumentException(ListStream.__init__, 'max_length', type(max_length), (int,)))
 		Misc.raise_ifn((max_length := int(max_length)) > 0 or max_length == -1, ValueError('Max length cannot be less than 0'))
-		self.__buffer__: list[typing.Any] = []
+		self.__buffer__: list[T] = []
 		self.__max_len__: int = int(max_length)
 		self.__explicit__: bool = bool(explicit_length)
 
@@ -586,7 +823,7 @@ class ListStream[T](Stream[T], collections.abc.Iterable[T]):
 		:return: The length of the internal buffer
 		"""
 
-		return len(self.__buffer__)
+		return len(self.buffer)
 
 	def __iter__(self) -> typing.Iterator[T]:
 		while not self.empty():
@@ -597,14 +834,23 @@ class ListStream[T](Stream[T], collections.abc.Iterable[T]):
 		:return: Whether the underlying buffer is empty
 		"""
 
-		return len(self.__buffer__) == 0
+		return len(self) == 0
 
 	def full(self) -> bool:
 		"""
 		:return: Whether the underlying buffer is full
 		"""
 
-		return len(self.__buffer__) == self.__max_len__
+		return len(self) == self.max_length
+
+	def readable(self) -> bool:
+		return not self.closed
+
+	def writable(self) -> bool:
+		return not self.closed
+
+	def seekable(self) -> bool:
+		return not self.closed
 
 	def readinto(self, __buffer: io.IOBase | typing.IO | bytearray | list[T] | set[T]) -> int:
 		"""
@@ -614,7 +860,7 @@ class ListStream[T](Stream[T], collections.abc.Iterable[T]):
 		:raises StreamError: If this stream is closed or not readable
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not self.readable():
 			raise StreamError('Stream is not readable')
@@ -654,15 +900,15 @@ class ListStream[T](Stream[T], collections.abc.Iterable[T]):
 		:raises StreamEmptyError: If the stream is empty and stream length is explicit
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not self.readable():
 			raise StreamError('Stream is not readable')
 
-		count: int = len(self.__buffer__) if __size is ... or __size is None or int(__size) < 0 else int(__size)
-		Misc.raise_if(count > len(self.__buffer__) and self.is_length_explicit, EOFError('Read past end of stream'))
-		temp: tuple[typing.Any, ...] = tuple(self.__buffer__[:count])
-		del self.__buffer__[:count]
+		count: int = len(self.buffer) if __size is ... or __size is None or int(__size) < 0 else int(__size)
+		Misc.raise_if(count > len(self.buffer) and self.is_length_explicit, EOFError('Read past end of stream'))
+		temp: tuple[typing.Any, ...] = tuple(self.buffer[:count])
+		del self.buffer[:count]
 		result: tuple[typing.Any, ...] = tuple((y := self.__reader_stack__(x))[0 if len(y) == 1 else slice(None)] for x in temp)
 		Misc.raise_if(len(result) == 0 and self.is_length_explicit, StreamEmptyError('Stream is empty'))
 		return result[0] if __size == 1 else result
@@ -675,13 +921,13 @@ class ListStream[T](Stream[T], collections.abc.Iterable[T]):
 		:raises StreamError: If this stream is closed or not readable
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not self.readable():
 			raise StreamError('Stream is not readable')
 
-		count: int = len(self.__buffer__) if __size is ... or __size is None or int(__size) < 0 else int(__size)
-		temp: tuple[typing.Any, ...] = tuple(self.__buffer__[:count])
+		count: int = len(self.buffer) if __size is ... or __size is None or int(__size) < 0 else int(__size)
+		temp: tuple[typing.Any, ...] = tuple(self.buffer[:count])
 		result: tuple[typing.Any, ...] = tuple((y := self.__reader_stack__(x))[0 if len(y) == 1 else slice(None)] for x in temp)
 		return result[0] if __size == 1 else result
 
@@ -695,13 +941,13 @@ class ListStream[T](Stream[T], collections.abc.Iterable[T]):
 		:raises StreamFullError: If this stream is full
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not self.writable():
 			raise StreamError('Stream is not writable')
 
-		if self.__max_len__ < 0 or len(self.__buffer__) < self.__max_len__:
-			self.__buffer__.extend(self.__writer_stack__(__object))
+		if self.max_length < 0 or len(self.buffer) < self.max_length:
+			self.buffer.extend(self.__writer_stack__(__object))
 			self.__auto_flush__(ignore_invalid)
 			return self
 
@@ -719,7 +965,7 @@ class ListStream[T](Stream[T], collections.abc.Iterable[T]):
 		:raises TypeError: If '__buffer' is not a supported stream nor an iterable
 		"""
 
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not self.writable():
 			raise StreamError('Stream is not writable')
@@ -733,7 +979,7 @@ class ListStream[T](Stream[T], collections.abc.Iterable[T]):
 			try:
 				count: int = 0
 
-				while self.__max_len__ < 0 or len(self.__buffer__) < self.__max_len__:
+				while self.max_length < 0 or len(self) < self.max_length:
 					count += 1
 					self.write(__buffer.read(1))
 					self.__auto_flush__(ignore_invalid)
@@ -750,7 +996,7 @@ class ListStream[T](Stream[T], collections.abc.Iterable[T]):
 
 			try:
 				while True:
-					if 0 <= self.__max_len__ <= len(self.__buffer__):
+					if 0 <= self.max_length <= len(self):
 						raise StreamFullError('Stream is full')
 
 					self.write(next(iterator))
@@ -779,6 +1025,15 @@ class ListStream[T](Stream[T], collections.abc.Iterable[T]):
 
 		return self.__explicit__
 
+	@property
+	def buffer(self) -> collections.abc.MutableSequence[T]:
+		"""
+		* Should only be called from derived classes *
+		:return: The underlying buffer
+		"""
+
+		return self.__buffer__
+
 
 class OrderedStream[T](ListStream[T]):
 	def __init__(self, max_length: int = -1, fifo: bool = True, explicit_length: bool = False):
@@ -793,32 +1048,32 @@ class OrderedStream[T](ListStream[T]):
 		self.__fifo__: bool = bool(fifo)
 
 	def read(self, __size: typing.Optional[int] = ...) -> tuple[T, ...] | T:
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not self.readable():
 			raise StreamError('Stream is not readable')
 
-		count: int = len(self.__buffer__) if __size is ... or __size is None or int(__size) < 0 else int(__size)
-		Misc.raise_if(count > len(self.__buffer__) and self.is_length_explicit, EOFError('Read past end of stream'))
-		temp: tuple[typing.Any, ...] = tuple(self.__buffer__[:count] if self.__fifo__ else reversed(self.__buffer__[-count:]))
+		count: int = len(self) if __size is ... or __size is None or int(__size) < 0 else int(__size)
+		Misc.raise_if(count > len(self) and self.is_length_explicit, EOFError('Read past end of stream'))
+		temp: tuple[typing.Any, ...] = tuple(self.buffer[:count] if self.is_fifo else reversed(self.buffer[-count:]))
 
-		if self.__fifo__:
-			del self.__buffer__[:count]
+		if self.is_fifo:
+			del self.buffer[:count]
 		else:
-			del self.__buffer__[-count:]
+			del self.buffer[-count:]
 
 		result: tuple[typing.Any, ...] = tuple((y := self.__reader_stack__(x))[0 if len(y) == 1 else slice(None)] for x in temp)
 		Misc.raise_if(len(result) == 0 and self.is_length_explicit, StreamEmptyError('Stream is empty'))
 		return ... if len(result) == 0 else result[0] if __size == 1 else result
 
 	def peek(self, __size: typing.Optional[int] = ...) -> tuple[T, ...] | T:
-		if not self.__state__:
+		if self.closed:
 			raise StreamError('Stream is closed')
 		elif not self.readable():
 			raise StreamError('Stream is not readable')
 
-		count: int = len(self.__buffer__) if __size is ... or __size is None or int(__size) < 0 else int(__size)
-		temp: tuple[typing.Any, ...] = tuple(self.__buffer__[:count] if self.__fifo__ else reversed(self.__buffer__[-count:]))
+		count: int = len(self) if __size is ... or __size is None or int(__size) < 0 else int(__size)
+		temp: tuple[typing.Any, ...] = tuple(self.buffer[:count] if self.is_fifo else reversed(self.buffer[-count:]))
 		result: tuple[typing.Any, ...] = tuple((y := self.__reader_stack__(x))[0 if len(y) == 1 else slice(None)] for x in temp)
 		return ... if len(result) == 0 else result[0] if __size == 1 else result
 
@@ -836,7 +1091,7 @@ class OrderedStream[T](ListStream[T]):
 		:return: Whether this stream is LIFO
 		"""
 
-		return not self.__fifo__
+		return not self.is_fifo
 
 
 class TypedStream[T](OrderedStream[T]):
@@ -865,9 +1120,17 @@ class TypedStream[T](OrderedStream[T]):
 		:raises AssertionError: If the object is not an instance of a whitelisted type
 		"""
 
-		assert isinstance(__object, self.__cls__), f'Object of type  \'{type(__object)}\' does not match one of the specified type(s):\n  {"\n  ".join(str(c) for c in self.__cls__)}'
+		assert isinstance(__object, self.allowed_types), f'Object of type  \'{type(__object)}\' does not match one of the specified type(s):\n  {"\n  ".join(str(c) for c in self.__cls__)}'
 		super().write(__object)
 		return self
+
+	@property
+	def allowed_types(self) -> tuple[type, ...]:
+		"""
+		:return: The list of types allowed into this stream
+		"""
+
+		return self.__cls__
 
 
 class ByteStream(TypedStream[bytes | bytearray], io.BufferedIOBase):

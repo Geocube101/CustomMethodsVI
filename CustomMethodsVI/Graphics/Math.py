@@ -1070,7 +1070,7 @@ class TransformMatrix3D:
 
 		if isinstance(vector, Vector4):
 			result: CPU.ndarray = vector.array.transpose() @ self.array
-			return Vector3(*result.transpose())
+			return Vector4(*result.transpose())
 		elif isinstance(vector, Vector3):
 			source: CPU.ndarray = CPU.zeros((4,), CPU.float64)
 			source[:3] = vector.array

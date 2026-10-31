@@ -32,7 +32,7 @@ class Logger:
 			:return: This stream
 			"""
 
-			self.write(self.__logger__.__get_line__(self.category, sep.join(map(str, data))) + end)
+			self.write(sep.join(map(str, data)) + end)
 			return self
 
 		def write(self, line: str, *, ignore_invalid=False) -> Logger.CategoryLogger:
@@ -57,7 +57,7 @@ class Logger:
 
 			return self.__category__
 
-	def __init__(self, stream: io.IOBase, timezone: datetime.timezone | datetime.tzinfo = datetime.timezone.utc, header_format: str = '{%D} {%T} - [ {%TZ} ] [ {%C} ] -> Thread {%TID}: {%M}'):
+	def __init__(self, stream: typing.TextIO, timezone: datetime.timezone | datetime.tzinfo = datetime.timezone.utc, header_format: str = '{%D} {%T} - [ {%TZ} ] [ {%C} ] -> Thread {%TID}: {%M}', *, display_edge_messages: bool = True):
 		"""
 		Class representing a log file writer\n
 		[ Header Format ]\n
@@ -71,10 +71,11 @@ class Logger:
 		* %M - Original message
 		:param stream: The stream to write results to
 		:param timezone: The timezone to log with
+		:param display_edge_messages: Whether to display the open and close messages when logger is opened and closed
 		"""
 
-		if not isinstance(stream, io.IOBase):
-			raise Exceptions.InvalidArgumentException(Logger.__init__, 'stream', type(stream), (io.IOBase,))
+		if not isinstance(stream, (typing.TextIO, io.TextIOBase)):
+			raise Exceptions.InvalidArgumentException(Logger.__init__, 'stream', type(stream), (typing.TextIO, io.TextIOBase))
 		elif not isinstance(timezone, datetime.timezone):
 			raise Exceptions.InvalidArgumentException(Logger.__init__, 'timezone', type(timezone), (datetime.timezone, datetime.tzinfo))
 
@@ -85,11 +86,14 @@ class Logger:
 
 		categories: tuple[str, ...] = ('DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL')
 		self.__header__: str = str(header_format)
-		self.__stream__: io.IOBase = stream
+		self.__stream__: typing.TextIO = stream
 		self.__timezone__: datetime.timezone = timezone
 		self.__state__: bool = True
 		self.__categories__: dict[str, Logger.CategoryLogger] = {category: Logger.CategoryLogger(self, category) for category in categories}
-		self.__stream__.write('==========[ Log Opened ]==========\n\n')
+		self.__edge_messages__: bool = bool(display_edge_messages)
+
+		if self.__edge_messages__:
+			self.__stream__.write('==========[ Log Opened ]==========\n\n')
 
 	def __get_line__(self, category: str, msg: str) -> str:
 		now: datetime.datetime = datetime.datetime.now(self.__timezone__)
@@ -118,7 +122,9 @@ class Logger:
 			category.flush()
 			category.close()
 
-		self.__stream__.write('\n==========[ Log Closed ]==========')
+		if self.__edge_messages__:
+			self.__stream__.write('\n==========[ Log Closed ]==========')
+
 		self.__state__ = False
 		self.__stream__.flush()
 		self.__stream__.close()
@@ -135,7 +141,9 @@ class Logger:
 		if self.__state__ is False:
 			raise IOError('Log is closed')
 
-		self.__stream__.write('\n==========[ Log Closed ]==========')
+		if self.__edge_messages__:
+			self.__stream__.write('\n==========[ Log Closed ]==========')
+
 		self.__state__ = False
 		self.__stream__ = None
 

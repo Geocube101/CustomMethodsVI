@@ -1,3 +1,4 @@
+import collections.abc
 import math
 import time
 import typing
@@ -223,6 +224,16 @@ def fullname(variable: typing.Any) -> str:
 		module: str = cls.__module__
 		qualname: str = cls.__qualname__
 		return qualname if module is None or module == 'builtins' or module == '__builtin__' else f'{module}.{qualname}'
+
+
+def is_mutable(variable: typing.Any) -> bool:
+	"""
+	Checks if the specified variable is either a mutable collection or mutable instance
+	:param variable: The variable
+	:return: True if mutable
+	"""
+
+	return isinstance(variable, (collections.abc.MutableMapping, collections.abc.MutableSet, collections.abc.MutableSequence)) or hasattr(variable, '__delitem__') or hasattr(variable, '__setitem__') or (hasattr(variable, '__module__') and variable.__module__ != 'builtins')
 
 
 __all__: list[str] = [

@@ -236,7 +236,6 @@ class TkinterRenderer3DCPU(Renderer3D):
 
 	def render(self) -> None:
 		Misc.raise_if(self.active_camera is None, ValueError('No active camera'))
-		self.active_camera.open_draw_cache()
 		polygons: tuple[Poly.Triangle3D, ...] = Stream.LinqStream(self.enabled_meshes).transform_many(lambda shape: shape.get_polygons()).merge(self.polygons).sort(lambda poly: self.active_camera.view.translation.distance_squared(poly.center), reverse=True).collect()
 		transformed: collections.abc.Iterator[Poly.Polygon3D] = self.active_camera.polygons_world_to_screen(self.width, self.height, polygons)
 		last_drawn: int = 0
@@ -279,8 +278,6 @@ class TkinterRenderer3DCPU(Renderer3D):
 		for i in range(len(z_order) - 1):
 			self.__canvas__.tag_lower(z_order[i][0], z_order[i + 1][0])
 
-		self.active_camera.close_draw_cache()
-
 	@property
 	def width(self) -> int:
 		current_width: int = self.__canvas__.winfo_width()
@@ -307,15 +304,16 @@ class ImageRenderer3DCPU(Renderer3D):
 		Misc.raise_ifn(isinstance(image, (collections.abc.Sequence, np.ndarray)), Exceptions.InvalidArgumentException(DearPyGuiRenderer3DCPU.__init__, 'image', type(image), (collections.abc.Sequence, np.ndarray)))
 		self.__image__: np.ndarray = image if isinstance(image, np.ndarray) else np.zeros((int(image[1]), int(image[0]), 3), np.uint8)
 		super().__init__()
+		Misc.raise_ifn(self.__image__.dtype == np.uint8, TypeError('Image buffer must be uint8'))
+		Misc.raise_ifn(len(self.__image__.shape) == 3 and self.__image__.shape[2] > 0, ValueError('Image buffer must have at least 1 channel'))
 
 	def render(self) -> None:
 		Misc.raise_if(self.active_camera is None, ValueError('No active camera'))
-		self.active_camera.open_draw_cache()
 		polygons: tuple[Poly.Polygon3D, ...] = Stream.LinqStream(self.enabled_meshes).transform_many(lambda shape: shape.get_polygons()).merge(self.polygons).collect()
 		transformed: collections.abc.Iterable[Poly.Polygon3D] = self.active_camera.polygons_world_to_screen(self.width, self.height, polygons)
 		canvas: PIL.Image.Image = PIL.Image.new('RGB', self.size, '#000000')
 		drawer: PIL.ImageDraw.ImageDraw = PIL.ImageDraw.ImageDraw(canvas, 'RGBA')
-		z_stack: list[tuple[float, Poly.Polygon3D]] = []
+		z_stack: list[tuple[float, int, Poly.Polygon3D]] = []
 		i: int
 
 		for i, polygon in enumerate(transformed):
@@ -325,11 +323,11 @@ class ImageRenderer3DCPU(Renderer3D):
 				continue
 
 			z_depth: float = polygons[i].points.average().distance(self.active_camera.view.translation)
-			z_stack.append((z_depth, polygon))
+			z_stack.append((z_depth, i, polygon))
 
 		z_stack.sort(key=lambda pair: pair[0], reverse=True)
 
-		for i, (z_depth, polygon) in enumerate(z_stack):
+		for z_depth, index, polygon in z_stack:
 			if (material := polygon.material.get_material(Material.SimpleMaterial)) is None:
 				raise TypeError('CPU render only supports simple materials')
 
@@ -338,15 +336,24 @@ class ImageRenderer3DCPU(Renderer3D):
 			outline: Util.Color = material.outline
 
 			if self.is_sun_enabled:
-				ratio: float = polygons[i].normal.angle(self.sun_normal) / math.pi
+				ratio: float = polygons[index].normal.angle(self.sun_normal) / math.pi
 				ratio_v4: Math.Vector4 = Math.Vector4(ratio, ratio, ratio, 1)
 				fill *= ratio_v4
 				outline *= ratio_v4
 
 			drawer.polygon(points, fill.rgba, outline.rgba)
 
-		self.__image__[:, :, :] = cv2.cvtColor(np.asarray(canvas, dtype=np.uint8), cv2.COLOR_RGB2BGR)
-		self.active_camera.close_draw_cache()
+		channels: int = self.__image__.shape[2]
+		image: np.ndarray = np.asarray(canvas, dtype=np.uint8)
+
+		if channels == 1:
+			self.__image__[:, :, 0] = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+		elif channels == 3:
+			self.__image__[:, :, :] = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+		elif channels == 4:
+			self.__image__[:, :, :] = cv2.cvtColor(image, cv2.COLOR_RGB2BGRA)
+		else:
+			raise ValueError(f'Unsupported number of channels: {channels}')
 
 	@property
 	def image(self) -> np.ndarray:
@@ -390,7 +397,6 @@ if os.name == 'nt':
 
 		def render(self) -> None:
 			Misc.raise_if(self.active_camera is None, ValueError('No active camera'))
-			self.active_camera.open_draw_cache()
 			polygons: tuple[Poly.Polygon3D, ...] = Stream.LinqStream(self.enabled_meshes).transform_many(lambda shape: shape.get_polygons()).merge(self.polygons).collect()
 			transformed: collections.abc.Iterable[Poly.Polygon3D] = self.active_camera.polygons_world_to_screen(self.width, self.height, polygons)
 			last_drawn: int = 0
@@ -431,8 +437,6 @@ if os.name == 'nt':
 
 			for i in range(len(z_order) - 1):
 				dpg.move_item(z_order[i][0], before=z_order[i + 1][0])
-
-			self.active_camera.close_draw_cache()
 
 		@property
 		def width(self) -> int:

@@ -39,8 +39,11 @@ class DynamicBarrierPrimitive(BarrierPrimitive):
 	"""
 
 	def __del__(self):
-		if self.entered:
-			self.exit()
+		try:
+			if self.entered:
+				self.exit()
+		except (FileNotFoundError, AttributeError):
+			pass
 
 	def __enter__(self) -> BarrierPrimitive:
 		"""
@@ -114,8 +117,11 @@ class SynchronizationPrimitive:
 	"""
 
 	def __del__(self):
-		if self.acquired:
-			self.release()
+		try:
+			if self.acquired:
+				self.release()
+		except (FileNotFoundError, AttributeError):
+			pass
 
 	def __enter__(self) -> SynchronizationPrimitive:
 		"""
@@ -240,6 +246,26 @@ class LockUser:
 
 		Misc.raise_ifn(isinstance(lock, LockType_T), Exceptions.InvalidArgumentException(LockUser.__init__, 'lock', type(lock), (threading.Lock, multiprocessing.synchronize.Lock, SynchronizationPrimitive)))
 		self.__lock__: LockType_T = lock
+
+	def release_read_lock(self) -> None:
+		"""
+		Releases the reader lock if an RW lock, otherwise releases the lock\n
+		"""
+
+		if isinstance(self.__lock__, ReaderWriterPrimitive):
+			return self.__lock__.release_reader()
+		else:
+			return self.__lock__.release()
+
+	def release_write_lock(self) -> None:
+		"""
+		Releases the writer lock if an RW lock, otherwise releases the lock\n
+		"""
+
+		if isinstance(self.__lock__, ReaderWriterPrimitive,):
+			self.__lock__.release_writer()
+		else:
+			self.__lock__.release()
 
 	def acquire_read_lock(self) -> bool:
 		"""

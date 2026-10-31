@@ -2,11 +2,52 @@ from __future__ import annotations
 
 import collections.abc
 import math
+import typing
 
 from . import Math
 from . import Poly
 from .. import Exceptions
 from .. import Misc
+
+
+class CameraDrawCache:
+	def __init__(self):
+		self.__meshes__: dict[Poly.Mesh3D, Poly.Mesh3D] = {}
+		self.__polygons__: dict[Poly.Polygon3D, Poly.Polygon3D] = {}
+		self.__points__: dict[Math.Vector3, Math.Vector3] = {}
+
+	def __setitem__(self, key: Poly.Mesh3D | Poly.Polygon3D | Math.Vector3, value: Poly.Mesh3D | Poly.Polygon3D | Math.Vector3) -> None:
+		if not isinstance(value, type(key)):
+			raise TypeError('Key and value type must match')
+		elif isinstance(key, Poly.Mesh3D):
+			self.__meshes__[key] = value
+		elif isinstance(key, Poly.Polygon3D):
+			self.__polygons__[key] = value
+		elif isinstance(key, Math.Vector3):
+			self.__points__[key] = value
+
+	def __delitem__(self, key: Poly.Mesh3D | Poly.Polygon3D | Math.Vector3) -> None:
+		if isinstance(key, Poly.Mesh3D):
+			self.__meshes__.pop(key)
+		elif isinstance(key, Poly.Polygon3D):
+			self.__polygons__.pop(key)
+		elif isinstance(key, Math.Vector3):
+			self.__points__.pop(key)
+
+	def __getitem__(self, item: Poly.Mesh3D | Poly.Polygon3D | Math.Vector3) -> typing.Optional[Poly.Mesh3D | Poly.Polygon3D | Math.Vector3]:
+		if isinstance(item, Poly.Mesh3D):
+			return self.__meshes__.get(item)
+		elif isinstance(item, Poly.Polygon3D):
+			return self.__polygons__.get(item)
+		elif isinstance(item, Math.Vector3):
+			return self.__points__.get(item)
+		else:
+			return NotImplemented
+
+	def clear(self) -> None:
+		self.__meshes__.clear()
+		self.__polygons__.clear()
+		self.__points__.clear()
 
 
 class Camera:
@@ -64,32 +105,16 @@ class Camera:
 		self.__view__: Math.TransformMatrix3D = view_matrix
 		self.__projection__: Math.TransformMatrix3D = projection_matrix
 		self.__view_projection__: Math.TransformMatrix3D = self.view.inversed() @ self.projection
-		self.__point_cache__: dict[Math.Vector3, Math.Vector3] = ...
+		self.__draw_cache__: CameraDrawCache = CameraDrawCache()
 		self.__cull_faces__: bool = bool(cull_faces)
 
-	def open_draw_cache(self) -> None:
+	def clear_draw_cache(self) -> None:
 		"""
-		Opens the draw cache\n
-		Draw conversions are cached to reduce overhead
-		:raise RuntimeError: If the cache is already opened
-		"""
-
-		if self.__point_cache__ is not ...:
-			raise RuntimeError('Draw cache already open')
-
-		self.__point_cache__ = {}
-
-	def close_draw_cache(self) -> None:
-		"""
-		Closes the draw cache
-		:raise RuntimeError: If the cache is already closed
+		Clears the camera's draw cache\n
+		Called automatically if camera's world matrix changes
 		"""
 
-		if self.__point_cache__ is ...:
-			raise RuntimeError('Draw cache not open')
-
-		self.__point_cache__.clear()
-		self.__point_cache__ = ...
+		self.__draw_cache__.clear()
 
 	def rotate(self, x_radians: float, y_radians: float, z_radians: float) -> Camera:
 		"""
@@ -161,26 +186,20 @@ class Camera:
 		aspect: float = screen_width / screen_height / math.sqrt(2)
 
 		for point in points:
-			if self.is_draw_cache_opened and (converted := self.__point_cache__.get(point)) is not None:
-				yield converted
+			if (transformed := self.__draw_cache__[point]) is not None:
+				yield transformed
 				continue
 
 			full_clip: Math.Vector4 = self.view_projection.transform_vector(Math.Vector4(*point, 1))
 
-			if full_clip.w <= 0 and self.is_draw_cache_opened:
-				self.__point_cache__[point] = ...
-				yield ...
-				continue
-			elif full_clip.w <= 0:
+			if full_clip.w <= 0:
+				self.__draw_cache__[point] = ...
 				yield ...
 				continue
 
 			ndc: Math.Vector3 = full_clip[:3] / full_clip.w / Math.Vector3(aspect, 1, 1)
 			screen: Math.Vector3 = Math.Vector3((ndc.x + 1) / 2 * screen_width, (1 - (ndc.y + 1) / 2) * screen_height, (ndc.z + 1) / 2)
-
-			if self.is_draw_cache_opened:
-				self.__point_cache__[point] = screen
-
+			self.__draw_cache__[point] = screen
 			yield screen
 
 	def polygons_world_to_screen(self, screen_width: int, screen_height: int, polygons: collections.abc.Iterable[Poly.Polygon3D]) -> collections.abc.Iterator[Poly.Polygon3D]:
@@ -199,17 +218,16 @@ class Camera:
 			if polygon.material is None or (self.cull_faces and view_direction.dot(polygon.normal) <= 0):
 				yield ...
 				continue
-
-			points: tuple[Math.Vector3, ...] = tuple(self.points_world_to_screen(screen_width, screen_height, polygon.points))
-
-			if ... in points:
-				yield ...
+			elif (transformed := self.__draw_cache__[polygon]) is not None:
+				yield transformed
 				continue
 
-			yield Poly.Polygon3D(*points, uv_mat=polygon.material, invert_normal=polygon.is_normal_inverted)
+			points: tuple[Math.Vector3, ...] = tuple(self.points_world_to_screen(screen_width, screen_height, polygon.points))
+			transformed: Poly.Polygon3D = ... if ... in points else Poly.Polygon3D(*points, uv_mat=polygon.material, invert_normal=polygon.is_normal_inverted)
+			self.__draw_cache__[polygon] = transformed
+			yield transformed
 
 	def shapes_world_to_screen(self, screen_width: int, screen_height: int, shapes: collections.abc.Iterable[Poly.Mesh3D]) -> collections.abc.Iterator[Poly.Mesh3D]:
-
 		"""
 		Converts the specified shapes from world space into screen space\n
 		Shapes out of bounds will be '...'
@@ -222,23 +240,14 @@ class Camera:
 		for shape in shapes:
 			if not shape.enabled:
 				continue
-
-			shape_polygons: tuple[Poly.Polygon3D, ...] = tuple(shape.get_polygons())
-			polygons: tuple[Poly.Polygon3D, ...] = tuple(self.polygons_world_to_screen(screen_width, screen_height, shape_polygons))
-
-			if ... in polygons:
-				yield ...
+			elif (transformed := self.__draw_cache__[shape]) is not None:
+				yield transformed
 				continue
 
-			yield Poly.Mesh3D(Math.TransformMatrix3D.identity(), polygons)
-
-	@property
-	def is_draw_cache_opened(self) -> bool:
-		"""
-		:return: Whether the draw cache is open
-		"""
-
-		return self.__point_cache__ is not ...
+			polygons: tuple[Poly.Polygon3D, ...] = tuple(self.polygons_world_to_screen(screen_width, screen_height, shape.get_polygons()))
+			transformed: Poly.Mesh3D = ... if ... in polygons else Poly.Mesh3D(Math.TransformMatrix3D.identity(), polygons)
+			self.__draw_cache__[shape] = transformed
+			yield transformed
 
 	@property
 	def cull_faces(self) -> bool:
@@ -283,6 +292,7 @@ class Camera:
 		Misc.raise_ifn(isinstance(matrix, Math.TransformMatrix3D), Exceptions.InvalidArgumentException(Camera.view.setter, 'matrix', type(matrix), (Math.TransformMatrix3D,)))
 		self.__view__ = matrix
 		self.__view_projection__ = self.view.inversed() @ self.projection
+		self.clear_draw_cache()
 
 	@projection.setter
 	def projection(self, matrix: Math.TransformMatrix3D) -> None:
@@ -295,6 +305,7 @@ class Camera:
 		Misc.raise_ifn(isinstance(matrix, Math.TransformMatrix3D), Exceptions.InvalidArgumentException(Camera.projection.setter, 'matrix', type(matrix), (Math.TransformMatrix3D,)))
 		self.__projection__ = matrix
 		self.__view_projection__ = self.view @ self.projection
+		self.clear_draw_cache()
 
 
 class VectorizedCamera(Camera):
@@ -336,9 +347,18 @@ class VectorizedCamera(Camera):
 		nan: float = float('nan')
 		all_points: Math.CPU.ndarray = Math.CPU.full((len(polygons), highest_count, 4), nan, Math.NUMPY.float64)
 		all_points[:, :, 3] = 1
+		all_cached: bool = True
+		local_cache: list[Poly.Polygon3D] = []
 
 		for i, polygon in enumerate(polygons):
-			all_points[i, :len(polygon.points), :3] = polygon.points.array
+			if (transformed := self.__draw_cache__[polygon]) is not None:
+				local_cache.append(transformed)
+			else:
+				all_points[i, :len(polygon.points), :3] = polygon.points.array
+
+		if all_cached:
+			for transformed in local_cache:
+				yield transformed
 
 		if Math.NUMPY.__name__ == 'cupy':
 			all_points = Math.GPU.asarray(all_points)

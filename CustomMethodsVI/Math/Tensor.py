@@ -8,9 +8,11 @@ import random
 import typing
 import types
 
+from . import Math
+from . import Vector
+
 from .. import Exceptions
 from .. import Stream
-from ..Math import Functions, Vector
 
 
 class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable):
@@ -357,12 +359,12 @@ class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable)
 		"""
 
 		if isinstance(other, (float, int)):
-			return Tensor.shaped((None if x is None else Functions.safe_divide(x, float(other)) for x in self.__array__), *self.__dimensions__)
+			return Tensor.shaped((None if x is None else Math.safe_divide(x, float(other)) for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, Tensor):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot divide tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
-			return Tensor.shaped((None if a is None or b is None else Functions.safe_divide(a, b) for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
+			return Tensor.shaped((None if a is None or b is None else Math.safe_divide(a, b) for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
 			return NotImplemented
 
@@ -375,12 +377,12 @@ class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable)
 		"""
 
 		if isinstance(other, (float, int)):
-			return Tensor.shaped((None if x is None else Functions.safe_floor_divide(x, float(other)) for x in self.__array__), *self.__dimensions__)
+			return Tensor.shaped((None if x is None else Math.safe_floor_divide(x, float(other)) for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, Tensor):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot divide tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
-			return Tensor.shaped((None if a is None or b is None else Functions.safe_floor_divide(a, b) for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
+			return Tensor.shaped((None if a is None or b is None else Math.safe_floor_divide(a, b) for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
 			return NotImplemented
 
@@ -393,12 +395,12 @@ class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable)
 		"""
 
 		if isinstance(other, (float, int)):
-			return Tensor.shaped((None if x is None else Functions.safe_modulo(x, float(other)) for x in self.__array__), *self.__dimensions__)
+			return Tensor.shaped((None if x is None else Math.safe_modulo(x, float(other)) for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, Tensor):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot modulo tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} to tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
-			return Tensor.shaped((None if a is None or b is None else Functions.safe_modulo(a, b) for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
+			return Tensor.shaped((None if a is None or b is None else Math.safe_modulo(a, b) for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
 			return NotImplemented
 
@@ -413,7 +415,7 @@ class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable)
 		for i, value in enumerate(self.__array__):
 			a: typing.Optional[float] = self.__array__[i]
 			b: typing.Optional[float] = other.__array__[i] if isinstance(other, Tensor) else float(other)
-			a, b = None if a is None or b is None else Functions.safe_divmod(a, b)
+			a, b = None if a is None or b is None else Math.safe_divmod(a, b)
 			position: list[int] = [*list(self.__index_to_position__(i)), 0]
 			tensor.__array__[tensor.__position_to_index__(tuple(position))] = a
 			position[-1] = 1
@@ -524,12 +526,12 @@ class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable)
 		"""
 
 		if isinstance(other, (float, int)):
-			return Tensor.shaped((None if x is None else Functions.safe_divide(float(other), x) for x in self.__array__), *self.__dimensions__)
+			return Tensor.shaped((None if x is None else Math.safe_divide(float(other), x) for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, Tensor):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot divide tensor of dimension {"x".join(str(x) for x in self.__dimensions__)} from tensor of dimension {"x".join(str(x) for x in other.__dimensions__)}')
 
-			return Tensor.shaped((None if a is None or b is None else Functions.safe_divide(b, a) for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
+			return Tensor.shaped((None if a is None or b is None else Math.safe_divide(b, a) for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
 			return NotImplemented
 
@@ -542,12 +544,12 @@ class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable)
 		"""
 
 		if isinstance(other, (float, int)):
-			return Tensor.shaped((None if x is None else Functions.safe_floor_divide(float(other), x) for x in self.__array__), *self.__dimensions__)
+			return Tensor.shaped((None if x is None else Math.safe_floor_divide(float(other), x) for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, Tensor):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot divide tensor of dimension {"x".join(str(x) for x in self.__dimensions__)} from tensor of dimension {"x".join(str(x) for x in other.__dimensions__)}')
 
-			return Tensor.shaped((None if a is None or b is None else Functions.safe_floor_divide(b, a) for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
+			return Tensor.shaped((None if a is None or b is None else Math.safe_floor_divide(b, a) for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
 			return NotImplemented
 
@@ -560,12 +562,12 @@ class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable)
 		"""
 
 		if isinstance(other, (float, int)):
-			return Tensor.shaped((None if x is None else Functions.safe_modulo(float(other), x) for x in self.__array__), *self.__dimensions__)
+			return Tensor.shaped((None if x is None else Math.safe_modulo(float(other), x) for x in self.__array__), *self.__dimensions__)
 		elif isinstance(other, Tensor):
 			if self.__dimensions__ != other.__dimensions__:
 				raise ValueError(f'Cannot modulo tensor of dimension {"x".join(str(x) for x in self.__dimensions__)} from tensor of dimension {"x".join(str(x) for x in other.__dimensions__)}')
 
-			return Tensor.shaped((None if a is None or b is None else Functions.safe_modulo(b, a) for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
+			return Tensor.shaped((None if a is None or b is None else Math.safe_modulo(b, a) for a, b in zip(self.__array__, other.__array__)), *self.__dimensions__)
 		else:
 			return NotImplemented
 
@@ -580,7 +582,7 @@ class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable)
 		for i, value in enumerate(self.__array__):
 			a: typing.Optional[float] = self.__array__[i]
 			b: typing.Optional[float] = other.__array__[i] if isinstance(other, Tensor) else float(other)
-			a, b = None if a is None or b is None else Functions.safe_divmod(b, a)
+			a, b = None if a is None or b is None else Math.safe_divmod(b, a)
 			position: list[int] = [*list(self.__index_to_position__(i)), 0]
 			tensor.__array__[tensor.__position_to_index__(tuple(position))] = a
 			position[-1] = 1
@@ -719,7 +721,7 @@ class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable)
 
 			for i in range(self.__size__):
 				if self.__array__[i] is not None:
-					self.__array__[i] = Functions.safe_divide(self.__array__[i], float(other))
+					self.__array__[i] = Math.safe_divide(self.__array__[i], float(other))
 
 			return self
 		elif isinstance(other, Tensor):
@@ -727,7 +729,7 @@ class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable)
 				raise ValueError(f'Cannot divide tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} from tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			for i in range(self.__size__):
-				self.__array__[i] = None if self.__array__[i] is None or other.__array__[i] is None else Functions.safe_divide(self.__array__[i], other.__array__[i])
+				self.__array__[i] = None if self.__array__[i] is None or other.__array__[i] is None else Math.safe_divide(self.__array__[i], other.__array__[i])
 
 			return self
 		else:
@@ -745,7 +747,7 @@ class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable)
 
 			for i in range(self.__size__):
 				if self.__array__[i] is not None:
-					self.__array__[i] = Functions.safe_floor_divide(self.__array__[i], float(other))
+					self.__array__[i] = Math.safe_floor_divide(self.__array__[i], float(other))
 
 			return self
 		elif isinstance(other, Tensor):
@@ -753,7 +755,7 @@ class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable)
 				raise ValueError(f'Cannot divide tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} from tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			for i in range(self.__size__):
-				self.__array__[i] = None if self.__array__[i] is None or other.__array__[i] is None else Functions.safe_floor_divide(self.__array__[i], other.__array__[i])
+				self.__array__[i] = None if self.__array__[i] is None or other.__array__[i] is None else Math.safe_floor_divide(self.__array__[i], other.__array__[i])
 
 			return self
 		else:
@@ -771,7 +773,7 @@ class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable)
 
 			for i in range(self.__size__):
 				if self.__array__[i] is not None:
-					self.__array__[i] = Functions.safe_modulo(self.__array__[i], float(other))
+					self.__array__[i] = Math.safe_modulo(self.__array__[i], float(other))
 
 			return self
 		elif isinstance(other, Tensor):
@@ -779,7 +781,7 @@ class Tensor(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable)
 				raise ValueError(f'Cannot modulo tensor of dimension {"x".join(str(x) for x in other.__dimensions__)} from tensor of dimension {"x".join(str(x) for x in self.__dimensions__)}')
 
 			for i in range(self.__size__):
-				self.__array__[i] = None if self.__array__[i] is None or other.__array__[i] is None else Functions.safe_modulo(self.__array__[i], other.__array__[i])
+				self.__array__[i] = None if self.__array__[i] is None or other.__array__[i] is None else Math.safe_modulo(self.__array__[i], other.__array__[i])
 
 			return self
 		else:

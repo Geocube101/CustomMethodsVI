@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import colorsys
+import typing
 
 from . import Math
 from .. import Event
@@ -8,7 +9,7 @@ from .. import Exceptions
 from .. import Misc
 
 
-class Object:
+class Object(typing.Hashable):
 	__NEXT_ID: int = 0
 
 	def __init__(self):

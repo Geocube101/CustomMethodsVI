@@ -104,6 +104,7 @@ def safe_divmod(a: float, b: float) -> tuple[float, float]:
 	nan: float = float('nan')
 	return (nan, nan) if a == 0 and b == 0 or a == inf and b == inf else (0, nan) if b == inf else (inf, 0) if b == 0 else divmod(a, b)
 
+
 @Overload
 def is_prime(x: int) -> bool:
 	"""

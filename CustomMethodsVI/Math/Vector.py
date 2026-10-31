@@ -4,8 +4,10 @@ import collections.abc
 import math
 import typing
 
+from . import Math
+from . import Tensor
+
 from .. import Exceptions
-from .. import Math
 from .. import Misc
 from .. import Stream
 
@@ -173,9 +175,9 @@ class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable,
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(None if a is None or b is None else Math.Functions.safe_divide(a, b) for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else Math.safe_divide(a, b) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is None else Math.Functions.safe_divide(x, float(other)) for x in self.__components__)
+			return Vector(None if x is None else Math.safe_divide(x, float(other)) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -189,13 +191,13 @@ class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable,
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(None if a is None or b is None else Math.Functions.safe_floor_divide(a, b) for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else Math.safe_floor_divide(a, b) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is None else Math.Functions.safe_floor_divide(x, float(other)) for x in self.__components__)
+			return Vector(None if x is None else Math.safe_floor_divide(x, float(other)) for x in self.__components__)
 		else:
 			return NotImplemented
 
-	def __divmod__(self, other: Vector | float) -> Math.Tensor.Tensor:
+	def __divmod__(self, other: Vector | float) -> Tensor.Tensor:
 		"""
 		Div-mods this vector by another vector or number
 		:param other: The single number or vector to div-mod
@@ -205,11 +207,11 @@ class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable,
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			result: list[tuple[float, float]] = [None if a is None or b is None else Math.Functions.safe_divmod(a, b) for a, b in zip(self.__components__, other.__components__)]
-			return Math.Tensor.Tensor(result)
+			result: list[tuple[float, float]] = [None if a is None or b is None else Math.safe_divmod(a, b) for a, b in zip(self.__components__, other.__components__)]
+			return Tensor.Tensor(result)
 		elif isinstance(other, (float, int)):
-			result: list[tuple[float, float]] = [None if a is None else Math.Functions.safe_divmod(a, float(other)) for a in self.__components__]
-			return Math.Tensor.Tensor(result)
+			result: list[tuple[float, float]] = [None if a is None else Math.safe_divmod(a, float(other)) for a in self.__components__]
+			return Tensor.Tensor(result)
 		else:
 			return NotImplemented
 
@@ -223,9 +225,9 @@ class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable,
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(None if a is None or b is None else Math.Functions.safe_modulo(a, b) for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else Math.safe_modulo(a, b) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is None else Math.Functions.safe_modulo(x, float(other)) for x in self.__components__)
+			return Vector(None if x is None else Math.safe_modulo(x, float(other)) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -303,9 +305,9 @@ class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable,
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(None if a is None or b is None else Math.Functions.safe_divide(b, a) for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else Math.safe_divide(b, a) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is None else Math.Functions.safe_divide(float(other), x) for x in self.__components__)
+			return Vector(None if x is None else Math.safe_divide(float(other), x) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -319,13 +321,13 @@ class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable,
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(None if a is None or b is None else Math.Functions.safe_floor_divide(b, a) for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else Math.safe_floor_divide(b, a) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is None else Math.Functions.safe_floor_divide(float(other), x) for x in self.__components__)
+			return Vector(None if x is None else Math.safe_floor_divide(float(other), x) for x in self.__components__)
 		else:
 			return NotImplemented
 
-	def __rdivmod__(self, other: Vector | float) -> Math.Tensor.Tensor:
+	def __rdivmod__(self, other: Vector | float) -> Tensor.Tensor:
 		"""
 		Div-mods this vector by another vector or number
 		:param other: The single number or vector to div-mod
@@ -335,11 +337,11 @@ class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable,
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			result: list[tuple[float, float]] = [None if a is None or b is None else Math.Functions.safe_divmod(b, a) for a, b in zip(self.__components__, other.__components__)]
-			return Math.Tensor.Tensor(result)
+			result: list[tuple[float, float]] = [None if a is None or b is None else Math.safe_divmod(b, a) for a, b in zip(self.__components__, other.__components__)]
+			return Tensor.Tensor(result)
 		elif isinstance(other, (float, int)):
-			result: list[tuple[float, float]] = [None if a is None else Math.Functions.safe_divmod(float(other), a) for a in self.__components__]
-			return Math.Tensor.Tensor(result)
+			result: list[tuple[float, float]] = [None if a is None else Math.safe_divmod(float(other), a) for a in self.__components__]
+			return Tensor.Tensor(result)
 		else:
 			return NotImplemented
 
@@ -353,9 +355,9 @@ class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable,
 
 		if isinstance(other, Vector):
 			Misc.raise_ifn(self.dimension == other.dimension, ValueError('Mismatched vector dimensions'))
-			return Vector(None if a is None or b is None else Math.Functions.safe_modulo(b, a) for a, b in zip(self.__components__, other.__components__))
+			return Vector(None if a is None or b is None else Math.safe_modulo(b, a) for a, b in zip(self.__components__, other.__components__))
 		elif isinstance(other, (float, int)):
-			return Vector(None if x is None else Math.Functions.safe_modulo(float(other), x) for x in self.__components__)
+			return Vector(None if x is None else Math.safe_modulo(float(other), x) for x in self.__components__)
 		else:
 			return NotImplemented
 
@@ -475,10 +477,10 @@ class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable,
 
 	def __bool__(self) -> bool:
 		"""
-		:return: Whether this vector is a zero vector
+		:return: Whether this vector is not a zero vector
 		"""
 
-		return all(x is None or x == 0 for x in self.__components__)
+		return bool(self.length_squared())
 
 	def __hash__(self) -> int:
 		return hash(self.__components__)
@@ -674,14 +676,14 @@ class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable,
 		c3: typing.Optional[float] = None if a1 is None or b2 is None else (a1 * b2 - a2 * b1)
 		return Vector(c1, c2, c3)
 
-	def to_matrix(self) -> Math.Tensor.Tensor:
+	def to_matrix(self) -> Tensor.Tensor:
 		"""
 		:return: This vector as a matrix
 		"""
 
-		return Math.Tensor.Tensor(self)
+		return Tensor.Tensor(self)
 
-	def relative_coord_matrix(self, *orthonormal_basis: Vector) -> Math.Tensor.Tensor:
+	def relative_coord_matrix(self, *orthonormal_basis: Vector) -> Tensor.Tensor:
 		"""
 		Calculates the coordinate matrix of the specified coordinate relative to the orthonormal basis vectors
 		:param orthonormal_basis: The basis vectors; there must be "n" vectors each "n" dimensions where "n" is the coordinate vector's dimension
@@ -694,7 +696,7 @@ class Vector(typing.SupportsRound, typing.SupportsAbs, collections.abc.Hashable,
 		assert self.dimension == len(orthonormal_basis), 'Coordinate dimension does not match basis dimension'
 
 		result: tuple[float, ...] = tuple(self.dot(vector) for vector in orthonormal_basis)
-		return Math.Tensor.Tensor.shaped(result, self.dimension, 1)
+		return Tensor.Tensor.shaped(result, self.dimension, 1)
 
 	def project(self, subspace: collections.abc.Iterable[Vector]) -> Vector:
 		"""

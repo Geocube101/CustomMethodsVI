@@ -1,2 +1,7 @@
-from . import Multiprocessing, Synchronization, Threading
-__all__: list[str] = ['Multiprocessing', 'Synchronization', 'Threading']
+from . import Multiprocessing, Threading
+from .Synchronization import *
+
+__all__: list[str] = [
+	'Multiprocessing', 'Threading',
+	'BarrierPrimitive', 'DynamicBarrierPrimitive', 'SynchronizationPrimitive', 'ReaderWriterPrimitive', 'LockUser', 'LockType_T'
+]

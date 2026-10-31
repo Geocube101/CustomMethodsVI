@@ -42,6 +42,9 @@ class Polygon3D(Util.Object):
 	def __eq__(self, other: Polygon3D) -> bool:
 		return isinstance(other, Polygon3D) and self.points == other.points
 
+	def __hash__(self) -> int:
+		return super().__hash__()
+
 	def transform(self, matrix: Math.TransformMatrix3D) -> Polygon3D:
 		"""
 		Transforms this n-gon by the specified transform matrix in-place
@@ -566,11 +569,11 @@ class Mesh3D(Util.Transformable3D):
 	def __on_world_matrix_changed__(self, obj: Util.Object3D) -> None:
 		self.__transformed__ = ...
 
-	def __hash__(self) -> int:
-		return hash(self.polygons)
-
 	def __eq__(self, other: Mesh3D) -> bool:
 		return isinstance(other, Mesh3D) and self.polygons == other.polygons
+
+	def __hash__(self) -> int:
+		return super().__hash__()
 
 	def copy_from(self, mesh: Mesh3D, *, copy_uvs: bool = True, copy_normals: bool = True) -> Mesh3D:
 		"""
@@ -668,6 +671,9 @@ class Polygon2D(Util.Object):
 	def __eq__(self, other: Polygon2D) -> bool:
 		return isinstance(other, Polygon2D) and self.points == other.points
 
+	def __hash__(self) -> int:
+		return super().__hash__()
+
 	def transform(self, matrix: Math.TransformMatrix2D) -> Polygon2D:
 		"""
 		Transforms this n-gon by the specified transform matrix in-place
@@ -732,7 +738,7 @@ class Polygon2D(Util.Object):
 
 		return Polygon2D(*self.points, uv_mat=self.__uv__)
 
-	def to_3d(self, z: float, invert_normal: bool = False) -> Polygon3D:
+	def to_3d(self, z: float = 0, invert_normal: bool = False) -> Polygon3D:
 		"""
 		Converts this 2D polygon to a 2D polygon
 		:param z: The z value to fill
@@ -853,11 +859,11 @@ class Mesh2D(Util.Transformable2D):
 	def __on_world_matrix_changed__(self, obj: Util.Object2D) -> None:
 		self.__transformed__ = ...
 
-	def __hash__(self) -> int:
-		return hash(self.points)
-
 	def __eq__(self, other: Mesh2D) -> bool:
 		return isinstance(other, Mesh2D) and self.points == other.points
+
+	def __hash__(self) -> int:
+		return super().__hash__()
 
 	def to_polygon(self, uv_mat: typing.Optional[Material.UVMap] = None) -> Polygon2D:
 		"""

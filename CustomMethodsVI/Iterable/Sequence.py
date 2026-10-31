@@ -385,7 +385,7 @@ class SortedList[T](SortableSequence[T]):
 	A list using binary search to maintain a sorted list of elements
 	"""
 
-	def __init__(self, *args: T | typing.Iterable[T]):
+	def __init__(self, *args: T | collections.abc.Iterable[T], comparer: typing.Callable[[T], typing.Any] = None):
 		"""
 		A list using binary search to search and maintain a sorted list of elements\n
 		- Constructor -
@@ -396,21 +396,26 @@ class SortedList[T](SortableSequence[T]):
 
 		if len(args) == 0:
 			super().__init__([])
-		elif len(args) == 1 and isinstance(args[0], SortedList):
-			super().__init__(args[0].__buffer__.copy())
-		elif len(args) == 1 and isinstance(args[0], ReverseSortedList):
-			super().__init__(reversed(args[0].__buffer__))
+			self.__comparer__: typing.Optional[typing.Callable[[T], typing.Any]] = comparer if callable(comparer) else None
+		elif len(args) == 1 and isinstance(src := args[0], SortedList):
+			super().__init__(src.__buffer__.copy())
+			self.__comparer__: typing.Optional[typing.Callable[[T], typing.Any]] = comparer if callable(comparer) else src.__comparer__
+		elif len(args) == 1 and isinstance(src := args[0], ReverseSortedList):
+			super().__init__(reversed(src.__buffer__))
+			self.__comparer__: typing.Optional[typing.Callable[[T], typing.Any]] = comparer if callable(comparer) else src.__comparer__
 		elif len(args) == 1:
-			assert hasattr(args[0], '__iter__'), 'Set argument must be an iterable'
+			assert hasattr(src := args[0], '__iter__'), 'Set argument must be an iterable'
 
 			try:
-				super().__init__(sorted(args[0]))
+				self.__comparer__: typing.Optional[typing.Callable[[T], typing.Any]] = comparer if callable(comparer) else None
+				super().__init__(sorted(src, key=self.__comparer__))
 			except TypeError as e:
 				raise TypeError(f'One or more objects are incomparable') from e
 
 		else:
 			try:
-				super().__init__(sorted(args))
+				self.__comparer__: typing.Optional[typing.Callable[[T], typing.Any]] = comparer if callable(comparer) else None
+				super().__init__(sorted(args, key=self.__comparer__))
 			except TypeError as e:
 				raise TypeError(f'One or more objects are incomparable') from e
 
@@ -539,6 +544,54 @@ class SortedList[T](SortableSequence[T]):
 		warnings.warn('\\\\\\\nDirect insertion in binary-sorted collection\nUse \'SortedList::append\' instead \\\\\\', UserWarning, stacklevel=2)
 		self.append(value)
 
+	def insert_index(self, item: T) -> int:
+		"""
+		Calculates the insertion index for this item using binary search\n
+		The item is not inserted
+		:param item: The item to insert
+		:return: The calculated insertion index
+		"""
+
+		length: int = len(self)
+
+		if length == 0:
+			return 0
+
+		start: int = 0
+		end: int = length
+		comp: typing.Any = self.__comparer__(item) if callable(self.__comparer__) else item
+		end_comp: typing.Any = self.__comparer__(self.__buffer__[-1]) if callable(self.__comparer__) else self.__buffer__[-1]
+		begin_comp: typing.Any = self.__comparer__(self.__buffer__[0]) if callable(self.__comparer__) else self.__buffer__[0]
+
+		try:
+			if comp >= end_comp:
+				return length
+			elif comp <= begin_comp:
+				return 0
+
+			while True:
+				mid: int = round((start + end) / 2)
+
+				if mid >= length or mid < 0:
+					raise ValueError(f'Unexpected error during binary-reduction - MIDPOINT={mid}')
+
+				mid_item: T = self.__buffer__[mid]
+				mid_comp: typing.Any = self.__comparer__(mid_item) if callable(self.__comparer__) else mid_item
+
+				if comp == mid_comp:
+					return mid
+				elif start + 1 == end:
+					return end
+				elif comp > mid_comp:
+					start = mid
+				elif comp < mid_comp:
+					end = mid
+				else:
+					raise ValueError(f'Unexpected error during binary-reduction - MIDPOINT={mid}')
+
+		except TypeError:
+			raise TypeError(f'Incomparable object of type \'{type(item)}\' is not storable')
+
 	def append(self, item: T) -> SortedList[T]:
 		"""
 		Appends an item to this collection
@@ -556,12 +609,15 @@ class SortedList[T](SortableSequence[T]):
 
 		start: int = 0
 		end: int = length
+		comp: typing.Any = self.__comparer__(item) if callable(self.__comparer__) else item
+		end_comp: typing.Any = self.__comparer__(self.__buffer__[-1]) if callable(self.__comparer__) else self.__buffer__[-1]
+		begin_comp: typing.Any = self.__comparer__(self.__buffer__[0]) if callable(self.__comparer__) else self.__buffer__[0]
 
 		try:
-			if item >= self.__buffer__[-1]:
+			if comp >= end_comp:
 				self.__buffer__.append(item)
 				return self
-			elif item <= self.__buffer__[0]:
+			elif comp <= begin_comp:
 				self.__buffer__.insert(0, item)
 				return self
 
@@ -570,12 +626,19 @@ class SortedList[T](SortableSequence[T]):
 
 				if mid >= length or mid < 0:
 					raise ValueError(f'Unexpected error during binary-reduction - MIDPOINT={mid}')
-				elif item == self.__buffer__[mid]:
+
+				mid_item: T = self.__buffer__[mid]
+				mid_comp: typing.Any = self.__comparer__(mid_item) if callable(self.__comparer__) else mid_item
+
+				if comp == mid_comp:
 					self.__buffer__.insert(mid, item)
 					return self
-				elif item > self.__buffer__[mid]:
+				elif start + 1 == end:
+					self.__buffer__.insert(end, item)
+					return self
+				elif comp > mid_comp:
 					start = mid
-				elif item < self.__buffer__[mid]:
+				elif comp < mid_comp:
 					end = mid
 				else:
 					raise ValueError(f'Unexpected error during binary-reduction - MIDPOINT={mid}')
@@ -597,7 +660,7 @@ class SortedList[T](SortableSequence[T]):
 			else:
 				self.__buffer__.extend(i)
 
-		self.__buffer__.sort()
+		self.__buffer__.sort(key=self.__comparer__)
 		return self
 
 	def set_resort(self, *iterables: typing.Iterable[T]) -> SortedList[T]:
@@ -616,7 +679,7 @@ class SortedList[T](SortableSequence[T]):
 			else:
 				buffer.update(i)
 
-		self.__buffer__ = list(sorted(buffer))
+		self.__buffer__ = list(sorted(buffer, key=self.__comparer__))
 		return self
 
 	def bin_search(self, item: T, lower: typing.Optional[int] = ..., upper: typing.Optional[int] = ...) -> int:
@@ -628,7 +691,11 @@ class SortedList[T](SortableSequence[T]):
 		:return: The position if found or -1
 		"""
 
-		if len(self) == 0 or item > self.__buffer__[-1] or item < self.__buffer__[0]:
+		comp: typing.Any = self.__comparer__(item) if callable(self.__comparer__) else item
+		end_comp: typing.Any = self.__comparer__(self.__buffer__[-1]) if callable(self.__comparer__) else self.__buffer__[-1]
+		begin_comp: typing.Any = self.__comparer__(self.__buffer__[0]) if callable(self.__comparer__) else self.__buffer__[0]
+
+		if len(self) == 0 or comp > end_comp or comp < begin_comp:
 			return -1
 
 		__lower = 0
@@ -636,14 +703,17 @@ class SortedList[T](SortableSequence[T]):
 		mid = __upper // 2
 
 		while True:
-			if self[mid] == item:
+			mid_item: T = self[mid]
+			mid_comp: typing.Any = self.__comparer__(mid_item) if callable(self.__comparer__) else mid_item
+
+			if mid_item == item:
 				return mid
 			elif mid == 0 or mid == len(self) - 1 or (lower is not ... and lower is not None and mid < lower) or (upper is not ... and upper is not None and mid > upper):
 				return -1
-			elif item > self[mid]:
+			elif comp > mid_comp:
 				__lower = mid
 				mid = (__lower + __upper) // 2
-			elif item < self[mid]:
+			elif comp < mid_comp:
 				__upper = mid
 				mid = (__lower + __upper) // 2
 
@@ -774,7 +844,7 @@ class SortedList[T](SortableSequence[T]):
 		"""
 
 		self.__buffer__.clear()
-		self.__buffer__.extend(sorted(other))
+		self.__buffer__.extend(sorted(other, key=self.__comparer__))
 		return self
 
 
@@ -783,7 +853,7 @@ class ReverseSortedList[T](SortableSequence[T]):
 	A list using binary search to maintain a reverse sorted list of elements
 	"""
 
-	def __init__(self, *args: T | typing.Iterable[T]):
+	def __init__(self, *args: T | collections.abc.Iterable[T], comparer: typing.Callable[[T], typing.Any] = None):
 		"""
 		A list using binary search to search and maintain a reverse sorted list of elements\n
 		- Constructor -
@@ -794,21 +864,26 @@ class ReverseSortedList[T](SortableSequence[T]):
 
 		if len(args) == 0:
 			super().__init__([])
-		elif len(args) == 1 and isinstance(args[0], ReverseSortedList):
-			super().__init__(args[0].__buffer__.copy())
-		elif len(args) == 1 and isinstance(args[0], SortedList):
-			super().__init__(reversed(args[0].__buffer__))
+			self.__comparer__: typing.Optional[typing.Callable[[T], typing.Any]] = comparer if callable(comparer) else None
+		elif len(args) == 1 and isinstance(src := args[0], ReverseSortedList):
+			super().__init__(src.__buffer__.copy())
+			self.__comparer__: typing.Optional[typing.Callable[[T], typing.Any]] = comparer if callable(comparer) else src.__comparer__
+		elif len(args) == 1 and isinstance(src := args[0], SortedList):
+			super().__init__(reversed(src.__buffer__))
+			self.__comparer__: typing.Optional[typing.Callable[[T], typing.Any]] = comparer if callable(comparer) else src.__comparer__
 		elif len(args) == 1:
-			assert hasattr(args[0], '__iter__'), 'Set argument must be an iterable'
+			assert hasattr(src := args[0], '__iter__'), 'Set argument must be an iterable'
 
 			try:
-				super().__init__(sorted(args[0], reverse=True))
+				self.__comparer__: typing.Optional[typing.Callable[[T], typing.Any]] = comparer if callable(comparer) else None
+				super().__init__(sorted(src, key=self.__comparer__, reverse=True))
 			except TypeError as e:
 				raise TypeError(f'One or more objects are incomparable') from e
 
 		else:
 			try:
-				super().__init__(sorted(args[0], reverse=True))
+				self.__comparer__: typing.Optional[typing.Callable[[T], typing.Any]] = comparer if callable(comparer) else None
+				super().__init__(sorted(args, key=self.__comparer__, reverse=True))
 			except TypeError as e:
 				raise TypeError(f'One or more objects are incomparable') from e
 
@@ -937,6 +1012,54 @@ class ReverseSortedList[T](SortableSequence[T]):
 		warnings.warn('\\\\\\\nDirect insertion in binary-sorted collection\nUse \'ReverseSortedList::append\' instead \\\\\\', UserWarning, stacklevel=2)
 		self.append(value)
 
+	def insert_index(self, item: T) -> int:
+		"""
+		Calculates the insertion index for this item using binary search\n
+		The item is not inserted
+		:param item: The item to insert
+		:return: The calculated insertion index
+		"""
+
+		length: int = len(self)
+
+		if length == 0:
+			return 0
+
+		start: int = 0
+		end: int = length
+		comp: typing.Any = self.__comparer__(item) if callable(self.__comparer__) else item
+		end_comp: typing.Any = self.__comparer__(self.__buffer__[-1]) if callable(self.__comparer__) else self.__buffer__[-1]
+		begin_comp: typing.Any = self.__comparer__(self.__buffer__[0]) if callable(self.__comparer__) else self.__buffer__[0]
+
+		try:
+			if comp >= begin_comp:
+				return 0
+			elif comp <= end_comp:
+				return length
+
+			while True:
+				mid: int = round((start + end) / 2)
+
+				if mid >= length or mid < 0:
+					raise ValueError(f'Unexpected error during binary-reduction - MIDPOINT={mid}')
+
+				mid_item: T = self.__buffer__[mid]
+				mid_comp: typing.Any = self.__comparer__(mid_item) if callable(self.__comparer__) else mid_item
+
+				if item == mid_item:
+					return mid
+				elif start + 1 == end:
+					return end
+				elif comp < mid_comp:
+					start = mid
+				elif comp > mid_comp:
+					end = mid
+				else:
+					raise ValueError(f'Unexpected error during binary-reduction - MIDPOINT={mid}')
+
+		except TypeError:
+			raise TypeError(f'Incomparable object of type \'{type(item)}\' is not storable')
+
 	def append(self, item: T) -> ReverseSortedList[T]:
 		"""
 		Appends an item to this collection
@@ -954,12 +1077,15 @@ class ReverseSortedList[T](SortableSequence[T]):
 
 		start: int = 0
 		end: int = length
+		comp: typing.Any = self.__comparer__(item) if callable(self.__comparer__) else item
+		end_comp: typing.Any = self.__comparer__(self.__buffer__[-1]) if callable(self.__comparer__) else self.__buffer__[-1]
+		begin_comp: typing.Any = self.__comparer__(self.__buffer__[0]) if callable(self.__comparer__) else self.__buffer__[0]
 
 		try:
-			if item >= self.__buffer__[0]:
+			if comp >= begin_comp:
 				self.__buffer__.insert(0, item)
 				return self
-			elif item <= self.__buffer__[-1]:
+			elif comp <= end_comp:
 				self.__buffer__.append(item)
 				return self
 
@@ -968,12 +1094,19 @@ class ReverseSortedList[T](SortableSequence[T]):
 
 				if mid >= length or mid < 0:
 					raise ValueError(f'Unexpected error during binary-reduction - MIDPOINT={mid}')
-				elif item == self.__buffer__[mid]:
+
+				mid_item: T = self.__buffer__[mid]
+				mid_comp: typing.Any = self.__comparer__(mid_item) if callable(self.__comparer__) else mid_item
+
+				if item == mid_item:
 					self.__buffer__.insert(mid, item)
 					return self
-				elif item < self.__buffer__[mid]:
+				elif start + 1 == end:
+					self.__buffer__.insert(end, item)
+					return self
+				elif comp < mid_comp:
 					start = mid
-				elif item > self.__buffer__[mid]:
+				elif comp > mid_comp:
 					end = mid
 				else:
 					raise ValueError(f'Unexpected error during binary-reduction - MIDPOINT={mid}')
@@ -995,7 +1128,7 @@ class ReverseSortedList[T](SortableSequence[T]):
 			else:
 				self.__buffer__.extend(i)
 
-		self.__buffer__.sort(reverse=True)
+		self.__buffer__.sort(key=self.__comparer__, reverse=True)
 		return self
 
 	def set_resort(self, *iterables: typing.Iterable[T]) -> ReverseSortedList[T]:
@@ -1014,7 +1147,7 @@ class ReverseSortedList[T](SortableSequence[T]):
 			else:
 				buffer.update(i)
 
-		self.__buffer__ = list(sorted(buffer, reverse=True))
+		self.__buffer__ = list(sorted(buffer, key=self.__comparer__, reverse=True))
 		return self
 
 	def bin_search(self, item: T, lower: typing.Optional[int] = ..., upper: typing.Optional[int] = ...) -> int:
@@ -1026,7 +1159,11 @@ class ReverseSortedList[T](SortableSequence[T]):
 		:return: The position if found or -1
 		"""
 
-		if len(self) == 0 or item < self.__buffer__[-1] or item > self.__buffer__[0]:
+		comp: typing.Any = self.__comparer__(item) if callable(self.__comparer__) else item
+		end_comp: typing.Any = self.__comparer__(self.__buffer__[-1]) if callable(self.__comparer__) else self.__buffer__[-1]
+		begin_comp: typing.Any = self.__comparer__(self.__buffer__[0]) if callable(self.__comparer__) else self.__buffer__[0]
+
+		if len(self) == 0 or comp < end_comp or comp > begin_comp:
 			return -1
 
 		__lower = 0
@@ -1034,14 +1171,17 @@ class ReverseSortedList[T](SortableSequence[T]):
 		mid = __upper // 2
 
 		while True:
-			if self[mid] == item:
+			mid_item: T = self[mid]
+			mid_comp: typing.Any = self.__comparer__(mid_item) if callable(self.__comparer__) else mid_item
+
+			if mid_item == item:
 				return mid
 			elif mid == 0 or mid == len(self) - 1 or (lower is not ... and lower is not None and mid < lower) or (upper is not ... and upper is not None and mid > upper):
 				return -1
-			elif item < self[mid]:
+			elif comp < mid_comp:
 				__lower = mid
 				mid = (__lower + __upper) // 2
-			elif item > self[mid]:
+			elif comp > mid_comp:
 				__upper = mid
 				mid = (__lower + __upper) // 2
 
@@ -1172,7 +1312,7 @@ class ReverseSortedList[T](SortableSequence[T]):
 		"""
 
 		self.__buffer__.clear()
-		self.__buffer__.extend(sorted(other, reverse=True))
+		self.__buffer__.extend(sorted(other, key=self.__comparer__, reverse=True))
 		return self
 
 

@@ -360,7 +360,20 @@ def minmax(arg: collections.abc.Iterable, *args) -> tuple[typing.Any, typing.Any
 		raise ValueError('minmax() iterable argument is empty') from None
 
 
+def safe_next[T](iterator: collections.abc.Iterator[T]) -> tuple[bool, T]:
+	"""
+	Returns the next object from the iterator safely
+	:param iterator: The iterator
+	:return: A tuple of whether the item was retrieved and the item
+	"""
+
+	try:
+		return True, next(iterator)
+	except StopIteration:
+		return False, None
+
+
 LinqStream = Stream.LinqStream
 
 
-__all__: list[str] = ['Iterable', 'IterableView', 'ThreadedGenerator', 'frange', 'minmax', 'LinqStream']
+__all__: list[str] = ['Iterable', 'IterableView', 'ThreadedGenerator', 'frange', 'minmax', 'safe_next', 'LinqStream']
