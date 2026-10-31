@@ -8,9 +8,10 @@ import math
 import types
 import typing
 
+from . import Vector
+
 from .. import Exceptions
 from .. import Misc
-from . import Vector
 
 
 class Equation:
